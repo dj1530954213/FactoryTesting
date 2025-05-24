@@ -2,6 +2,8 @@
 pub mod enums;
 /// 核心结构体定义模块
 pub mod structs;
+/// SeaORM实体定义模块
+pub mod entities;
 /// 单元测试模块
 pub mod tests;
 

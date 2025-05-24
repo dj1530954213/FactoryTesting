@@ -14,7 +14,7 @@ pub fn default_id() -> String {
 
 /// 通道点位定义结构体
 /// 描述一个测试点的静态配置信息，通常从Excel或配置文件导入
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChannelPointDefinition {
     /// 唯一标识符
     #[serde(default = "default_id")]
@@ -160,6 +160,47 @@ impl ChannelPointDefinition {
     }
 }
 
+impl Default for ChannelPointDefinition {
+    fn default() -> Self {
+        Self {
+            id: default_id(),
+            tag: String::new(),
+            variable_name: String::new(),
+            variable_description: String::new(),
+            station_name: String::new(),
+            module_name: String::new(),
+            module_type: ModuleType::default(),
+            channel_tag_in_module: String::new(),
+            data_type: PointDataType::default(),
+            power_supply_type: String::from("有源"),
+            wire_system: String::from("4线制"),
+            plc_absolute_address: None,
+            plc_communication_address: String::new(),
+            range_lower_limit: None,
+            range_upper_limit: None,
+            engineering_unit: None,
+            sll_set_value: None,
+            sll_set_point_address: None,
+            sll_feedback_address: None,
+            sl_set_value: None,
+            sl_set_point_address: None,
+            sl_feedback_address: None,
+            sh_set_value: None,
+            sh_set_point_address: None,
+            sh_feedback_address: None,
+            shh_set_value: None,
+            shh_set_point_address: None,
+            shh_feedback_address: None,
+            maintenance_value_set_point_address: None,
+            maintenance_enable_switch_point_address: None,
+            access_property: None,
+            save_history: None,
+            power_failure_protection: None,
+            test_rig_plc_address: None,
+        }
+    }
+}
+
 /// 子测试执行结果结构体
 /// 表示单个子测试项的执行结果
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -178,47 +219,32 @@ pub struct SubTestExecutionResult {
 
 impl SubTestExecutionResult {
     /// 创建新的子测试执行结果
-    pub fn new(status: SubTestStatus) -> Self {
+    pub fn new(status: SubTestStatus, details: Option<String>, expected: Option<String>, actual: Option<String>) -> Self {
         Self {
             status,
+            details,
+            expected_value: expected,
+            actual_value: actual,
+            timestamp: Utc::now(),
+        }
+    }
+}
+
+impl Default for SubTestExecutionResult {
+    fn default() -> Self {
+        Self {
+            status: SubTestStatus::NotTested,
             details: None,
             expected_value: None,
             actual_value: None,
             timestamp: Utc::now(),
         }
     }
-
-    /// 创建通过状态的结果
-    pub fn passed() -> Self {
-        Self::new(SubTestStatus::Passed)
-    }
-
-    /// 创建失败状态的结果
-    pub fn failed(details: String) -> Self {
-        Self {
-            status: SubTestStatus::Failed,
-            details: Some(details),
-            expected_value: None,
-            actual_value: None,
-            timestamp: Utc::now(),
-        }
-    }
-
-    /// 创建不适用状态的结果
-    pub fn not_applicable() -> Self {
-        Self::new(SubTestStatus::NotApplicable)
-    }
-}
-
-impl Default for SubTestExecutionResult {
-    fn default() -> Self {
-        Self::new(SubTestStatus::NotTested)
-    }
 }
 
 /// 模拟量读数点结构体
 /// 用于AI/AO测试中记录多点测试数据
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AnalogReadingPoint {
     /// 设定百分比（例如：0.0, 0.25, 0.5, 0.75, 1.0）
     pub set_percentage: f32,
@@ -232,46 +258,33 @@ pub struct AnalogReadingPoint {
     pub actual_reading_eng: Option<f32>,
     /// 该点的测试状态
     pub status: SubTestStatus,
-    /// 误差（如果计算得出）
+    /// 误差百分比
     pub error_percentage: Option<f32>,
-}
-
-impl AnalogReadingPoint {
-    /// 创建新的模拟量读数点
-    pub fn new(set_percentage: f32, set_value_eng: f32) -> Self {
-        Self {
-            set_percentage,
-            set_value_eng,
-            expected_reading_raw: None,
-            actual_reading_raw: None,
-            actual_reading_eng: None,
-            status: SubTestStatus::NotTested,
-            error_percentage: None,
-        }
-    }
 }
 
 /// 通道测试实例结构体
 /// 代表一个ChannelPointDefinition在某次特定测试执行中的实例
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChannelTestInstance {
     /// 唯一测试实例ID
     #[serde(default = "default_id")]
     pub instance_id: String,
     /// 关联的ChannelPointDefinition ID
-    pub channel_definition_id: String,
-    /// 所属批次ID
-    pub batch_id: String,
+    pub definition_id: String,
+    /// 所属测试批次ID
+    pub test_batch_id: String,
     
     /// 运行时状态（由ChannelStateManager管理）
     pub overall_status: OverallTestStatus,
+    /// 当前正在执行的测试步骤描述
+    pub current_step_details: Option<String>,
     /// 最近的错误信息
     pub error_message: Option<String>,
     
     /// 时间信息
     pub creation_time: DateTime<Utc>,
+    pub start_time: Option<DateTime<Utc>>,
     pub last_updated_time: DateTime<Utc>,
-    pub start_test_time: Option<DateTime<Utc>>,
     pub final_test_time: Option<DateTime<Utc>>,
     pub total_test_duration_ms: Option<i64>,
 
@@ -279,7 +292,15 @@ pub struct ChannelTestInstance {
     #[serde(default)]
     pub sub_test_results: HashMap<SubTestItem, SubTestExecutionResult>,
 
-    /// 当前操作员（用于手动测试等）
+    /// 硬接线测试中的特定数据
+    pub hardpoint_readings: Option<Vec<AnalogReadingPoint>>,
+    
+    /// 手动测试时的临时输入值
+    pub manual_test_current_value_input: Option<String>,
+    /// 手动测试时的临时输出值
+    pub manual_test_current_value_output: Option<String>,
+
+    /// 当前操作员
     pub current_operator: Option<String>,
     /// 重测次数
     pub retries_count: u32,
@@ -291,20 +312,24 @@ pub struct ChannelTestInstance {
 
 impl ChannelTestInstance {
     /// 创建新的通道测试实例
-    pub fn new(channel_definition_id: String, batch_id: String) -> Self {
+    pub fn new(definition_id: String, test_batch_id: String) -> Self {
         let now = Utc::now();
         Self {
             instance_id: default_id(),
-            channel_definition_id,
-            batch_id,
+            definition_id,
+            test_batch_id,
             overall_status: OverallTestStatus::NotTested,
+            current_step_details: None,
             error_message: None,
             creation_time: now,
+            start_time: None,
             last_updated_time: now,
-            start_test_time: None,
             final_test_time: None,
             total_test_duration_ms: None,
             sub_test_results: HashMap::new(),
+            hardpoint_readings: None,
+            manual_test_current_value_input: None,
+            manual_test_current_value_output: None,
             current_operator: None,
             retries_count: 0,
             transient_data: HashMap::new(),
@@ -314,7 +339,7 @@ impl ChannelTestInstance {
 
 /// 测试批次信息结构体
 /// 包含一个测试批次的基本信息和统计数据
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TestBatchInfo {
     /// 唯一批次ID
     #[serde(default = "default_id")]
@@ -323,12 +348,14 @@ pub struct TestBatchInfo {
     pub product_model: Option<String>,
     /// 序列号
     pub serial_number: Option<String>,
+    /// 客户名称
+    pub customer_name: Option<String>,
     /// 创建时间
     pub creation_time: DateTime<Utc>,
     pub last_updated_time: DateTime<Utc>,
     /// 操作员姓名
     pub operator_name: Option<String>,
-    /// 状态摘要（例如："100/120 tested, 85 passed, 10 failed, 5 skipped"）
+    /// 状态摘要（例如："进行中", "已完成 - 50/52 通过"）
     pub status_summary: Option<String>,
     /// 统计信息
     pub total_points: u32,
@@ -349,6 +376,7 @@ impl TestBatchInfo {
             batch_id: default_id(),
             product_model,
             serial_number,
+            customer_name: None,
             creation_time: now,
             last_updated_time: now,
             operator_name: None,
@@ -364,8 +392,8 @@ impl TestBatchInfo {
 }
 
 /// 原始测试结果结构体
-/// 由ISpecificTestStepExecutor返回的结果
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// 由SpecificTestStepExecutor执行后返回的原始数据，供ChannelStateManager处理
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RawTestOutcome {
     /// 通道实例ID
     pub channel_instance_id: String,
@@ -373,6 +401,10 @@ pub struct RawTestOutcome {
     pub sub_test_item: SubTestItem,
     /// 操作是否成功
     pub success: bool,
+    /// 从PLC读取的原始值
+    pub raw_value_read: Option<String>,
+    /// 计算得到的工程单位值
+    pub eng_value_calculated: Option<String>,
     /// 附加消息或错误细节
     pub message: Option<String>,
     /// 开始时间
@@ -380,7 +412,7 @@ pub struct RawTestOutcome {
     /// 结束时间
     pub end_time: DateTime<Utc>,
     /// 一系列读数，如AI多点测试
-    pub readings: Vec<AnalogReadingPoint>,
+    pub readings: Option<Vec<AnalogReadingPoint>>,
     /// 更多细节
     #[serde(default)]
     pub details: HashMap<String, serde_json::Value>,
@@ -398,10 +430,12 @@ impl RawTestOutcome {
             channel_instance_id,
             sub_test_item,
             success,
+            raw_value_read: None,
+            eng_value_calculated: None,
             message: None,
             start_time: now,
             end_time: now,
-            readings: Vec::new(),
+            readings: None,
             details: HashMap::new(),
         }
     }
@@ -423,5 +457,59 @@ impl RawTestOutcome {
         let mut outcome = Self::new(channel_instance_id, sub_test_item, false);
         outcome.message = Some(message);
         outcome
+    }
+}
+
+impl Default for RawTestOutcome {
+    fn default() -> Self {
+        Self {
+            channel_instance_id: String::new(),
+            sub_test_item: SubTestItem::HardPoint,
+            success: false,
+            raw_value_read: None,
+            eng_value_calculated: None,
+            message: None,
+            start_time: Utc::now(),
+            end_time: Utc::now(),
+            readings: None,
+            details: HashMap::new(),
+        }
+    }
+}
+
+/// 应用配置结构体
+/// 用于存储用户界面设置、默认参数、PLC连接配置等
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AppSettings {
+    #[serde(default = "default_id")]
+    pub id: String, // 通常只有一个实例，ID可以是固定的如 "default_settings"
+    pub theme: String,
+    pub plc_ip_address: Option<String>,
+    pub plc_port: Option<u16>,
+    pub default_operator_name: Option<String>,
+    pub auto_save_interval_minutes: Option<u32>,
+    #[serde(default)]
+    pub recent_projects: Vec<String>,
+    #[serde(default = "default_last_backup_time")]
+    pub last_backup_time: Option<DateTime<Utc>>,
+    // 其他配置项...
+}
+
+fn default_last_backup_time() -> Option<DateTime<Utc>> {
+    None
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            id: "default_settings".to_string(),
+            theme: "light".to_string(),
+            plc_ip_address: Some("127.0.0.1".to_string()),
+            plc_port: Some(502),
+            default_operator_name: None,
+            auto_save_interval_minutes: Some(5),
+            recent_projects: Vec::new(),
+            last_backup_time: None,
+        }
     }
 } 

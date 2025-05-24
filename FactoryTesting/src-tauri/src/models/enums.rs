@@ -167,6 +167,12 @@ pub enum SubTestItem {
     Custom(String),
 }
 
+impl Default for SubTestItem {
+    fn default() -> Self {
+        SubTestItem::HardPoint
+    }
+}
+
 /// 日志级别枚举
 /// 用于系统日志记录
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

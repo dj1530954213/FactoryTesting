@@ -8,7 +8,11 @@ fn main() {
     run_example();
     
     // 启动Tauri应用
-    app_lib::run()
+    // 在 cargo check 阶段，我们不实际运行Tauri应用，
+    // 而是依赖 app_lib::run() 中的打印语句（如果有）或其能被编译。
+    // 如果 app_lib::run() 做了很多事，可能会减慢检查速度或有其他副作用。
+    // 对于纯粹的库检查，这行可能不是必需的，但对于Tauri项目结构，main.rs通常会调用它。
+    app_lib::run(); // 保留，因为它在Tauri模板中常见
 }
 
 #[cfg(debug_assertions)]
@@ -16,7 +20,8 @@ fn run_example() {
     println!("=== FAT_TEST 核心数据模型示例 ===");
     
     // 导入我们的模型
-    use app_lib::models::*;
+    // 注意：现在 app_lib 重新导出了 models::*，所以可以直接用
+    use app_lib::models::{ChannelPointDefinition, ModuleType, PointDataType, TestBatchInfo, ChannelTestInstance, SubTestItem, SubTestStatus, SubTestExecutionResult, RawTestOutcome, AnalogReadingPoint};
     
     // 1. 创建通道点位定义示例
     println!("\n1. 创建通道点位定义:");
@@ -59,11 +64,13 @@ fn run_example() {
     // 添加一些子测试结果
     instance.sub_test_results.insert(
         SubTestItem::HardPoint,
-        SubTestExecutionResult::passed(),
+        // Corrected: Use new() method
+        SubTestExecutionResult::new(SubTestStatus::Passed, None, None, None),
     );
     instance.sub_test_results.insert(
         SubTestItem::LowAlarm,
-        SubTestExecutionResult::failed("报警值设置失败".to_string()),
+        // Corrected: Use new() method
+        SubTestExecutionResult::new(SubTestStatus::Failed, Some("报警值设置失败".to_string()), None, None),
     );
     
     println!("   实例ID: {}", instance.instance_id);
@@ -72,28 +79,56 @@ fn run_example() {
     
     // 4. 创建原始测试结果
     println!("\n4. 创建原始测试结果:");
-    let mut outcome = RawTestOutcome::success(
+    // Corrected: RawTestOutcome::success and ::failure were removed. Use ::new directly.
+    let mut outcome = RawTestOutcome::new(
         instance.instance_id.clone(),
         SubTestItem::HardPoint,
+        true, // success status
     );
+    outcome.raw_value_read = Some("16384".to_string());
+    outcome.eng_value_calculated = Some("20.0".to_string());
     
     // 添加一些模拟量读数点
-    outcome.readings.push(AnalogReadingPoint::new(0.0, 0.0));
-    outcome.readings.push(AnalogReadingPoint::new(0.25, 5.0));
-    outcome.readings.push(AnalogReadingPoint::new(1.0, 20.0));
+    // Corrected: Initialize AnalogReadingPoint fields directly and handle Option for readings
+    let readings_vec = outcome.readings.get_or_insert_with(Vec::new);
+    readings_vec.push(AnalogReadingPoint {
+        set_percentage: 0.0,
+        set_value_eng: 0.0,
+        actual_reading_raw: Some(0.0),
+        actual_reading_eng: Some(0.0),
+        status: SubTestStatus::Passed,
+        ..Default::default()
+    });
+    readings_vec.push(AnalogReadingPoint {
+        set_percentage: 0.25,
+        set_value_eng: 5.0,
+        actual_reading_raw: Some(8192.0),
+        actual_reading_eng: Some(4.98),
+        status: SubTestStatus::Passed,
+        ..Default::default()
+    });
+    readings_vec.push(AnalogReadingPoint {
+        set_percentage: 1.0,
+        set_value_eng: 20.0,
+        actual_reading_raw: Some(32767.0),
+        actual_reading_eng: Some(19.95),
+        status: SubTestStatus::Passed,
+        ..Default::default()
+    });
     
     println!("   测试成功: {}", outcome.success);
     println!("   子测试项: {:?}", outcome.sub_test_item);
-    println!("   读数点数量: {}", outcome.readings.len());
+    // Corrected: Handle Option for len()
+    println!("   读数点数量: {}", outcome.readings.as_ref().map_or(0, |v| v.len()));
     
     // 5. 演示序列化功能
     println!("\n5. 演示JSON序列化:");
     match serde_json::to_string_pretty(&instance) {
         Ok(json) => {
             println!("   通道测试实例JSON长度: {} 字符", json.len());
-            // 只显示前100个字符作为示例
-            let preview = if json.len() > 100 {
-                format!("{}...", &json[..100])
+            // 只显示前200个字符作为示例
+            let preview = if json.len() > 200 {
+                format!("{}...", &json[..200])
             } else {
                 json
             };
