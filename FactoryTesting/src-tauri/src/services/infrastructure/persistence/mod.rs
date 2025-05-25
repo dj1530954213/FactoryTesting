@@ -4,8 +4,8 @@
 /// 持久化服务接口定义和基础类型
 pub mod persistence_service;
 
-/// JSON文件持久化实现
-pub mod json_persistence_service;
+/// 应用配置服务（专门处理应用设置）
+pub mod app_settings_service;
 
 /// SQLite ORM 持久化实现
 pub mod sqlite_orm_persistence_service;
@@ -20,5 +20,5 @@ pub mod tests;
 
 // 重新导出主要接口和实现
 pub use persistence_service::*;
-pub use json_persistence_service::*;
+pub use app_settings_service::*;
 pub use sqlite_orm_persistence_service::*; 

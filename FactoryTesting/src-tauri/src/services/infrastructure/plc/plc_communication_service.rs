@@ -91,6 +91,14 @@ pub struct PlcCommunicationStats {
     pub successful_writes: u64,
     /// 失败写入次数
     pub failed_writes: u64,
+    /// 成功批量读取次数
+    pub successful_batch_reads: u64,
+    /// 失败批量读取次数
+    pub failed_batch_reads: u64,
+    /// 成功批量写入次数
+    pub successful_batch_writes: u64,
+    /// 失败批量写入次数
+    pub failed_batch_writes: u64,
     /// 总的读取耗时（毫秒）
     pub total_read_time_ms: u64,
     /// 总的写入耗时（毫秒）

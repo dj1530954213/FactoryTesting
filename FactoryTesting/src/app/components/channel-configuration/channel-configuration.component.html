@@ -1,0 +1,53 @@
+<div class="channel-config-container">
+  <div class="page-header">
+    <h1>🔧 通道配置管理</h1>
+    <p>管理和配置测试通道的定义信息</p>
+  </div>
+
+  <div class="config-actions">
+    <button class="btn btn-primary">
+      <span class="btn-icon">➕</span>
+      新增通道
+    </button>
+    <button class="btn btn-secondary">
+      <span class="btn-icon">📥</span>
+      导入配置
+    </button>
+    <button class="btn btn-secondary">
+      <span class="btn-icon">📤</span>
+      导出配置
+    </button>
+  </div>
+
+  <div class="config-content">
+    <div class="search-section">
+      <input type="text" placeholder="搜索通道..." class="search-input">
+      <select class="filter-select">
+        <option value="">所有模块类型</option>
+        <option value="AI">模拟量输入</option>
+        <option value="AO">模拟量输出</option>
+        <option value="DI">数字量输入</option>
+        <option value="DO">数字量输出</option>
+      </select>
+    </div>
+
+    <div class="channels-table">
+      <div class="table-header">
+        <div class="table-cell">标签</div>
+        <div class="table-cell">描述</div>
+        <div class="table-cell">模块类型</div>
+        <div class="table-cell">通道号</div>
+        <div class="table-cell">数据类型</div>
+        <div class="table-cell">操作</div>
+      </div>
+      
+      <div class="table-body">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <h3>暂无通道配置</h3>
+          <p>点击"新增通道"开始配置您的第一个测试通道</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

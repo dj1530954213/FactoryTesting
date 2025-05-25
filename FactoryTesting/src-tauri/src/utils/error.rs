@@ -315,14 +315,14 @@ impl From<serde_json::Error> for AppError {
 /// 字符串错误到 AppError 的转换（通用错误）
 impl From<String> for AppError {
     fn from(err_msg: String) -> Self {
-        AppError::UnknownError { message: err_msg }
+        Self::Generic { message: err_msg }
     }
 }
 
 /// &str 错误到 AppError 的转换（通用错误）
 impl From<&str> for AppError {
     fn from(err_msg: &str) -> Self {
-        AppError::UnknownError { message: err_msg.to_string() }
+        Self::Generic { message: err_msg.to_string() }
     }
 }
 

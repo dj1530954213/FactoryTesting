@@ -1,0 +1,266 @@
+<div class="data-import-container">
+  <div class="page-header">
+    <h1>📥 数据导入与批次创建</h1>
+    <p>导入Excel点位表，创建测试批次，开始工厂测试流程</p>
+  </div>
+
+  <!-- 步骤指示器 -->
+  <div class="steps-indicator">
+    <div class="step" [class.active]="currentStep >= 1" [class.completed]="currentStep > 1">
+      <div class="step-number">1</div>
+      <div class="step-label">选择文件</div>
+    </div>
+    <div class="step" [class.active]="currentStep >= 2" [class.completed]="currentStep > 2">
+      <div class="step-number">2</div>
+      <div class="step-label">预览数据</div>
+    </div>
+    <div class="step" [class.active]="currentStep >= 3" [class.completed]="currentStep > 3">
+      <div class="step-number">3</div>
+      <div class="step-label">创建批次</div>
+    </div>
+    <div class="step" [class.active]="currentStep >= 4">
+      <div class="step-number">4</div>
+      <div class="step-label">开始测试</div>
+    </div>
+  </div>
+
+  <!-- 步骤1: 文件选择 -->
+  <div class="import-section" *ngIf="currentStep === 1">
+    <!-- 错误提示 -->
+    <div class="error-alert" *ngIf="error">
+      <div class="error-icon">⚠️</div>
+      <div class="error-content">
+        <p>{{ error }}</p>
+        <button class="btn-close" (click)="clearError()">×</button>
+      </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div class="loading-overlay" *ngIf="isLoading">
+      <div class="loading-spinner"></div>
+      <p>{{ loadingMessage }}</p>
+    </div>
+
+    <div class="file-upload-area">
+      <div class="upload-zone" 
+           (click)="selectFile()" 
+           [class.dragover]="isDragOver"
+           [class.has-file]="selectedFileName"
+           (dragenter)="onDragEnter($event)"
+           (dragleave)="onDragLeave($event)"
+           (dragover)="onDragOver($event)"
+           (drop)="onDrop($event)"
+           style="position: relative;"
+           [attr.data-drag-zone]="true">
+        
+        <div class="upload-content" *ngIf="!selectedFileName"
+             (dragenter)="onDragEnter($event)"
+             (dragleave)="onDragLeave($event)"
+             (dragover)="onDragOver($event)"
+             (drop)="onDrop($event)"
+             style="pointer-events: none;">
+          <div class="upload-icon">📄</div>
+          <h3>选择Excel点位表文件</h3>
+          <p>支持 .xlsx, .xls 格式文件</p>
+          <p class="file-hint">点击选择文件或拖拽文件到此区域</p>
+          <button class="btn btn-primary" type="button" 
+                  (click)="selectFile(); $event.stopPropagation()"
+                  style="pointer-events: auto;">
+            <span class="btn-icon">📁</span>
+            浏览文件
+          </button>
+        </div>
+
+        <div class="selected-file-info" *ngIf="selectedFileName"
+             style="pointer-events: none;">
+          <div class="file-icon-large">📄</div>
+          <h3>{{ selectedFileName }}</h3>
+          <p>文件已选择，点击下一步继续</p>
+          <button class="btn btn-secondary" type="button" 
+                  (click)="selectFile(); $event.stopPropagation()"
+                  style="pointer-events: auto;">
+            <span class="btn-icon">🔄</span>
+            重新选择
+          </button>
+        </div>
+
+        <!-- 拖拽状态指示器 -->
+        <div class="drag-overlay" *ngIf="isDragOver">
+          <div class="drag-content">
+            <div class="drag-icon">📁</div>
+            <h3>释放文件以上传</h3>
+            <p>支持 .xlsx, .xls 格式</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="recent-files" *ngIf="recentFiles.length > 0">
+        <h4>最近使用的文件</h4>
+        <div class="file-list">
+          <div class="file-item" *ngFor="let file of recentFiles" (click)="selectRecentFile(file)">
+            <span class="file-icon">📄</span>
+            <div class="file-info">
+              <div class="file-name">{{ file.name }}</div>
+              <div class="file-date">{{ file.lastUsed | date:'yyyy-MM-dd HH:mm' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤2: 数据预览 -->
+  <div class="preview-section" *ngIf="currentStep === 2">
+    <div class="preview-header">
+      <h3>数据预览</h3>
+      <p>已解析 {{ previewData.length }} 个通道点位</p>
+    </div>
+    
+    <div class="preview-stats">
+      <div class="stat-card">
+        <div class="stat-icon">🔌</div>
+        <div class="stat-info">
+          <div class="stat-number">{{ getModuleTypeCount('AI') }}</div>
+          <div class="stat-label">模拟量输入</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📤</div>
+        <div class="stat-info">
+          <div class="stat-number">{{ getModuleTypeCount('AO') }}</div>
+          <div class="stat-label">模拟量输出</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🔘</div>
+        <div class="stat-info">
+          <div class="stat-number">{{ getModuleTypeCount('DI') }}</div>
+          <div class="stat-label">数字量输入</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🔲</div>
+        <div class="stat-info">
+          <div class="stat-number">{{ getModuleTypeCount('DO') }}</div>
+          <div class="stat-label">数字量输出</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-table">
+      <div class="table-header">
+        <div class="table-cell">标签</div>
+        <div class="table-cell">描述</div>
+        <div class="table-cell">模块类型</div>
+        <div class="table-cell">通道号</div>
+        <div class="table-cell">PLC地址</div>
+      </div>
+      <div class="table-body">
+        <div class="table-row" *ngFor="let item of previewData.slice(0, 10)">
+          <div class="table-cell">{{ item.tag }}</div>
+          <div class="table-cell">{{ item.description }}</div>
+          <div class="table-cell">
+            <span class="module-badge" [class]="'module-' + item.moduleType">
+              {{ item.moduleType }}
+            </span>
+          </div>
+          <div class="table-cell">{{ item.channelNumber }}</div>
+          <div class="table-cell">{{ item.plcAddress }}</div>
+        </div>
+      </div>
+      <div class="table-footer" *ngIf="previewData.length > 10">
+        <p>显示前10条，共{{ previewData.length }}条记录</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤3: 批次信息 -->
+  <div class="batch-section" *ngIf="currentStep === 3">
+    <div class="batch-form">
+      <h3>创建测试批次</h3>
+      <div class="form-group">
+        <label for="productModel">产品型号 *</label>
+        <input type="text" id="productModel" [(ngModel)]="batchInfo.productModel" 
+               placeholder="请输入产品型号" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label for="serialNumber">序列号 *</label>
+        <input type="text" id="serialNumber" [(ngModel)]="batchInfo.serialNumber" 
+               placeholder="请输入序列号" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label for="customerName">客户名称</label>
+        <input type="text" id="customerName" [(ngModel)]="batchInfo.customerName" 
+               placeholder="请输入客户名称" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="operatorName">操作员</label>
+        <input type="text" id="operatorName" [(ngModel)]="batchInfo.operatorName" 
+               placeholder="请输入操作员姓名" class="form-input">
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤4: 确认启动 -->
+  <div class="confirm-section" *ngIf="currentStep === 4">
+    <div class="confirm-info">
+      <h3>确认信息</h3>
+      <div class="info-grid">
+        <div class="info-item">
+          <label>文件名:</label>
+          <span>{{ selectedFileName }}</span>
+        </div>
+        <div class="info-item">
+          <label>通道数量:</label>
+          <span>{{ previewData.length }} 个</span>
+        </div>
+        <div class="info-item">
+          <label>产品型号:</label>
+          <span>{{ batchInfo.productModel }}</span>
+        </div>
+        <div class="info-item">
+          <label>序列号:</label>
+          <span>{{ batchInfo.serialNumber }}</span>
+        </div>
+      </div>
+      
+      <div class="warning-box">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-text">
+          <h4>开始测试前请确认:</h4>
+          <ul>
+            <li>所有测试设备已正确连接</li>
+            <li>PLC程序已下载并运行</li>
+            <li>测试台架处于就绪状态</li>
+            <li>接线已按照点位表完成</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作按钮 -->
+  <div class="action-buttons">
+    <button class="btn btn-outline" (click)="goToDashboard()">
+      <span class="btn-icon">🏠</span>
+      返回仪表板
+    </button>
+    
+    <button class="btn btn-secondary" *ngIf="currentStep > 1" (click)="previousStep()">
+      <span class="btn-icon">⬅️</span>
+      上一步
+    </button>
+    
+    <button class="btn btn-primary" *ngIf="currentStep < 4" (click)="nextStep()" 
+            [disabled]="!canProceedToNext()">
+      <span class="btn-icon">➡️</span>
+      下一步
+    </button>
+    
+    <button class="btn btn-success" *ngIf="currentStep === 4" (click)="startTesting()" 
+            [disabled]="isCreatingBatch">
+      <span class="btn-icon">🚀</span>
+      {{ isCreatingBatch ? '创建中...' : '创建批次并开始测试' }}
+    </button>
+  </div>
+</div>

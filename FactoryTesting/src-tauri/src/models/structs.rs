@@ -463,7 +463,7 @@ impl RawTestOutcome {
 impl Default for RawTestOutcome {
     fn default() -> Self {
         Self {
-            channel_instance_id: String::new(),
+            channel_instance_id: default_id(),
             sub_test_item: SubTestItem::HardPoint,
             success: false,
             raw_value_read: None,

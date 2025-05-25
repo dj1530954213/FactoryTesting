@@ -1,15 +1,72 @@
 <div class="app-container">
-  <header class="app-header">
-    <h1>🏭 工厂测试系统</h1>
-    <p>Factory Testing Application</p>
-  </header>
-  
-  <main class="app-main">
-    <div class="welcome-message">
-      <h2>欢迎使用工厂测试系统</h2>
-      <p>系统已成功启动，准备开始开发...</p>
+  <!-- 顶部导航栏 -->
+  <header class="top-nav">
+    <div class="nav-brand">
+      <span class="brand-icon">🏭</span>
+      <span class="brand-text">工厂测试系统</span>
+      <span class="version-badge">v1.0.0</span>
     </div>
-  </main>
-</div>
+    
+    <nav class="nav-menu">
+      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">📊</span>
+        仪表板
+      </a>
+      <a routerLink="/data-import" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">📥</span>
+        数据导入
+      </a>
+      <a routerLink="/test-execution" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">🧪</span>
+        测试执行
+      </a>
+      <a routerLink="/batch-management" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">📦</span>
+        批次管理
+      </a>
+      <a routerLink="/manual-test" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">🔧</span>
+        手动测试
+      </a>
+    </nav>
+    
+    <div class="nav-status">
+      <div class="status-item">
+        <span class="status-label">系统健康:</span>
+        <span class="status-value" [class]="systemStatus?.system_health === 'healthy' ? 'status-healthy' : 'status-error'">
+          {{ systemStatus?.system_health || 'unknown' }}
+        </span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">版本:</span>
+        <span class="status-value">{{ systemStatus?.version || '0.1.0' }}</span>
+      </div>
+      <div class="connection-status" [class]="isConnected ? 'connected' : 'disconnected'">
+        {{ isConnected ? '已连接' : '未连接' }}
+      </div>
+    </div>
+  </header>
 
-<router-outlet />
+  <!-- 主内容区域 -->
+  <main class="main-content">
+    <router-outlet></router-outlet>
+  </main>
+
+  <!-- 底部状态栏 -->
+  <footer class="bottom-status">
+    <div class="status-left">
+      <span class="status-indicator" [class]="isConnected ? 'connected' : 'disconnected'"></span>
+      <span>{{ isConnected ? '系统已连接' : '系统未连接' }}</span>
+    </div>
+    
+    <div class="status-center">
+      <span>活动任务: {{ systemStatus?.active_test_tasks || 0 }}</span>
+      <span class="separator">|</span>
+      <span>最后更新: {{ lastUpdateTime | date:'HH:mm:ss' }}</span>
+    </div>
+    
+    <div class="status-right">
+      <span>工厂测试系统 v{{ systemStatus?.version || '1.0.0' }}</span>
+    </div>
+  </footer>
+</div>

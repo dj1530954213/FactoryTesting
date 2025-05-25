@@ -1,0 +1,251 @@
+<div class="dashboard-container">
+  <!-- 页面标题 -->
+  <div class="page-header">
+    <h1>🏭 工厂测试系统仪表板</h1>
+    <p>欢迎使用工厂测试系统，请按照以下流程进行测试操作</p>
+  </div>
+
+  <!-- 系统状态概览 -->
+  <div class="system-overview">
+    <div class="status-card system-health" [class.healthy]="systemStatus?.system_health === 'healthy'">
+      <div class="status-icon">{{ systemStatus?.system_health === 'healthy' ? '✅' : '⚠️' }}</div>
+      <div class="status-info">
+        <h3>系统状态</h3>
+        <p class="status-value">{{ getSystemHealthText() }}</p>
+        <small>版本: {{ systemStatus?.version || 'v1.0.0' }}</small>
+      </div>
+    </div>
+    
+    <div class="status-card active-tests">
+      <div class="status-icon">🧪</div>
+      <div class="status-info">
+        <h3>活动测试</h3>
+        <p class="status-value">{{ systemStatus?.active_test_tasks || 0 }}</p>
+        <small>正在进行的测试任务</small>
+      </div>
+    </div>
+    
+    <div class="status-card total-batches">
+      <div class="status-icon">📦</div>
+      <div class="status-info">
+        <h3>待测批次</h3>
+        <p class="status-value">{{ pendingBatches }}</p>
+        <small>等待测试的批次数量</small>
+      </div>
+    </div>
+    
+    <div class="status-card success-rate">
+      <div class="status-icon">📊</div>
+      <div class="status-info">
+        <h3>成功率</h3>
+        <p class="status-value">{{ overallSuccessRate }}%</p>
+        <small>最近测试的通过率</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主要工作流程 -->
+  <div class="workflow-section">
+    <h2>测试工作流程</h2>
+    <div class="workflow-steps">
+      <!-- 步骤1: 导入点表 -->
+      <div class="workflow-step" [class.completed]="hasImportedData">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <h3>📥 导入点表</h3>
+          <p>上传Excel点位表文件，系统自动创建测试批次</p>
+          <button class="btn btn-primary" (click)="navigateToDataImport()" 
+                  [disabled]="systemStatus?.system_health !== 'healthy'">
+            <span class="btn-icon">📁</span>
+            导入点表文件
+          </button>
+        </div>
+      </div>
+
+      <!-- 步骤2: 选择批次 -->
+      <div class="workflow-step" [class.completed]="selectedBatch" [class.disabled]="!hasImportedData">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <h3>🎯 选择测试批次</h3>
+          <p>从可用批次中选择需要测试的产品批次</p>
+          <div class="batch-selector" *ngIf="availableBatches.length > 0">
+            <select class="batch-select" [(ngModel)]="selectedBatchId" (change)="onBatchSelected()">
+              <option value="">请选择测试批次...</option>
+              <option *ngFor="let batch of availableBatches" [value]="batch.id">
+                {{ batch.productModel }} - {{ batch.serialNumber }}
+              </option>
+            </select>
+          </div>
+          <div class="no-batches" *ngIf="availableBatches.length === 0 && hasImportedData">
+            <p>暂无可用批次，请先导入点表数据</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 步骤3: 确认接线 -->
+      <div class="workflow-step" [class.completed]="wiringConfirmed" [class.disabled]="!selectedBatch">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <h3>🔌 确认接线</h3>
+          <p>检查并确认所有测试点的接线连接正确</p>
+          <div class="wiring-info" *ngIf="selectedBatch">
+            <div class="wiring-stats">
+              <span class="stat-item">
+                <strong>总测试点:</strong> {{ selectedBatch.totalPoints }}
+              </span>
+              <span class="stat-item">
+                <strong>模拟量:</strong> {{ getAnalogPointsCount() }}
+              </span>
+              <span class="stat-item">
+                <strong>数字量:</strong> {{ getDigitalPointsCount() }}
+              </span>
+            </div>
+            <button class="btn btn-warning" (click)="confirmWiring()" [disabled]="wiringConfirmed">
+              <span class="btn-icon">✅</span>
+              {{ wiringConfirmed ? '接线已确认' : '确认接线完成' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 步骤4: 开始测试 -->
+      <div class="workflow-step" [class.completed]="testInProgress || testCompleted" [class.disabled]="!wiringConfirmed">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <h3>🚀 开始测试</h3>
+          <p>启动自动化测试流程，实时监控测试进度</p>
+          <div class="test-controls" *ngIf="selectedBatch && wiringConfirmed">
+            <div class="test-mode-selection">
+              <h4>选择测试模式</h4>
+              <div class="test-mode-buttons">
+                <button class="btn btn-success" (click)="startTest()" 
+                        [disabled]="testInProgress || testCompleted">
+                  <span class="btn-icon">▶️</span>
+                  {{ getTestButtonText() }}
+                </button>
+                <button class="btn btn-warning" (click)="navigateToManualTest()" 
+                        [disabled]="testInProgress">
+                  <span class="btn-icon">🔧</span>
+                  手动测试
+                </button>
+              </div>
+            </div>
+            <div class="test-actions" *ngIf="testInProgress || testCompleted">
+              <button class="btn btn-secondary" (click)="viewTestDetails()">
+                <span class="btn-icon">📊</span>
+                查看测试详情
+              </button>
+              <button class="btn btn-info" (click)="navigateToManualTest()" 
+                      *ngIf="testCompleted">
+                <span class="btn-icon">🔧</span>
+                手动干预测试
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 步骤5: 导出结果 -->
+      <div class="workflow-step" [class.completed]="resultExported" [class.disabled]="!testCompleted">
+        <div class="step-number">5</div>
+        <div class="step-content">
+          <h3>📄 导出结果</h3>
+          <p>测试完成后导出详细的测试报告</p>
+          <div class="export-controls" *ngIf="testCompleted">
+            <button class="btn btn-info" (click)="exportResults()">
+              <span class="btn-icon">📤</span>
+              导出测试报告
+            </button>
+            <button class="btn btn-secondary" (click)="resetWorkflow()">
+              <span class="btn-icon">🔄</span>
+              开始新测试
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 当前测试状态 -->
+  <div class="current-test-section" *ngIf="selectedBatch">
+    <h2>当前测试状态</h2>
+    <div class="test-status-card">
+      <div class="test-header">
+        <h3>{{ selectedBatch.productModel }} - {{ selectedBatch.serialNumber }}</h3>
+        <span class="test-status-badge" [class]="getTestStatusClass()">
+          {{ getTestStatusText() }}
+        </span>
+      </div>
+      
+      <div class="test-progress" *ngIf="testInProgress">
+        <div class="progress-info">
+          <span>测试进度: {{ currentTestProgress.completed }}/{{ currentTestProgress.total }}</span>
+          <span class="progress-percentage">{{ getProgressPercentage() }}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" [style.width.%]="getProgressPercentage()"></div>
+        </div>
+        <div class="progress-details">
+          <span class="result-item passed">✅ 通过: {{ currentTestProgress.passed }}</span>
+          <span class="result-item failed">❌ 失败: {{ currentTestProgress.failed }}</span>
+          <span class="result-item pending">⏳ 待测: {{ currentTestProgress.pending }}</span>
+        </div>
+      </div>
+      
+      <div class="test-summary" *ngIf="testCompleted">
+        <div class="summary-stats">
+          <div class="summary-item">
+            <span class="summary-label">总测试点:</span>
+            <span class="summary-value">{{ selectedBatch.totalPoints }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">通过数量:</span>
+            <span class="summary-value passed">{{ finalResults.passed }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">失败数量:</span>
+            <span class="summary-value failed">{{ finalResults.failed }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">成功率:</span>
+            <span class="summary-value">{{ getFinalSuccessRate() }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 最近测试历史 -->
+  <div class="recent-tests-section">
+    <h2>最近测试记录</h2>
+    <div class="recent-tests-list" *ngIf="recentBatches.length > 0">
+      <div class="test-record" *ngFor="let batch of recentBatches.slice(0, 5)">
+        <div class="record-info">
+          <h4>{{ batch.product_model }} - {{ batch.serial_number }}</h4>
+          <p class="record-time">{{ formatTime(batch.created_at) }}</p>
+        </div>
+        <div class="record-status">
+          <span class="status-badge" [class]="getBatchStatusClass(batch.overall_status)">
+            {{ getBatchStatusText(batch.overall_status) }}
+          </span>
+          <span class="success-rate">{{ calculatePassRate(batch) }}%</span>
+        </div>
+        <div class="record-actions">
+          <button class="btn-icon-small" (click)="viewBatchDetails(batch)" title="查看详情">👁️</button>
+          <button class="btn-icon-small" (click)="exportBatchReport(batch)" title="导出报告">📄</button>
+        </div>
+      </div>
+    </div>
+    <div class="empty-history" *ngIf="recentBatches.length === 0">
+      <div class="empty-icon">📋</div>
+      <p>暂无测试记录</p>
+      <p class="empty-hint">完成第一次测试后，历史记录将显示在这里</p>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div class="loading-overlay" *ngIf="loading">
+    <div class="loading-spinner"></div>
+    <p>{{ loadingMessage }}</p>
+  </div>
+</div>

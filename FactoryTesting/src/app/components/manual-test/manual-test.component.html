@@ -1,0 +1,314 @@
+<!-- 手动测试页面 -->
+<div class="manual-test-container">
+  <!-- 页面标题和导航 -->
+  <div class="page-header">
+    <div class="header-content">
+      <h1 class="page-title">
+        <i class="icon-manual-test"></i>
+        手动测试
+      </h1>
+      <p class="page-description">对选定通道执行手动测试操作，包括读值、写值和特定测试项</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="goToDashboard()">
+        <i class="icon-dashboard"></i>
+        返回仪表板
+      </button>
+      <button class="btn btn-primary" (click)="goToTestExecution()">
+        <i class="icon-test"></i>
+        自动测试
+      </button>
+    </div>
+  </div>
+
+  <!-- 统计概览 -->
+  <div class="statistics-overview">
+    <div class="stat-card">
+      <div class="stat-icon total">📊</div>
+      <div class="stat-content">
+        <div class="stat-value">{{ statistics.totalChannels }}</div>
+        <div class="stat-label">总通道数</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon ready">🟢</div>
+      <div class="stat-content">
+        <div class="stat-value">{{ statistics.readyForTest }}</div>
+        <div class="stat-label">就绪</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon progress">🟡</div>
+      <div class="stat-content">
+        <div class="stat-value">{{ statistics.inProgress }}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon completed">🟢</div>
+      <div class="stat-content">
+        <div class="stat-value">{{ statistics.completed }}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon failed">🔴</div>
+      <div class="stat-content">
+        <div class="stat-value">{{ statistics.failed }}</div>
+        <div class="stat-label">失败</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主要内容区域 -->
+  <div class="main-content">
+    <!-- 左侧：通道选择区域 -->
+    <div class="channel-selection-panel">
+      <div class="panel-header">
+        <h2>通道选择</h2>
+        <button class="btn btn-sm btn-outline" (click)="loadChannels()" [disabled]="isLoading">
+          <i class="icon-refresh" [class.spinning]="isLoading"></i>
+          刷新
+        </button>
+      </div>
+
+      <!-- 筛选控件 -->
+      <div class="filter-controls">
+        <div class="filter-group">
+          <label>搜索通道</label>
+          <input 
+            type="text" 
+            class="form-control" 
+            placeholder="输入通道标签或描述..." 
+            [(ngModel)]="searchTerm"
+            (input)="filterChannels()">
+        </div>
+        <div class="filter-group">
+          <label>模块类型</label>
+          <select class="form-control" [(ngModel)]="selectedModuleType" (change)="filterChannels()">
+            <option value="">全部类型</option>
+            <option *ngFor="let type of moduleTypes" [value]="type">{{ type }}</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>状态</label>
+          <select class="form-control" [(ngModel)]="selectedStatus" (change)="filterChannels()">
+            <option value="">全部状态</option>
+            <option *ngFor="let status of statusOptions" [value]="status">{{ status }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 通道列表 -->
+      <div class="channel-list" *ngIf="!isLoading && !error">
+        <div 
+          class="channel-item" 
+          *ngFor="let channel of filteredChannels"
+          [class.selected]="selectedChannel?.instanceId === channel.instanceId"
+          (click)="selectChannel(channel)">
+          <div class="channel-header">
+            <span class="channel-label">{{ channel.channelLabel }}</span>
+            <span class="channel-status" [class]="'status-' + channel.overallStatus.toLowerCase()">
+              {{ channel.overallStatus }}
+            </span>
+          </div>
+          <div class="channel-info">
+            <div class="channel-description">{{ channel.description }}</div>
+            <div class="channel-details">
+              <span class="module-type module-{{ channel.moduleType.toLowerCase() }}">
+                {{ channel.moduleType }}
+              </span>
+              <span class="plc-address">{{ channel.definition.plcAddress }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 加载状态 -->
+      <div class="loading-state" *ngIf="isLoading">
+        <div class="spinner"></div>
+        <p>正在加载通道数据...</p>
+      </div>
+
+      <!-- 错误状态 -->
+      <div class="error-state" *ngIf="error">
+        <div class="error-icon">⚠️</div>
+        <p>{{ error }}</p>
+        <button class="btn btn-primary" (click)="loadChannels()">重试</button>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="empty-state" *ngIf="!isLoading && !error && filteredChannels.length === 0">
+        <div class="empty-icon">📭</div>
+        <p>没有找到匹配的通道</p>
+        <button class="btn btn-outline" (click)="searchTerm = ''; selectedModuleType = ''; selectedStatus = ''; filterChannels()">
+          清除筛选
+        </button>
+      </div>
+    </div>
+
+    <!-- 右侧：测试操作区域 -->
+    <div class="test-operation-panel">
+      <!-- 选中通道信息 -->
+      <div class="selected-channel-info" *ngIf="selectedChannel">
+        <div class="panel-header">
+          <h2>通道详情</h2>
+        </div>
+        <div class="channel-details-card">
+          <div class="detail-row">
+            <label>通道标签:</label>
+            <span>{{ selectedChannel.channelLabel }}</span>
+          </div>
+          <div class="detail-row">
+            <label>描述:</label>
+            <span>{{ selectedChannel.description }}</span>
+          </div>
+          <div class="detail-row">
+            <label>模块类型:</label>
+            <span class="module-type module-{{ selectedChannel.moduleType.toLowerCase() }}">
+              {{ selectedChannel.moduleType }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <label>数据类型:</label>
+            <span>{{ selectedChannel.definition.pointDataType }}</span>
+          </div>
+          <div class="detail-row">
+            <label>PLC地址:</label>
+            <span class="plc-address">{{ selectedChannel.definition.plcAddress }}</span>
+          </div>
+          <div class="detail-row" *ngIf="selectedChannel.definition.expectedValue !== undefined">
+            <label>期望值:</label>
+            <span>{{ selectedChannel.definition.expectedValue }}</span>
+          </div>
+          <div class="detail-row" *ngIf="selectedChannel.definition.tolerance !== undefined">
+            <label>容差:</label>
+            <span>± {{ selectedChannel.definition.tolerance }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 测试项选择 -->
+      <div class="test-item-selection" *ngIf="selectedChannel">
+        <div class="panel-header">
+          <h3>选择测试项</h3>
+        </div>
+        <div class="test-items-grid">
+          <div 
+            class="test-item-card" 
+            *ngFor="let subTest of availableSubTests"
+            [class.disabled]="!subTest.applicable"
+            [class.selected]="selectedSubTest?.name === subTest.name"
+            (click)="subTest.applicable && selectSubTest(subTest)">
+            <div class="test-item-header">
+              <span class="test-item-name">{{ subTest.displayName }}</span>
+              <span class="test-item-status" *ngIf="!subTest.applicable">不适用</span>
+            </div>
+            <div class="test-item-description">{{ subTest.description }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 测试操作面板 -->
+      <div class="test-operation-area" *ngIf="selectedChannel && selectedSubTest">
+        <div class="panel-header">
+          <h3>{{ selectedSubTest.displayName }}</h3>
+        </div>
+
+        <!-- 当前值显示 -->
+        <div class="current-value-display" *ngIf="currentValue !== null">
+          <label>当前值:</label>
+          <div class="value-display">
+            <span class="value">{{ currentValue }}</span>
+            <span class="unit" *ngIf="selectedChannel.moduleType === 'AI' || selectedChannel.moduleType === 'AO'">
+              {{ selectedChannel.definition.pointDataType === 'Float32' ? '' : '' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 写入值输入 -->
+        <div class="input-section" *ngIf="selectedSubTest.name === 'WriteValue'">
+          <label>写入值:</label>
+          <div class="input-group">
+            <input 
+              *ngIf="getInputType() !== 'checkbox'"
+              [type]="getInputType()"
+              class="form-control"
+              [placeholder]="getInputPlaceholder()"
+              [(ngModel)]="inputValue"
+              [disabled]="isTestInProgress">
+            <div class="checkbox-group" *ngIf="getInputType() === 'checkbox'">
+              <label class="checkbox-label">
+                <input 
+                  type="checkbox" 
+                  [(ngModel)]="inputValue"
+                  [disabled]="isTestInProgress">
+                <span class="checkbox-text">{{ inputValue ? '开启' : '关闭' }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="action-buttons">
+          <button 
+            class="btn btn-primary"
+            *ngIf="selectedSubTest.name === 'ReadValue'"
+            (click)="executeReadValue()"
+            [disabled]="isTestInProgress">
+            <i class="icon-read" [class.spinning]="isTestInProgress"></i>
+            {{ isTestInProgress ? '读取中...' : '读取数值' }}
+          </button>
+
+          <button 
+            class="btn btn-success"
+            *ngIf="selectedSubTest.name === 'WriteValue'"
+            (click)="executeWriteValue()"
+            [disabled]="isTestInProgress || inputValue === null">
+            <i class="icon-write" [class.spinning]="isTestInProgress"></i>
+            {{ isTestInProgress ? '写入中...' : '写入数值' }}
+          </button>
+
+          <button 
+            class="btn btn-warning"
+            *ngIf="selectedSubTest.name !== 'ReadValue' && selectedSubTest.name !== 'WriteValue'"
+            (click)="executeSpecificTest()"
+            [disabled]="isTestInProgress">
+            <i class="icon-test" [class.spinning]="isTestInProgress"></i>
+            {{ isTestInProgress ? '执行中...' : '执行测试' }}
+          </button>
+        </div>
+
+        <!-- 测试结果显示 -->
+        <div class="test-result" *ngIf="testResult">
+          <div class="result-header" [class]="testResult.success ? 'success' : 'error'">
+            <i class="result-icon" [class]="testResult.success ? 'icon-success' : 'icon-error'"></i>
+            <span class="result-status">{{ testResult.success ? '成功' : '失败' }}</span>
+            <span class="result-timestamp">{{ testResult.timestamp }}</span>
+          </div>
+          <div class="result-content">
+            <p class="result-message">{{ testResult.message }}</p>
+            <div class="result-value" *ngIf="testResult.value !== undefined">
+              <label>返回值:</label>
+              <span class="value">{{ testResult.value }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 未选择通道的提示 -->
+      <div class="no-selection-state" *ngIf="!selectedChannel">
+        <div class="no-selection-icon">🎯</div>
+        <h3>请选择一个通道</h3>
+        <p>从左侧列表中选择一个通道开始手动测试</p>
+      </div>
+
+      <!-- 未选择测试项的提示 -->
+      <div class="no-test-selection-state" *ngIf="selectedChannel && !selectedSubTest">
+        <div class="no-selection-icon">🔧</div>
+        <h3>请选择测试项</h3>
+        <p>选择一个适用的测试项来执行手动操作</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
+use base64;
 
 use crate::utils::error::{AppError, AppResult};
 use crate::services::traits::BaseService;
@@ -28,6 +29,8 @@ pub struct MockPlcService {
     write_log: Arc<Mutex<Vec<WriteOperation>>>,
     /// 通信统计信息
     stats: Arc<Mutex<PlcCommunicationStats>>,
+    /// 最后一次发生的错误
+    last_error: Arc<Mutex<Option<AppError>>>,
     /// 读取超时时间（毫秒）
     read_timeout_ms: u32,
     /// 写入超时时间（毫秒）
@@ -65,6 +68,7 @@ impl MockPlcService {
             data_storage: Arc::new(Mutex::new(HashMap::new())),
             write_log: Arc::new(Mutex::new(Vec::new())),
             stats: Arc::new(Mutex::new(PlcCommunicationStats::default())),
+            last_error: Arc::new(Mutex::new(None)),
             read_timeout_ms: 3000,
             write_timeout_ms: 3000,
             simulate_network_delay: true,
@@ -103,6 +107,11 @@ impl MockPlcService {
     /// 返回所有记录的写入操作，用于测试验证
     pub fn get_write_log(&self) -> Vec<WriteOperation> {
         self.write_log.lock().unwrap().clone()
+    }
+
+    /// 获取最后一次错误
+    pub fn get_last_error(&self) -> Option<AppError> {
+        self.last_error.lock().unwrap().clone()
     }
 
     /// 清空写入日志
@@ -172,6 +181,12 @@ impl MockPlcService {
         stats.last_communication_time = Some(Utc::now());
     }
 
+    /// 设置并记录错误
+    fn set_and_record_error(&self, error: AppError) -> AppError {
+        *self.last_error.lock().unwrap() = Some(error.clone());
+        error
+    }
+
     /// 获取存储的值
     fn get_stored_value(&self, address: &str) -> Option<Value> {
         self.data_storage.lock().unwrap().get(address).cloned()
@@ -214,10 +229,12 @@ impl BaseService for MockPlcService {
 impl PlcCommunicationService for MockPlcService {
     async fn connect(&mut self) -> AppResult<()> {
         self.simulate_delay().await;
+        *self.last_error.lock().unwrap() = None;
 
         if self.should_simulate_error() {
             self.connection_status = PlcConnectionStatus::Error("模拟连接失败".to_string());
-            return Err(AppError::plc_communication_error("模拟的PLC连接失败"));
+            let err = AppError::plc_communication_error("模拟的PLC连接失败");
+            return Err(self.set_and_record_error(err));
         }
 
         self.connection_status = PlcConnectionStatus::Connected;
@@ -244,836 +261,852 @@ impl PlcCommunicationService for MockPlcService {
     }
 
     async fn read_bool(&self, address: &str) -> AppResult<bool> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟读取错误 at {}", address),
             )));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Bool(b_val)) => {
+                self.update_stats(|stats| stats.successful_reads += 1);
+                Ok(b_val)
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC type error at address {}: expected bool, got {:?}", address, other_val)
+                )))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC address not found: {}", address)
+                )))
+            }
+        }
     }
 
     async fn read_int8(&self, address: &str) -> AppResult<i8> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_i64())
-            .map(|v| v as i8)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(i_val) = num.as_i64() {
+                    if i_val >= i8::MIN as i64 && i_val <= i8::MAX as i64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(i_val as i8)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(
+                            format!("PLC type error at address {}: value {} out of range for i8", address, i_val)
+                        )))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(
+                        format!("PLC type error at address {}: expected i8, got non-integer Number", address)
+                    )))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC type error at address {}: expected i8, got {:?}", address, other_val)
+                )))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC address not found: {}", address)
+                )))
+            }
+        }
     }
 
     async fn read_uint8(&self, address: &str) -> AppResult<u8> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u8)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(u_val) = num.as_u64() {
+                    if u_val <= u8::MAX as u64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(u_val as u8)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value {} out of range for u8", address, u_val))))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u8, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u8, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_int16(&self, address: &str) -> AppResult<i16> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_i64())
-            .map(|v| v as i16)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(i_val) = num.as_i64() {
+                    if i_val >= i16::MIN as i64 && i_val <= i16::MAX as i64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(i_val as i16)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value {} out of range for i16", address, i_val))))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i16, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i16, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_uint16(&self, address: &str) -> AppResult<u16> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u16)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(u_val) = num.as_u64() {
+                    if u_val <= u16::MAX as u64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(u_val as u16)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value {} out of range for u16", address, u_val))))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u16, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u16, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_int32(&self, address: &str) -> AppResult<i32> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_i64())
-            .map(|v| v as i32)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(i_val) = num.as_i64() {
+                    if i_val >= i32::MIN as i64 && i_val <= i32::MAX as i64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(i_val as i32)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value {} out of range for i32", address, i_val))))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i32, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i32, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_uint32(&self, address: &str) -> AppResult<u32> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u32)
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(u_val) = num.as_u64() {
+                    if u_val <= u32::MAX as u64 {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(u_val as u32)
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value {} out of range for u32", address, u_val))))
+                    }
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u32, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u32, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_int64(&self, address: &str) -> AppResult<i64> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(i_val) = num.as_i64() {
+                    self.update_stats(|stats| stats.successful_reads += 1);
+                    Ok(i_val)
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i64, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected i64, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_uint64(&self, address: &str) -> AppResult<u64> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
-
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(u_val) = num.as_u64() {
+                    self.update_stats(|stats| stats.successful_reads += 1);
+                    Ok(u_val)
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u64, got non-integer Number", address))))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected u64, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
     async fn read_float32(&self, address: &str) -> AppResult<f32> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟读取错误 at {}", address),
             )));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
-            .unwrap_or(0.0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(f_val) = num.as_f64() {
+                    self.update_stats(|stats| stats.successful_reads += 1);
+                    Ok(f_val as f32)
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(
+                        format!("PLC type error at address {}: expected f32, got non-float Number", address)
+                    )))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC type error at address {}: expected f32, got {:?}", address, other_val)
+                )))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC address not found: {}", address)
+                )))
+            }
+        }
     }
 
     async fn read_float64(&self, address: &str) -> AppResult<f64> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟读取错误 at {}", address),
             )));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Number(num)) => {
+                if let Some(f_val) = num.as_f64() {
+                    self.update_stats(|stats| stats.successful_reads += 1);
+                    Ok(f_val)
+                } else {
+                    self.update_stats(|stats| stats.failed_reads += 1);
+                    Err(self.set_and_record_error(AppError::plc_communication_error(
+                        format!("PLC type error at address {}: expected f64, got non-float Number", address)
+                    )))
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC type error at address {}: expected f64, got {:?}", address, other_val)
+                )))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC address not found: {}", address)
+                )))
+            }
+        }
     }
 
     async fn read_string(&self, address: &str, _max_length: usize) -> AppResult<String> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟读取错误 at {}", address),
             )));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| v.as_str().map(|s| s.to_string()))
-            .unwrap_or_default();
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::String(s_val)) => {
+                self.update_stats(|stats| stats.successful_reads += 1);
+                Ok(s_val)
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC type error at address {}: expected String, got {:?}", address, other_val)
+                )))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(
+                    format!("PLC address not found: {}", address)
+                )))
+            }
+        }
     }
 
     async fn read_bytes(&self, address: &str, _length: usize) -> AppResult<Vec<u8>> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_reads += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟读取错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟读取错误 at {}", address))));
         }
 
-        let result = self
-            .get_stored_value(address)
-            .and_then(|v| {
-                v.as_array().map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_u64())
-                        .map(|v| v as u8)
-                        .collect()
-                })
-            })
-            .unwrap_or_default();
-
-        self.update_stats(|stats| {
-            stats.successful_reads += 1;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(result)
+        match self.get_stored_value(address) {
+            Some(Value::Array(arr)) => {
+                let mut bytes = Vec::new();
+                for val_num in arr {
+                    if let Some(num) = val_num.as_u64() {
+                        if num <= u8::MAX as u64 {
+                            bytes.push(num as u8);
+                        } else {
+                            self.update_stats(|stats| stats.failed_reads += 1);
+                            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: value in byte array out of range for u8", address))));
+                        }
+                    } else {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        return Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected Vec<u8>, got non-Number in array", address))));
+                    }
+                }
+                self.update_stats(|stats| stats.successful_reads += 1);
+                Ok(bytes)
+            }
+            Some(Value::String(s_val)) => { 
+                match base64::decode(&s_val) {
+                    Ok(bytes) => {
+                        self.update_stats(|stats| stats.successful_reads += 1);
+                        Ok(bytes)
+                    }
+                    Err(_) => {
+                        self.update_stats(|stats| stats.failed_reads += 1);
+                        Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected Vec<u8>, failed to decode base64 string", address))))
+                    }
+                }
+            }
+            Some(other_val) => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC type error at address {}: expected Vec<u8>, got {:?}", address, other_val))))
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_reads += 1);
+                Err(self.set_and_record_error(AppError::plc_communication_error(format!("PLC address not found: {}", address))))
+            }
+        }
     }
 
+    // --- Write Operations ---
+
     async fn write_bool(&self, address: &str, value: bool) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟写入错误 at {}", address),
             )));
         }
 
-        let json_value = Value::Bool(value);
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_bool".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Bool(value);
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_bool".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_int8(&self, address: &str, value: i8) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as i64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_int8".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_int8".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_uint8(&self, address: &str, value: u8) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as u64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_uint8".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_uint8".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_int16(&self, address: &str, value: i16) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as i64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_int16".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_int16".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_uint16(&self, address: &str, value: u16) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as u64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_uint16".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_uint16".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_int32(&self, address: &str, value: i32) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as i64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_int32".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_int32".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_uint32(&self, address: &str, value: u32) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value as u64));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_uint32".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_uint32".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_int64(&self, address: &str, value: i64) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_int64".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_int64".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_uint64(&self, address: &str, value: u64) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::Number(serde_json::Number::from(value));
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_uint64".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::Number(serde_json::Number::from(value));
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_uint64".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_float32(&self, address: &str, value: f32) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
+            )));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟写入错误 at {}", address),
             )));
         }
 
-        let json_value = Value::Number(
-            serde_json::Number::from_f64(value as f64)
-                .unwrap_or_else(|| serde_json::Number::from(0)),
-        );
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_float32".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(())
+        // 将 f32 转换为 f64 存储，因为 serde_json::Number 主要支持 f64
+        match serde_json::Number::from_f64(value as f64) {
+            Some(num_val) => {
+                let value_to_store = Value::Number(num_val);
+                self.store_value(address.to_string(), value_to_store.clone());
+                self.log_write_operation(address.to_string(), value_to_store, "write_float32".to_string());
+                self.update_stats(|stats| stats.successful_writes += 1);
+                Ok(())
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_writes += 1);
+                Err(self.set_and_record_error(AppError::serialization_error(format!(
+                    "无法将f32 {} 转换为JSON Number",
+                    value
+                ))))
+            }
+        }
     }
 
     async fn write_float64(&self, address: &str, value: f64) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
-        }
-
-        if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                "PLC未连接",
             )));
         }
-
-        let json_value = Value::Number(
-            serde_json::Number::from_f64(value).unwrap_or_else(|| serde_json::Number::from(0)),
-        );
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_float64".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(())
+        if self.should_simulate_error() {
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error(
+                format!("模拟写入错误 at {}", address),
+            )));
+        }
+        match serde_json::Number::from_f64(value) {
+            Some(num_val) => {
+                let value_to_store = Value::Number(num_val);
+                self.store_value(address.to_string(), value_to_store.clone());
+                self.log_write_operation(address.to_string(), value_to_store, "write_float64".to_string());
+                self.update_stats(|stats| stats.successful_writes += 1);
+                Ok(())
+            }
+            None => {
+                self.update_stats(|stats| stats.failed_writes += 1);
+                Err(self.set_and_record_error(AppError::serialization_error(format!(
+                    "无法将f64 {} 转换为JSON Number",
+                    value
+                ))))
+            }
+        }
     }
 
     async fn write_string(&self, address: &str, value: &str) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
-
-        let json_value = Value::String(value.to_string());
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_string".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        let value_to_store = Value::String(value.to_string());
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_string".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
     async fn write_bytes(&self, address: &str, value: &[u8]) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
             self.update_stats(|stats| stats.failed_writes += 1);
-            return Err(AppError::plc_communication_error(format!(
-                "模拟写入错误: {}",
-                address
-            )));
+            return Err(self.set_and_record_error(AppError::plc_communication_error(format!("模拟写入错误 at {}", address))));
         }
+        
+        // 存储为 base64 字符串，或者数字数组
+        // 为简单起见，这里存储为base64字符串
+        let base64_encoded = base64::encode(value);
+        let value_to_store = Value::String(base64_encoded);
 
-        let json_value = Value::Array(
-            value
-                .iter()
-                .map(|&b| Value::Number(serde_json::Number::from(b as u64)))
-                .collect(),
-        );
-        self.store_value(address.to_string(), json_value.clone());
-        self.log_write_operation(address.to_string(), json_value, "write_bytes".to_string());
-
-        self.update_stats(|stats| {
-            stats.successful_writes += 1;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
+        self.store_value(address.to_string(), value_to_store.clone());
+        self.log_write_operation(address.to_string(), value_to_store, "write_bytes".to_string());
+        self.update_stats(|stats| stats.successful_writes += 1);
         Ok(())
     }
 
+    // --- Batch Operations ---
+
     async fn batch_read(&self, addresses: &[String]) -> AppResult<HashMap<String, Value>> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            // 对于批量操作，如果连接失败，是否算作多次失败读取？
+            // 这里将其视为一次批量读取操作的失败。具体的子读取不单独计数。
+            self.update_stats(|stats| stats.failed_batch_reads += 1); 
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
-            self.update_stats(|stats| stats.failed_reads += addresses.len() as u64);
-            return Err(AppError::plc_communication_error("模拟批量读取错误"));
+            self.update_stats(|stats| stats.failed_batch_reads += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("模拟批量读取错误")));
         }
 
         let mut results = HashMap::new();
-        let storage = self.data_storage.lock().unwrap();
-
+        let mut batch_had_errors = false;
         for address in addresses {
-            if let Some(value) = storage.get(address) {
-                results.insert(address.clone(), value.clone());
-            } else {
-                results.insert(address.clone(), Value::Null);
+            // 这里不直接调用单个read方法，避免重复的连接检查和延迟
+            match self.get_stored_value(address) {
+                Some(value) => {
+                    results.insert(address.clone(), value);
+                    // 成功读取单个值，不在这里更新 successful_reads，在批量成功后统一更新
+                }
+                None => {
+                    // 单个地址未找到，整个批量读取可以认为是部分成功或整体失败
+                    // 这里选择将缺失的值也放入结果中，用 Value::Null 表示
+                    results.insert(address.clone(), Value::Null);
+                    // 或者，可以将此视为错误，并让整个批量读取失败：
+                    // batch_had_errors = true;
+                    // self.update_stats(|stats| stats.failed_reads += 1); // 计入单个失败
+                    // break; 
+                }
             }
         }
 
-        self.update_stats(|stats| {
-            stats.successful_reads += addresses.len() as u64;
-            stats.total_read_time_ms += start_time.elapsed().as_millis() as u64;
-        });
-
-        Ok(results)
+        if batch_had_errors { // 如果选择上面注释掉的逻辑
+             self.update_stats(|stats| stats.failed_batch_reads += 1);
+             Err(self.set_and_record_error(AppError::plc_communication_error(format!("Partial failure in batch read: Some addresses not found"))))
+        } else {
+            self.update_stats(|stats| stats.successful_batch_reads += 1);
+            // 也可以在这里根据 results.len() 更新 successful_reads
+            // self.update_stats(|stats| stats.successful_reads += addresses.len() as u64);
+            Ok(results)
+        }
     }
 
     async fn batch_write(&self, values: &HashMap<String, Value>) -> AppResult<()> {
-        let start_time = Instant::now();
         self.simulate_delay().await;
-
         if !self.is_connected() {
-            return Err(AppError::plc_communication_error("PLC未连接"));
+            self.update_stats(|stats| stats.failed_batch_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("PLC未连接")));
         }
-
         if self.should_simulate_error() {
-            self.update_stats(|stats| stats.failed_writes += values.len() as u64);
-            return Err(AppError::plc_communication_error("模拟批量写入错误"));
+            self.update_stats(|stats| stats.failed_batch_writes += 1);
+            return Err(self.set_and_record_error(AppError::plc_communication_error("模拟批量写入错误")));
         }
 
-        {
-            let mut storage = self.data_storage.lock().unwrap();
-            for (address, value) in values {
-                storage.insert(address.clone(), value.clone());
-            }
-        }
-
-        // 记录批量写入操作
+        // 对于 batch_write，如果其中一个失败，是否应该回滚或部分应用？
+        // Mock 实现：简单地逐个写入。
         for (address, value) in values {
-            self.log_write_operation(
-                address.clone(),
-                value.clone(),
-                "batch_write".to_string(),
-            );
+            // 检查值是否可转换为 serde_json::Number (用于浮点数等)
+            // 这是一个简化，真实PLC可能对类型有更严格的要求
+            let current_value_to_store = match value {
+                Value::Number(n) => Value::Number(n.clone()),
+                Value::Bool(b) => Value::Bool(*b),
+                Value::String(s) => Value::String(s.clone()),
+                _ => {
+                    // 对于不支持的类型，可以选择跳过，或返回错误
+                    // 这里选择跳过并记录一个警告或内部错误
+                    log::warn!("批量写入中遇到不支持的值类型 {:?} for address {}", value, address);
+                    // 或者返回错误:
+                    // self.update_stats(|stats| stats.failed_writes += 1); // 计入单个失败
+                    // return Err(self.set_and_record_error(AppError::plc_type_error(address, "SupportedType", &format!("{:?}", value))));
+                    continue; // 跳过此值
+                }
+            };
+
+            self.store_value(address.clone(), current_value_to_store.clone());
+            self.log_write_operation(address.clone(), current_value_to_store, "batch_write_item".to_string());
+            // 成功写入单个值，不在这里更新 successful_writes，在批量成功后统一更新
         }
-
+        
         self.update_stats(|stats| {
-            stats.successful_writes += values.len() as u64;
-            stats.total_write_time_ms += start_time.elapsed().as_millis() as u64;
+            stats.successful_batch_writes += 1;
+            // 也可以在这里根据 values.len() 更新 successful_writes
+            // stats.successful_writes += values.len() as u64;
         });
-
         Ok(())
     }
 
@@ -1128,7 +1161,10 @@ impl PlcCommunicationService for MockPlcService {
     }
 
     fn reset_communication_stats(&mut self) {
-        *self.stats.lock().unwrap() = PlcCommunicationStats::default();
+        let mut stats = self.stats.lock().unwrap();
+        *stats = PlcCommunicationStats::default();
+        self.last_error.lock().unwrap().take();
+        log::info!("通信统计信息已重置 for {}", self.service_name);
     }
 
     fn set_read_timeout(&mut self, timeout_ms: u32) -> AppResult<()> {

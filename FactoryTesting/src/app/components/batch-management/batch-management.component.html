@@ -1,0 +1,192 @@
+<div class="batch-management-container">
+  <div class="page-header">
+    <h1>📦 批次管理</h1>
+    <p>查看和管理测试批次历史记录</p>
+  </div>
+
+  <!-- 统计概览 -->
+  <div class="stats-overview">
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ totalBatches }}</div>
+        <div class="stat-label">总批次数</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ completedBatches }}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🔄</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ inProgressBatches }}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📈</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ successRate }}%</div>
+        <div class="stat-label">成功率</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 筛选和搜索 -->
+  <div class="filter-section">
+    <div class="search-group">
+      <input type="text" placeholder="搜索批次..." class="search-input" [(ngModel)]="searchTerm">
+      <button class="btn btn-secondary">
+        <span class="btn-icon">🔍</span>
+        搜索
+      </button>
+    </div>
+    
+    <div class="filter-group">
+      <select class="filter-select" [(ngModel)]="statusFilter">
+        <option value="">所有状态</option>
+        <option value="completed">已完成</option>
+        <option value="in-progress">进行中</option>
+        <option value="failed">失败</option>
+        <option value="cancelled">已取消</option>
+      </select>
+      
+      <select class="filter-select" [(ngModel)]="dateFilter">
+        <option value="">所有时间</option>
+        <option value="today">今天</option>
+        <option value="week">本周</option>
+        <option value="month">本月</option>
+        <option value="quarter">本季度</option>
+      </select>
+    </div>
+
+    <div class="action-group">
+      <button class="btn btn-primary" (click)="navigateToDataImport()">
+        <span class="btn-icon">➕</span>
+        新建批次
+      </button>
+      <button class="btn btn-secondary" (click)="refreshBatches()">
+        <span class="btn-icon">🔄</span>
+        刷新
+      </button>
+      <button class="btn btn-secondary" (click)="exportBatches()">
+        <span class="btn-icon">📤</span>
+        导出报告
+      </button>
+    </div>
+  </div>
+
+  <!-- 批次列表 -->
+  <div class="batch-list">
+    <div class="batch-card" *ngFor="let batch of filteredBatches" (click)="viewBatchDetails(batch)">
+      <div class="batch-header">
+        <div class="batch-title">
+          <h3>{{ batch.productModel }} - {{ batch.serialNumber }}</h3>
+          <span class="batch-status" [class]="'status-' + batch.status">
+            {{ getStatusLabel(batch.status) }}
+          </span>
+        </div>
+        <div class="batch-date">
+          {{ batch.createdAt | date:'yyyy-MM-dd HH:mm' }}
+        </div>
+      </div>
+      
+      <div class="batch-content">
+        <div class="batch-info">
+          <div class="info-item">
+            <span class="info-label">客户:</span>
+            <span class="info-value">{{ batch.customerName || '未指定' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">操作员:</span>
+            <span class="info-value">{{ batch.operatorName || '未指定' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">测试点数:</span>
+            <span class="info-value">{{ batch.totalPoints }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">耗时:</span>
+            <span class="info-value">{{ formatDuration(batch.duration) }}</span>
+          </div>
+        </div>
+        
+        <div class="batch-progress">
+          <div class="progress-info">
+            <span>进度: {{ batch.completedPoints }}/{{ batch.totalPoints }}</span>
+            <span class="progress-percentage">{{ getProgressPercentage(batch) }}%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="getProgressPercentage(batch)"></div>
+          </div>
+          
+          <div class="result-summary">
+            <span class="result-item passed">
+              <span class="result-icon">✅</span>
+              {{ batch.passedPoints }}
+            </span>
+            <span class="result-item failed">
+              <span class="result-icon">❌</span>
+              {{ batch.failedPoints }}
+            </span>
+            <span class="result-item pending" *ngIf="batch.status === 'in-progress'">
+              <span class="result-icon">⏳</span>
+              {{ batch.totalPoints - batch.completedPoints }}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="batch-actions" (click)="$event.stopPropagation()">
+        <button class="btn-icon-small" (click)="viewBatchDetails(batch)" title="查看详情">
+          👁️
+        </button>
+        <button class="btn-icon-small" *ngIf="batch.status === 'in-progress'" 
+                (click)="continueBatch(batch)" title="继续测试">
+          ▶️
+        </button>
+        <button class="btn-icon-small" (click)="exportBatch(batch)" title="导出报告">
+          📄
+        </button>
+        <button class="btn-icon-small" (click)="duplicateBatch(batch)" title="复制批次">
+          📋
+        </button>
+        <button class="btn-icon-small danger" (click)="deleteBatch(batch)" title="删除批次">
+          🗑️
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 空状态 -->
+  <div class="empty-state" *ngIf="filteredBatches.length === 0">
+    <div class="empty-icon">📦</div>
+    <h3>{{ searchTerm || statusFilter || dateFilter ? '未找到匹配的批次' : '暂无测试批次' }}</h3>
+    <p>{{ searchTerm || statusFilter || dateFilter ? '请尝试调整搜索条件' : '点击"新建批次"开始您的第一个测试' }}</p>
+    <button class="btn btn-primary" (click)="navigateToDataImport()" *ngIf="!searchTerm && !statusFilter && !dateFilter">
+      <span class="btn-icon">➕</span>
+      创建第一个批次
+    </button>
+  </div>
+
+  <!-- 分页 -->
+  <div class="pagination" *ngIf="totalPages > 1">
+    <button class="btn btn-secondary" [disabled]="currentPage === 1" (click)="goToPage(currentPage - 1)">
+      ⬅️ 上一页
+    </button>
+    <span class="page-info">第 {{ currentPage }} 页，共 {{ totalPages }} 页</span>
+    <button class="btn btn-secondary" [disabled]="currentPage === totalPages" (click)="goToPage(currentPage + 1)">
+      下一页 ➡️
+    </button>
+  </div>
+
+  <!-- 加载状态 -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner"></div>
+    <p>{{ loadingMessage }}</p>
+  </div>
+</div>

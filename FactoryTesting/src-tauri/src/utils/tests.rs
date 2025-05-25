@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::utils::error::{AppError, AppResult};
     use crate::utils::config::{AppConfig, ConfigManager};
     use std::path::PathBuf;
@@ -17,7 +16,7 @@ mod tests {
         assert_eq!(plc_error.error_code(), "PLC_COMMUNICATION_ERROR");
         assert!(plc_error.to_string().contains("PLC连接失败"));
 
-        let io_error = AppError::io_error("文件读取失败");
+        let io_error = AppError::io_error("文件读取失败", "Unknown");
         assert_eq!(io_error.error_code(), "IO_ERROR");
         assert!(io_error.to_string().contains("文件读取失败"));
     }
@@ -40,7 +39,7 @@ mod tests {
         match json_error {
             Err(e) => {
                 let app_error: AppError = e.into();
-                assert_eq!(app_error.error_code(), "SERIALIZATION_ERROR");
+                assert_eq!(app_error.error_code(), "JSON_ERROR");
             }
             Ok(_) => panic!("应该产生JSON错误"),
         }

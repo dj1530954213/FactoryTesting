@@ -1,89 +1,238 @@
-/* 工厂测试系统基础样式 */
+/* 工厂测试系统主应用样式 */
 .app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f5f7fa;
+}
+
+/* 顶部导航栏 */
+.app-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
-/* 头部样式 */
-.app-header {
-  padding: 2rem;
-  text-align: center;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.app-header h1 {
-  font-size: 2.5rem;
-  margin: 0 0 0.5rem 0;
-  font-weight: 700;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
-.app-header p {
-  font-size: 1.1rem;
+.logo-section h1 {
+  font-size: 1.5rem;
   margin: 0;
-  opacity: 0.9;
-  font-style: italic;
+  font-weight: 700;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.version {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* 主导航 */
+.main-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-link {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-link:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.nav-link.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+}
+
+.nav-link.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 状态区域 */
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00b894;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.connection-status.offline .status-dot {
+  background: #e74c3c;
 }
 
 /* 主内容区域 */
 .app-main {
   flex: 1;
+  min-height: 0; /* 允许内容区域收缩 */
+}
+
+/* 底部状态栏 */
+.app-footer {
+  background: #2c3e50;
+  color: #bdc3c7;
+  padding: 0.75rem 0;
+  border-top: 1px solid #34495e;
+}
+
+.footer-content {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  padding: 2rem;
-}
-
-.welcome-message {
-  text-align: center;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 3rem;
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  max-width: 500px;
-}
-
-.welcome-message h2 {
-  font-size: 1.8rem;
-  margin: 0 0 1rem 0;
-  font-weight: 600;
-}
-
-.welcome-message p {
-  font-size: 1.1rem;
-  margin: 0;
-  opacity: 0.9;
-  line-height: 1.5;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  font-size: 0.85rem;
 }
 
 /* 响应式设计 */
+@media (max-width: 1024px) {
+  .header-content {
+    padding: 1rem;
+  }
+  
+  .footer-content {
+    padding: 0 1rem;
+  }
+}
+
 @media (max-width: 768px) {
-  .app-header h1 {
-    font-size: 2rem;
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
   }
   
-  .app-header p {
-    font-size: 1rem;
+  .main-nav {
+    flex-wrap: wrap;
+    justify-content: center;
   }
   
-  .welcome-message {
-    padding: 2rem;
-    margin: 0 1rem;
+  .nav-link {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
   }
   
-  .welcome-message h2 {
-    font-size: 1.5rem;
+  .footer-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
   }
   
-  .welcome-message p {
-    font-size: 1rem;
+  .logo-section h1 {
+    font-size: 1.3rem;
   }
+}
+
+@media (max-width: 480px) {
+  .header-content {
+    padding: 0.75rem;
+  }
+  
+  .logo-section {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+  
+  .main-nav {
+    width: 100%;
+  }
+  
+  .nav-link {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  .status-section {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* 全局样式重置 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }

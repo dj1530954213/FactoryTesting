@@ -28,8 +28,13 @@ thiserror = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 async-trait = "0.1"
 tokio = { version = "1.0", features = ["fs", "macros", "rt", "time"] }
+tokio-util = "0.7"
 tokio-modbus = "0.16.1"
-sea-orm = { version = "0.12", features = [ "sqlx-sqlite", "runtime-tokio-native-tls", "macros" ] }
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
+base64 = "0.22.0"
+env_logger = "0.11.8"
+calamine = "0.22"
 
 [dev-dependencies]
 tempfile = "3.0"
+mockall = "0.12"

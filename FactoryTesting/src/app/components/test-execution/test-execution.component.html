@@ -1,0 +1,297 @@
+<div class="test-execution-container">
+  <!-- 页面标题 -->
+  <div class="page-header">
+    <div class="header-content">
+      <h1>🧪 测试执行监控</h1>
+      <p *ngIf="executionData">{{ executionData.batch.product_model }} - {{ executionData.batch.serial_number }}</p>
+      <p *ngIf="!executionData">实时监控测试执行过程和结果</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" (click)="goToDashboard()">
+        <span class="btn-icon">🏠</span>
+        返回仪表板
+      </button>
+      <button class="btn btn-secondary" (click)="goToBatchManagement()">
+        <span class="btn-icon">📦</span>
+        批次管理
+      </button>
+    </div>
+  </div>
+
+  <!-- 测试统计概览 -->
+  <div class="statistics-overview" *ngIf="executionData">
+    <div class="stat-card total">
+      <div class="stat-icon">📊</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.total }}</div>
+        <div class="stat-label">总测试点</div>
+      </div>
+    </div>
+    
+    <div class="stat-card completed">
+      <div class="stat-icon">✅</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.completed }}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+    </div>
+    
+    <div class="stat-card passed">
+      <div class="stat-icon">🎯</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.passed }}</div>
+        <div class="stat-label">通过</div>
+      </div>
+    </div>
+    
+    <div class="stat-card failed">
+      <div class="stat-icon">❌</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.failed }}</div>
+        <div class="stat-label">失败</div>
+      </div>
+    </div>
+    
+    <div class="stat-card in-progress">
+      <div class="stat-icon">🔄</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.inProgress }}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+    </div>
+    
+    <div class="stat-card success-rate">
+      <div class="stat-icon">📈</div>
+      <div class="stat-info">
+        <div class="stat-number">{{ statistics.successRate }}%</div>
+        <div class="stat-label">成功率</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 测试控制面板 -->
+  <div class="control-panel" *ngIf="executionData">
+    <div class="control-section">
+      <h3>测试控制</h3>
+      <div class="control-buttons">
+        <button class="btn btn-success" (click)="startTest()" 
+                [disabled]="isTestRunning || isLoading">
+          <span class="btn-icon">▶️</span>
+          {{ isTestRunning ? '测试运行中' : '开始测试' }}
+        </button>
+        
+        <button class="btn btn-warning" (click)="pauseTest()" 
+                [disabled]="!isTestRunning || isPaused || isLoading">
+          <span class="btn-icon">⏸️</span>
+          暂停测试
+        </button>
+        
+        <button class="btn btn-info" (click)="resumeTest()" 
+                [disabled]="!isPaused || isLoading">
+          <span class="btn-icon">▶️</span>
+          恢复测试
+        </button>
+        
+        <button class="btn btn-danger" (click)="stopTest()" 
+                [disabled]="!isTestRunning || isLoading">
+          <span class="btn-icon">⏹️</span>
+          停止测试
+        </button>
+      </div>
+    </div>
+    
+    <div class="control-section">
+      <h3>数据控制</h3>
+      <div class="control-buttons">
+        <button class="btn btn-secondary" (click)="refreshData()" [disabled]="isLoading">
+          <span class="btn-icon">🔄</span>
+          刷新数据
+        </button>
+        
+        <button class="btn btn-secondary" (click)="toggleAutoRefresh()">
+          <span class="btn-icon">{{ autoRefresh ? '⏸️' : '▶️' }}</span>
+          {{ autoRefresh ? '停止自动刷新' : '开启自动刷新' }}
+        </button>
+        
+        <button class="btn btn-primary" (click)="exportResults()" 
+                [disabled]="!executionData || statistics.completed === 0">
+          <span class="btn-icon">📤</span>
+          导出结果
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 筛选和搜索 -->
+  <div class="filter-section" *ngIf="executionData">
+    <div class="filter-group">
+      <label>状态筛选:</label>
+      <select [(ngModel)]="statusFilter" class="filter-select">
+        <option value="">所有状态</option>
+        <option [value]="OverallTestStatus.NotStarted">{{ OVERALL_TEST_STATUS_LABELS[OverallTestStatus.NotStarted] }}</option>
+        <option [value]="OverallTestStatus.InProgress">{{ OVERALL_TEST_STATUS_LABELS[OverallTestStatus.InProgress] }}</option>
+        <option [value]="OverallTestStatus.Completed">{{ OVERALL_TEST_STATUS_LABELS[OverallTestStatus.Completed] }}</option>
+        <option [value]="OverallTestStatus.Failed">{{ OVERALL_TEST_STATUS_LABELS[OverallTestStatus.Failed] }}</option>
+      </select>
+    </div>
+    
+    <div class="filter-group">
+      <label>模块类型:</label>
+      <select [(ngModel)]="moduleTypeFilter" class="filter-select">
+        <option value="">所有类型</option>
+        <option value="AI">模拟量输入</option>
+        <option value="AO">模拟量输出</option>
+        <option value="DI">数字量输入</option>
+        <option value="DO">数字量输出</option>
+      </select>
+    </div>
+    
+    <div class="filter-group">
+      <label>搜索:</label>
+      <input type="text" [(ngModel)]="searchTerm" placeholder="搜索标签或描述..." class="search-input">
+    </div>
+    
+    <div class="filter-group">
+      <label class="checkbox-label">
+        <input type="checkbox" [(ngModel)]="showOnlyFailed">
+        只显示失败项
+      </label>
+    </div>
+  </div>
+
+  <!-- 测试数据表格 -->
+  <div class="data-table-section" *ngIf="executionData">
+    <div class="table-header">
+      <h3>测试详细数据</h3>
+      <div class="table-info">
+        <span>显示 {{ getFilteredInstances().length }} / {{ statistics.total }} 项</span>
+        <span *ngIf="autoRefresh" class="auto-refresh-indicator">🔄 自动刷新</span>
+      </div>
+    </div>
+    
+    <div class="data-table">
+      <div class="table-head">
+        <div class="table-cell">标签</div>
+        <div class="table-cell">描述</div>
+        <div class="table-cell">模块类型</div>
+        <div class="table-cell">状态</div>
+        <div class="table-cell">测试结果</div>
+        <div class="table-cell">测量值</div>
+        <div class="table-cell">期望值</div>
+        <div class="table-cell">误差</div>
+        <div class="table-cell">测试时间</div>
+        <div class="table-cell">耗时</div>
+      </div>
+      
+      <div class="table-body">
+        <div class="table-row" *ngFor="let instance of getFilteredInstances().slice((currentPage-1)*pageSize, currentPage*pageSize)">
+          <div class="table-cell">
+            <span class="tag-label">{{ getDefinitionForInstance(instance)?.tag || 'N/A' }}</span>
+          </div>
+          
+          <div class="table-cell">
+            <span class="description">{{ getDefinitionForInstance(instance)?.description || 'N/A' }}</span>
+          </div>
+          
+          <div class="table-cell">
+            <span class="module-type" [class]="'module-' + getDefinitionForInstance(instance)?.module_type">
+              {{ getDefinitionForInstance(instance)?.module_type || 'N/A' }}
+            </span>
+          </div>
+          
+          <div class="table-cell">
+            <span class="status-badge" [class]="getStatusClass(instance.overall_status)">
+              {{ getStatusLabel(instance.overall_status) }}
+            </span>
+          </div>
+          
+          <div class="table-cell">
+            <span class="test-result" 
+                  [class]="getLatestOutcomeForInstance(instance)?.success ? 'result-pass' : 'result-fail'"
+                  *ngIf="getLatestOutcomeForInstance(instance)">
+              {{ getLatestOutcomeForInstance(instance)?.success ? '通过' : '失败' }}
+            </span>
+            <span *ngIf="!getLatestOutcomeForInstance(instance)" class="no-result">-</span>
+          </div>
+          
+          <div class="table-cell">
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.measured_value !== undefined">
+              {{ getLatestOutcomeForInstance(instance)?.measured_value }}
+            </span>
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.measured_value === undefined" class="no-value">-</span>
+          </div>
+          
+          <div class="table-cell">
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.expected_value !== undefined">
+              {{ getLatestOutcomeForInstance(instance)?.expected_value }}
+            </span>
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.expected_value === undefined" class="no-value">-</span>
+          </div>
+          
+          <div class="table-cell">
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.tolerance !== undefined">
+              ±{{ getLatestOutcomeForInstance(instance)?.tolerance }}
+            </span>
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.tolerance === undefined" class="no-value">-</span>
+          </div>
+          
+          <div class="table-cell">
+            <span *ngIf="getLatestOutcomeForInstance(instance)?.test_timestamp">
+              {{ formatTimestamp(getLatestOutcomeForInstance(instance)!.test_timestamp) }}
+            </span>
+            <span *ngIf="!getLatestOutcomeForInstance(instance)?.test_timestamp" class="no-value">-</span>
+          </div>
+          
+          <div class="table-cell">
+            <span class="duration">
+              {{ formatDuration(instance.created_at, instance.updated_at) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 分页 -->
+    <div class="pagination" *ngIf="getFilteredInstances().length > pageSize">
+      <button class="btn btn-secondary" [disabled]="currentPage === 1" (click)="currentPage = currentPage - 1">
+        ⬅️ 上一页
+      </button>
+      <span class="page-info">
+        第 {{ currentPage }} 页，共 {{ Math.ceil(getFilteredInstances().length / pageSize) }} 页
+      </span>
+      <button class="btn btn-secondary" 
+              [disabled]="currentPage >= Math.ceil(getFilteredInstances().length / pageSize)" 
+              (click)="currentPage = currentPage + 1">
+        下一页 ➡️
+      </button>
+    </div>
+  </div>
+
+  <!-- 空状态 -->
+  <div class="empty-state" *ngIf="!executionData && !isLoading">
+    <div class="empty-icon">🧪</div>
+    <h3>未选择测试批次</h3>
+    <p>请从仪表板或批次管理页面选择一个测试批次</p>
+    <button class="btn btn-primary" (click)="goToDashboard()">
+      <span class="btn-icon">🏠</span>
+      返回仪表板
+    </button>
+  </div>
+
+  <!-- 错误状态 -->
+  <div class="error-state" *ngIf="error && !isLoading">
+    <div class="error-icon">⚠️</div>
+    <h3>加载失败</h3>
+    <p>{{ error }}</p>
+    <button class="btn btn-primary" (click)="refreshData()">
+      <span class="btn-icon">🔄</span>
+      重试
+    </button>
+  </div>
+
+  <!-- 加载状态 -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner"></div>
+    <p>{{ loadingMessage }}</p>
+  </div>
+</div>

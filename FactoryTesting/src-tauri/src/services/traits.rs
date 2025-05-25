@@ -69,18 +69,6 @@ pub trait PersistenceService: BaseService {
     
     /// 按批次ID查询测试结果
     async fn load_test_outcomes_by_batch(&self, batch_id: &str) -> AppResult<Vec<RawTestOutcome>>;
-
-    /// 保存应用配置
-    async fn save_app_settings(&self, settings: &AppSettings) -> AppResult<()>;
-
-    /// 加载应用配置
-    async fn load_app_settings(&self) -> AppResult<Option<AppSettings>>;
-
-    /// 备份数据
-    async fn backup_data(&self, backup_dir: &std::path::PathBuf) -> AppResult<()>;
-
-    /// 恢复数据
-    async fn restore_data(&self, backup_dir: &std::path::PathBuf) -> AppResult<()>;
 }
 
 /// PLC通信服务trait

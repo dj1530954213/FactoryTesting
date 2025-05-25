@@ -1,0 +1,82 @@
+<!-- 工厂测试系统主界面 -->
+<div class="app-container">
+  <!-- 顶部导航栏 -->
+  <header class="app-header">
+    <div class="header-content">
+      <div class="logo-section">
+        <h1 class="app-title">FAT_TEST 工厂测试系统</h1>
+        <span class="version">v{{systemVersion}}</span>
+      </div>
+      
+      <div class="status-section">
+        <div class="system-status" [class.healthy]="isSystemHealthy" [class.unhealthy]="!isSystemHealthy">
+          <span class="status-indicator"></span>
+          <span class="status-text">{{systemHealthText}}</span>
+        </div>
+        
+        <div class="active-tasks" *ngIf="activeTaskCount > 0">
+          <span class="task-count">{{activeTaskCount}}</span>
+          <span class="task-label">活动任务</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主导航菜单 -->
+  <nav class="main-nav">
+    <div class="nav-content">
+      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
+        <i class="icon-dashboard"></i>
+        <span>仪表板</span>
+      </a>
+      
+      <a routerLink="/channel-config" routerLinkActive="active" class="nav-item">
+        <i class="icon-config"></i>
+        <span>通道配置</span>
+      </a>
+      
+      <a routerLink="/batch-management" routerLinkActive="active" class="nav-item">
+        <i class="icon-batch"></i>
+        <span>批次管理</span>
+      </a>
+      
+      <a routerLink="/test-execution" routerLinkActive="active" class="nav-item">
+        <i class="icon-test"></i>
+        <span>测试执行</span>
+      </a>
+      
+      <a routerLink="/manual-test" routerLinkActive="active" class="nav-item">
+        <i class="icon-manual"></i>
+        <span>手动测试</span>
+      </a>
+      
+      <a routerLink="/data-import" routerLinkActive="active" class="nav-item">
+        <i class="icon-import"></i>
+        <span>数据导入</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- 主内容区域 -->
+  <main class="main-content">
+    <router-outlet></router-outlet>
+  </main>
+
+  <!-- 底部状态栏 -->
+  <footer class="app-footer">
+    <div class="footer-content">
+      <div class="left-section">
+        <span class="copyright">© 2024 FAT_TEST 工厂测试系统</span>
+      </div>
+      
+      <div class="right-section">
+        <span class="build-info">构建版本: {{systemVersion}}</span>
+        <span class="separator">|</span>
+        <span class="connection-status">
+          <span class="status-dot" [class.connected]="isSystemHealthy"></span>
+          后端连接: {{isSystemHealthy ? '正常' : '异常'}}
+        </span>
+      </div>
+    </div>
+  </footer>
+</div> 

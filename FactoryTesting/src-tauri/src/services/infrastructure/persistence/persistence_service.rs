@@ -182,8 +182,8 @@ pub trait ExtendedPersistenceService: PersistenceService {
     
     // 备份和恢复功能
     
-    /// 创建数据备份
-    async fn create_backup(&self, backup_name: Option<String>) -> AppResult<PathBuf>;
+    /// 创建数据备份并返回备份信息
+    async fn backup(&self, backup_name: &str) -> AppResult<BackupInfo>;
     
     /// 从备份恢复数据
     async fn restore_from_backup(&self, backup_path: &PathBuf) -> AppResult<()>;
@@ -285,14 +285,14 @@ pub struct IntegrityCheckResult {
 pub struct PersistenceServiceFactory;
 
 impl PersistenceServiceFactory {
-    /// 创建JSON文件持久化服务
-    pub fn create_json_service(config: PersistenceConfig) -> crate::services::infrastructure::persistence::JsonPersistenceService {
-        crate::services::infrastructure::persistence::JsonPersistenceService::new(config)
+    /// 创建SQLite ORM持久化服务
+    pub async fn create_sqlite_service(config: PersistenceConfig, db_path: Option<&std::path::Path>) -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
+        crate::services::infrastructure::persistence::SqliteOrmPersistenceService::new(config, db_path).await
     }
     
-    /// 创建默认的JSON文件持久化服务
-    pub fn create_default_json_service() -> crate::services::infrastructure::persistence::JsonPersistenceService {
-        Self::create_json_service(PersistenceConfig::default())
+    /// 创建默认的SQLite ORM持久化服务（使用内存数据库）
+    pub async fn create_default_sqlite_service() -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
+        Self::create_sqlite_service(PersistenceConfig::default(), Some(std::path::Path::new(":memory:"))).await
     }
 }
 

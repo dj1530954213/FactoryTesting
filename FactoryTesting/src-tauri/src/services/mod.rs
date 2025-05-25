@@ -5,11 +5,11 @@
 /// - Domain Layer: 领域服务，包含核心业务逻辑
 /// - Infrastructure Layer: 基础设施服务，处理外部依赖
 
-/// 应用层服务模块（将在后续步骤中实现）
-// pub mod application;
+/// 应用层服务模块
+pub mod application;
 
-/// 领域层服务模块（将在后续步骤中实现）
-// pub mod domain;
+/// 领域层服务模块
+pub mod domain;
 
 /// 基础设施层服务模块
 pub mod infrastructure;
@@ -20,14 +20,28 @@ pub mod traits;
 // 重新导出基础trait
 pub use traits::{BaseService, StateManagementService, EventPublisher, ServiceContainer};
 
-// 重新导出基础设施层的主要类型（避免冲突）
-pub use infrastructure::plc::{
-    PlcTag, PlcDataType, PlcConnectionStatus, PlcCommunicationStats, MockPlcService
+// 重新导出应用层服务
+pub use application::{
+    ITestCoordinationService, TestCoordinationService,
+    TestExecutionRequest, TestExecutionResponse, TestProgressUpdate
 };
 
-// 重新导出持久化服务的主要类型
-pub use infrastructure::persistence::{
+// 重新导出领域层服务
+pub use domain::{
+    IChannelStateManager, ChannelStateManager,
+    ITestExecutionEngine, TestExecutionEngine, TaskStatus, TestTask,
+    ISpecificTestStepExecutor, AIHardPointPercentExecutor, 
+    AIAlarmTestExecutor, DIStateReadExecutor
+};
+
+// 重新导出基础设施层的主要类型（避免冲突）
+pub use infrastructure::{
+    IPlcCommunicationService, MockPlcService,
+    PlcTag, PlcDataType, PlcConnectionStatus, PlcCommunicationStats,
+    IPersistenceService, SqliteOrmPersistenceService,
     PersistenceConfig, PersistenceStats, QueryCriteria, QueryResult,
-    ExtendedPersistenceService, JsonPersistenceService, PersistenceServiceFactory,
-    BackupInfo, IntegrityReport, IntegrityStatus, PersistenceServiceHelper
+    ExtendedPersistenceService, PersistenceServiceFactory,
+    BackupInfo, IntegrityReport, IntegrityStatus, PersistenceServiceHelper,
+    // 应用配置服务
+    AppSettingsService, JsonAppSettingsService, AppSettingsConfig, AppSettingsServiceFactory
 }; 

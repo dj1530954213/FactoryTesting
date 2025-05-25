@@ -2,24 +2,65 @@
 pub mod models;
 pub mod utils;
 pub mod services;
+pub mod tauri_commands;
+pub mod commands;
 
 // 重新导出常用类型，方便使用
 pub use models::*;
 pub use utils::{AppError, AppResult, AppConfig};
 pub use services::*;
+pub use tauri_commands::{AppState, SystemStatus, init_app_state};
+
+// 导入新的命令函数
+use commands::data_management::{
+    parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions
+};
 
 /// 应用程序主要运行函数
+/// 
+/// 这个函数现在会启动 Tauri 应用程序
 pub fn run() {
-    #[cfg(debug_assertions)]
-    {
-        println!("=== FAT_TEST 系统启动（调试模式）===");
-        run_example();
-    }
-    
-    #[cfg(not(debug_assertions))]
-    {
-        println!("=== FAT_TEST 系统启动（发布模式）===");
-    }
+    // 使用 tokio 运行时启动 Tauri 应用
+    tauri::async_runtime::block_on(async {
+        // 初始化应用状态
+        let app_state = match init_app_state().await {
+            Ok(state) => state,
+            Err(e) => {
+                eprintln!("初始化应用状态失败: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        // 启动 Tauri 应用
+        tauri::Builder::default()
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                tauri_commands::submit_test_execution,
+                tauri_commands::start_batch_testing,
+                tauri_commands::pause_batch_testing,
+                tauri_commands::resume_batch_testing,
+                tauri_commands::stop_batch_testing,
+                tauri_commands::get_batch_progress,
+                tauri_commands::get_batch_results,
+                tauri_commands::cleanup_completed_batch,
+                tauri_commands::get_all_channel_definitions,
+                tauri_commands::save_channel_definition,
+                tauri_commands::delete_channel_definition,
+                tauri_commands::get_all_batch_info,
+                tauri_commands::save_batch_info,
+                tauri_commands::get_batch_test_instances,
+                tauri_commands::create_test_instance,
+                tauri_commands::get_instance_state,
+                tauri_commands::update_test_result,
+                tauri_commands::get_system_status,
+                parse_excel_file,
+                create_test_batch,
+                get_batch_list,
+                get_batch_channel_definitions
+            ])
+            .run(tauri::generate_context!())
+            .expect("启动 Tauri 应用失败");
+    });
 }
 
 #[cfg(debug_assertions)]
