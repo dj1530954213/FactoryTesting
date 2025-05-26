@@ -4,8 +4,8 @@
 /// 将后端服务暴露给前端 Angular 应用
 
 use crate::models::{
-    ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, RawTestOutcome,
-    TestReport, ReportTemplate, ReportGenerationRequest
+    ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome,
+    TestReport, ReportTemplate, ReportGenerationRequest, AppSettings
 };
 use crate::services::application::{
     ITestCoordinationService, TestCoordinationService,
@@ -19,13 +19,19 @@ use crate::services::domain::{
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
     IPlcCommunicationService, MockPlcService,
-    excel::ExcelImporter
+    excel::ExcelImporter,
+    persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig}
 };
 use crate::utils::error::{AppError, AppResult};
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use serde::{Serialize, Deserialize};
 use tauri::State;
+use tokio::sync::Mutex;
+
+// ============================================================================
+// 应用状态管理
+// ============================================================================
 
 /// 应用状态，包含所有服务实例
 pub struct AppState {
@@ -34,85 +40,82 @@ pub struct AppState {
     pub test_execution_engine: Arc<dyn ITestExecutionEngine>,
     pub persistence_service: Arc<dyn IPersistenceService>,
     pub report_generation_service: Arc<dyn IReportGenerationService>,
+    pub app_settings_service: Arc<dyn AppSettingsService>,
+}
+
+/// 系统状态信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemStatus {
+    pub active_test_tasks: usize,
+    pub system_health: String,
+    pub version: String,
 }
 
 impl AppState {
     /// 创建新的应用状态
     pub async fn new() -> AppResult<Self> {
-        // 获取当前工作目录并构建数据库路径
-        let current_dir = std::env::current_dir()
-            .map_err(|e| AppError::io_error("获取当前目录失败".to_string(), e.to_string()))?;
-        
-        // 构建数据目录路径 (在 src-tauri 的上级目录)
-        let data_dir = current_dir.parent()
-            .ok_or_else(|| AppError::io_error("无法获取父目录".to_string(), "路径错误".to_string()))?
-            .join("data");
-        
-        // 确保数据目录存在
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
-                .map_err(|e| AppError::io_error(
-                    format!("创建数据目录失败: {:?}", data_dir), 
-                    e.to_string()
-                ))?;
-        }
-        
-        // 构建数据库文件路径
-        let db_path = data_dir.join("factory_testing.db");
-        
-        println!("数据库路径: {:?}", db_path); // 调试信息
-        println!("数据目录存在: {}", data_dir.exists());
-        println!("数据库文件存在: {}", db_path.exists());
-        
-        // 创建基础设施服务
+        // 创建数据库配置
         let config = crate::services::infrastructure::persistence::PersistenceConfig::default();
-        
-        // 暂时使用内存数据库进行测试
-        println!("使用内存数据库进行测试...");
-        let persistence_service = Arc::new(
+
+        // 创建持久化服务
+        let persistence_service: Arc<dyn IPersistenceService> = Arc::new(
             SqliteOrmPersistenceService::new(config, Some(std::path::Path::new(":memory:"))).await?
         );
-        
-        let plc_service_test_rig = Arc::new(MockPlcService::new("TestRig"));
-        let plc_service_target = Arc::new(MockPlcService::new("Target"));
-        
-        // 创建领域服务
-        let channel_state_manager = Arc::new(
-            ChannelStateManager::new(persistence_service.clone())
+
+        // 创建应用配置服务
+        let app_settings_config = AppSettingsConfig::default();
+        let mut app_settings_service: Arc<dyn AppSettingsService> = Arc::new(
+            JsonAppSettingsService::new(app_settings_config)
         );
         
-        let test_execution_engine = Arc::new(
+        // 初始化应用配置服务
+        if let Some(service) = Arc::get_mut(&mut app_settings_service) {
+            service.initialize().await?;
+        }
+
+        // 创建通道状态管理器
+        let channel_state_manager: Arc<dyn IChannelStateManager> = Arc::new(
+            ChannelStateManager::new(persistence_service.clone())
+        );
+
+        // 创建PLC服务
+        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(MockPlcService::new("TestRig"));
+        let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(MockPlcService::new("Target"));
+
+        // 创建测试执行引擎
+        let test_execution_engine: Arc<dyn ITestExecutionEngine> = Arc::new(
             TestExecutionEngine::new(
-                5, // 最大并发测试数
+                10, // 最大并发测试数
                 plc_service_test_rig,
                 plc_service_target,
             )
         );
-        
-        // 创建应用服务
-        let test_coordination_service = Arc::new(
+
+        // 创建测试协调服务
+        let test_coordination_service: Arc<dyn ITestCoordinationService> = Arc::new(
             TestCoordinationService::new(
                 channel_state_manager.clone(),
                 test_execution_engine.clone(),
                 persistence_service.clone(),
             )
         );
-        
-        // 创建报告目录
-        let reports_dir = data_dir.join("reports");
-        let report_generation_service = Arc::new(
+
+        // 创建报告生成服务
+        let reports_dir = std::path::PathBuf::from("reports");
+        let report_generation_service: Arc<dyn IReportGenerationService> = Arc::new(
             ReportGenerationService::new(
                 persistence_service.clone(),
                 reports_dir,
             )?
         );
-        
+
         Ok(Self {
             test_coordination_service,
             channel_state_manager,
             test_execution_engine,
             persistence_service,
             report_generation_service,
+            app_settings_service,
         })
     }
 }
@@ -327,8 +330,8 @@ pub async fn save_batch_info(
 /// 获取批次测试实例
 #[tauri::command]
 pub async fn get_batch_test_instances(
-    state: State<'_, AppState>,
-    batch_id: String,
+    _state: State<'_, AppState>,
+    _batch_id: String,
 ) -> Result<Vec<ChannelTestInstance>, String> {
     // TODO: 实现获取批次测试实例的逻辑
     // 目前返回空列表
@@ -381,18 +384,10 @@ pub async fn update_test_result(
 // 系统信息相关命令
 // ============================================================================
 
-/// 系统状态信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemStatus {
-    pub active_test_tasks: usize,
-    pub system_health: String,
-    pub version: String,
-}
-
 /// 获取系统状态
 #[tauri::command]
 pub async fn get_system_status(
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<SystemStatus, String> {
     Ok(SystemStatus {
         active_test_tasks: 0, // TODO: 从测试执行引擎获取
@@ -503,4 +498,47 @@ pub async fn delete_report(
         .delete_report(&report_id)
         .await
         .map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// 应用配置相关命令
+// ============================================================================
+
+/// 加载应用配置
+#[tauri::command]
+pub async fn load_app_settings_cmd(
+    state: State<'_, AppState>,
+) -> Result<AppSettings, String> {
+    match state.app_settings_service.load_settings().await {
+        Ok(Some(settings)) => Ok(settings),
+        Ok(None) => {
+            // 如果没有配置文件，返回默认配置
+            let default_settings = AppSettings::default();
+            // 保存默认配置到文件
+            if let Err(e) = state.app_settings_service.save_settings(&default_settings).await {
+                log::warn!("保存默认应用配置失败: {}", e);
+            }
+            Ok(default_settings)
+        },
+        Err(e) => {
+            log::error!("加载应用配置失败: {}", e);
+            // 发生错误时也返回默认配置
+            Ok(AppSettings::default())
+        }
+    }
+}
+
+/// 保存应用配置
+#[tauri::command]
+pub async fn save_app_settings_cmd(
+    state: State<'_, AppState>,
+    settings: AppSettings,
+) -> Result<(), String> {
+    state.app_settings_service
+        .save_settings(&settings)
+        .await
+        .map_err(|e| {
+            log::error!("保存应用配置失败: {}", e);
+            format!("保存应用配置失败: {}", e)
+        })
 } 

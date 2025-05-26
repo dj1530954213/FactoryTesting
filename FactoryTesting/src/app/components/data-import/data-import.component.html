@@ -22,12 +22,8 @@
       <div class="step-number">2</div>
       <div class="step-label">预览数据</div>
     </div>
-    <div class="step" [class.active]="currentStep >= 3" [class.completed]="currentStep > 3">
+    <div class="step" [class.active]="currentStep >= 3">
       <div class="step-number">3</div>
-      <div class="step-label">创建批次</div>
-    </div>
-    <div class="step" [class.active]="currentStep >= 4">
-      <div class="step-number">4</div>
       <div class="step-label">开始测试</div>
     </div>
   </div>
@@ -155,25 +151,73 @@
       </div>
     </div>
 
+    <!-- 详细统计信息 -->
+    <div class="detail-stats">
+      <div class="detail-row">
+        <span class="detail-label">数据类型分布:</span>
+        <div class="detail-badges">
+          <span class="data-type-badge type-bool" *ngIf="getDataTypeCount('Bool') > 0">
+            Bool: {{ getDataTypeCount('Bool') }}
+          </span>
+          <span class="data-type-badge type-float" *ngIf="getDataTypeCount('Float') > 0">
+            Float: {{ getDataTypeCount('Float') }}
+          </span>
+          <span class="data-type-badge type-int" *ngIf="getDataTypeCount('Int') > 0">
+            Int: {{ getDataTypeCount('Int') }}
+          </span>
+          <span class="data-type-badge type-string" *ngIf="getDataTypeCount('String') > 0">
+            String: {{ getDataTypeCount('String') }}
+          </span>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">站点分布:</span>
+        <div class="detail-badges">
+          <span class="station-badge" *ngFor="let station of getUniqueStations()">
+            {{ station }}: {{ getStationCount(station) }}
+          </span>
+        </div>
+      </div>
+    </div>
+
     <div class="preview-table">
       <div class="table-header">
         <div class="table-cell">标签</div>
+        <div class="table-cell">变量名</div>
         <div class="table-cell">描述</div>
         <div class="table-cell">模块类型</div>
         <div class="table-cell">通道号</div>
+        <div class="table-cell">数据类型</div>
+        <div class="table-cell">站名</div>
         <div class="table-cell">PLC地址</div>
+        <div class="table-cell">量程</div>
       </div>
       <div class="table-body">
         <div class="table-row" *ngFor="let item of previewData.slice(0, 10)">
           <div class="table-cell">{{ item.tag }}</div>
-          <div class="table-cell">{{ item.description }}</div>
+          <div class="table-cell">{{ item.variableName }}</div>
+          <div class="table-cell" [title]="item.description">{{ item.description }}</div>
           <div class="table-cell">
             <span class="module-badge" [class]="'module-' + item.moduleType">
               {{ item.moduleType }}
             </span>
           </div>
           <div class="table-cell">{{ item.channelNumber }}</div>
+          <div class="table-cell">
+            <span class="data-type-badge" [class]="'type-' + item.dataType.toLowerCase()">
+              {{ item.dataType }}
+            </span>
+          </div>
+          <div class="table-cell">{{ item.stationName }}</div>
           <div class="table-cell">{{ item.plcAddress }}</div>
+          <div class="table-cell">
+            <span *ngIf="item.analogRangeMin !== undefined && item.analogRangeMax !== undefined">
+              {{ item.analogRangeMin }} ~ {{ item.analogRangeMax }}
+            </span>
+            <span *ngIf="item.analogRangeMin === undefined || item.analogRangeMax === undefined">
+              -
+            </span>
+          </div>
         </div>
       </div>
       <div class="table-footer" *ngIf="previewData.length > 10">
@@ -182,35 +226,8 @@
     </div>
   </div>
 
-  <!-- 步骤3: 批次信息 -->
-  <div class="batch-section" *ngIf="currentStep === 3">
-    <div class="batch-form">
-      <h3>创建测试批次</h3>
-      <div class="form-group">
-        <label for="productModel">产品型号 *</label>
-        <input type="text" id="productModel" [(ngModel)]="batchInfo.productModel" 
-               placeholder="请输入产品型号" class="form-input" required>
-      </div>
-      <div class="form-group">
-        <label for="serialNumber">序列号 *</label>
-        <input type="text" id="serialNumber" [(ngModel)]="batchInfo.serialNumber" 
-               placeholder="请输入序列号" class="form-input" required>
-      </div>
-      <div class="form-group">
-        <label for="customerName">客户名称</label>
-        <input type="text" id="customerName" [(ngModel)]="batchInfo.customerName" 
-               placeholder="请输入客户名称" class="form-input">
-      </div>
-      <div class="form-group">
-        <label for="operatorName">操作员</label>
-        <input type="text" id="operatorName" [(ngModel)]="batchInfo.operatorName" 
-               placeholder="请输入操作员姓名" class="form-input">
-      </div>
-    </div>
-  </div>
-
-  <!-- 步骤4: 确认启动 -->
-  <div class="confirm-section" *ngIf="currentStep === 4">
+  <!-- 步骤3: 确认启动 -->
+  <div class="confirm-section" *ngIf="currentStep === 3">
     <div class="confirm-info">
       <h3>确认信息</h3>
       <div class="info-grid">
@@ -221,14 +238,6 @@
         <div class="info-item">
           <label>通道数量:</label>
           <span>{{ previewData.length }} 个</span>
-        </div>
-        <div class="info-item">
-          <label>产品型号:</label>
-          <span>{{ batchInfo.productModel }}</span>
-        </div>
-        <div class="info-item">
-          <label>序列号:</label>
-          <span>{{ batchInfo.serialNumber }}</span>
         </div>
       </div>
       
@@ -242,6 +251,7 @@
             <li>测试台架处于就绪状态</li>
             <li>接线已按照点位表完成</li>
           </ul>
+          <p><strong>系统将自动创建测试批次并分配批次信息</strong></p>
         </div>
       </div>
     </div>
@@ -259,16 +269,16 @@
       上一步
     </button>
     
-    <button class="btn btn-primary" *ngIf="currentStep < 4" (click)="nextStep()" 
+    <button class="btn btn-primary" *ngIf="currentStep < 3" (click)="nextStep()" 
             [disabled]="!canProceedToNext()">
       <span class="btn-icon">➡️</span>
       下一步
     </button>
     
-    <button class="btn btn-success" *ngIf="currentStep === 4" (click)="startTesting()" 
+    <button class="btn btn-success" *ngIf="currentStep === 3" (click)="startTesting()" 
             [disabled]="isCreatingBatch">
       <span class="btn-icon">🚀</span>
-      {{ isCreatingBatch ? '创建中...' : '创建批次并开始测试' }}
+      {{ isCreatingBatch ? '创建中...' : '自动创建批次并开始测试' }}
     </button>
   </div>
 </div>

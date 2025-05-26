@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 # FAT_TEST 项目 Cursor 开发规则
 
@@ -188,7 +188,7 @@ import { LineChart } from 'echarts/charts';
 
 ## 目录结构要求
 
-**📁 项目目录结构**：请严格参考 [`docs/PROJECT_STRUCTURE.md`](./PROJECT_STRUCTURE.md) 文档中的完整目录结构要求。该文档详细描述了 Rust 后端和 Angular 前端的所有目录组织规范。
+**📁 项目目录结构**：请严格参考 [`docs/PROJECT_STRUCTURE.md`](mdc:PROJECT_STRUCTURE.md) 文档中的完整目录结构要求。该文档详细描述了 Rust 后端和 Angular 前端的所有目录组织规范。
 
 ## 开发最佳实践
 

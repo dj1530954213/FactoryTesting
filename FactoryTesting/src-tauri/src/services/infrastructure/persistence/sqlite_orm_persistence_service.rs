@@ -2,16 +2,16 @@
 // 详细注释：使用SeaORM和SQLite实现数据持久化服务
 
 use async_trait::async_trait;
-use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, Statement, DatabaseBackend};
+use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex}; // 使用 Mutex
-use chrono::{Utc, DateTime}; // 添加 DateTime
+use chrono::Utc;
 // 确保导入 rusqlite (如果直接使用其类型)
 // use rusqlite; // 如果下面只用 rusqlite::*, 则这个可能不需要
-use sea_orm::sqlx::SqliteConnection; // 通过 sea_orm::sqlx 引用
+// use sea_orm::sqlx::SqliteConnection; // 通过 sea_orm::sqlx 引用
 // use sea_orm::sqlx::Executor; // 如果 Executor 未被使用，可以注释或移除以避免警告
 
-use crate::models::structs::*;
+use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome};
 use crate::models::entities; // 导入实体模块
 use crate::services::traits::{BaseService, PersistenceService};
 // 导入 ExtendedPersistenceService 和相关结构体
@@ -27,6 +27,8 @@ use crate::services::infrastructure::persistence::persistence_service::{
     IntegrityCheckResult // 导入 IntegrityCheckResult
 };
 use crate::utils::error::{AppError, AppResult};
+use log::{info, warn, error, debug};
+use uuid::Uuid;
 
 // 定义常量
 const DEFAULT_DB_FILE: &str = "factory_testing_data.sqlite";

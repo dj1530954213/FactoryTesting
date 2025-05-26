@@ -3,31 +3,16 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { TauriApiService } from '../../services/tauri-api.service';
+import {
+  ChannelPointDefinition,
+  ChannelTestInstance,
+  ModuleType,
+  PointDataType,
+  OverallTestStatus
+} from '../../models';
 
-// 数据模型接口
-interface ChannelTestInstance {
-  instanceId: string;
-  batchId: string;
-  channelLabel: string;
-  description: string;
-  moduleType: string;
-  overallStatus: string;
-  lastUpdated: string;
-  definition: ChannelPointDefinition;
-}
-
-interface ChannelPointDefinition {
-  channelLabel: string;
-  description: string;
-  moduleType: string;
-  pointDataType: string;
-  plcAddress: string;
-  expectedValue?: number;
-  tolerance?: number;
-  highAlarmThreshold?: number;
-  lowAlarmThreshold?: number;
-}
-
+// 手动测试相关接口
 interface SubTestItem {
   name: string;
   displayName: string;
@@ -50,6 +35,14 @@ interface TestStatistics {
   failed: number;
 }
 
+// 扩展的测试实例接口，包含通道定义信息
+interface ExtendedChannelTestInstance extends ChannelTestInstance {
+  definition?: ChannelPointDefinition;
+  channelLabel?: string;
+  description?: string;
+  moduleType?: ModuleType;
+}
+
 @Component({
   selector: 'app-manual-test',
   standalone: true,
@@ -59,9 +52,9 @@ interface TestStatistics {
 })
 export class ManualTestComponent implements OnInit, OnDestroy {
   // 数据状态
-  channels: ChannelTestInstance[] = [];
-  filteredChannels: ChannelTestInstance[] = [];
-  selectedChannel: ChannelTestInstance | null = null;
+  channels: ExtendedChannelTestInstance[] = [];
+  filteredChannels: ExtendedChannelTestInstance[] = [];
+  selectedChannel: ExtendedChannelTestInstance | null = null;
   availableSubTests: SubTestItem[] = [];
   selectedSubTest: SubTestItem | null = null;
   statistics: TestStatistics = {
@@ -86,13 +79,16 @@ export class ManualTestComponent implements OnInit, OnDestroy {
   testResult: ManualTestResult | null = null;
 
   // 筛选选项
-  moduleTypes = ['AI', 'AO', 'DI', 'DO', 'COMMUNICATION'];
-  statusOptions = ['Ready', 'InProgress', 'Completed', 'Failed'];
+  moduleTypes = ['AI', 'AO', 'DI', 'DO'];
+  statusOptions = ['NotTested', 'HardPointTesting', 'TestCompletedPassed', 'TestCompletedFailed'];
 
   // 订阅管理
   private subscriptions: Subscription[] = [];
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private tauriApi: TauriApiService
+  ) {}
 
   ngOnInit() {
     this.loadChannels();
@@ -105,23 +101,54 @@ export class ManualTestComponent implements OnInit, OnDestroy {
   }
 
   // 加载通道数据
-  async loadChannels() {
+  loadChannels() {
     this.isLoading = true;
     this.error = null;
 
-    try {
-      // 模拟API调用 - 实际应该调用Tauri命令
-      await this.simulateApiCall();
-      
-      // 模拟数据
-      this.channels = this.generateMockChannels();
-      this.filteredChannels = [...this.channels];
-      this.updateStatistics();
-    } catch (error) {
-      this.error = '加载通道数据失败: ' + (error as Error).message;
-    } finally {
-      this.isLoading = false;
-    }
+    // 获取所有通道定义
+    const subscription = this.tauriApi.getAllChannelDefinitions().subscribe({
+      next: (definitions) => {
+        if (definitions.length === 0) {
+          this.error = '没有找到通道定义，请先导入Excel文件';
+          this.channels = [];
+          this.filteredChannels = [];
+        } else {
+          // 将通道定义转换为扩展的测试实例
+          this.channels = definitions.map(def => this.createExtendedTestInstance(def));
+          this.filteredChannels = [...this.channels];
+        }
+        this.updateStatistics();
+      },
+      error: (error) => {
+        this.error = '加载通道数据失败: ' + error.message;
+        this.channels = [];
+        this.filteredChannels = [];
+        this.updateStatistics();
+      },
+      complete: () => {
+        this.isLoading = false;
+      }
+    });
+
+    this.subscriptions.push(subscription);
+  }
+
+  // 从通道定义创建扩展的测试实例
+  private createExtendedTestInstance(definition: ChannelPointDefinition): ExtendedChannelTestInstance {
+    return {
+      instance_id: `manual_${definition.id}`,
+      definition_id: definition.id,
+      test_batch_id: 'manual_test_batch',
+      overall_status: OverallTestStatus.NotTested,
+      sub_test_results: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      // 扩展属性，方便模板访问
+      definition: definition,
+      channelLabel: definition.tag,
+      description: definition.description,
+      moduleType: definition.module_type
+    };
   }
 
   // 初始化子测试项
@@ -140,21 +167,21 @@ export class ManualTestComponent implements OnInit, OnDestroy {
   filterChannels() {
     this.filteredChannels = this.channels.filter(channel => {
       const matchesSearch = !this.searchTerm || 
-        channel.channelLabel.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        channel.description.toLowerCase().includes(this.searchTerm.toLowerCase());
+        (channel.channelLabel && channel.channelLabel.toLowerCase().includes(this.searchTerm.toLowerCase())) ||
+        (channel.description && channel.description.toLowerCase().includes(this.searchTerm.toLowerCase()));
       
       const matchesModule = !this.selectedModuleType || 
         channel.moduleType === this.selectedModuleType;
       
       const matchesStatus = !this.selectedStatus || 
-        channel.overallStatus === this.selectedStatus;
+        channel.overall_status.toString() === this.selectedStatus;
 
       return matchesSearch && matchesModule && matchesStatus;
     });
   }
 
   // 选择通道
-  selectChannel(channel: ChannelTestInstance) {
+  selectChannel(channel: ExtendedChannelTestInstance) {
     this.selectedChannel = channel;
     this.selectedSubTest = null;
     this.testResult = null;
@@ -165,7 +192,7 @@ export class ManualTestComponent implements OnInit, OnDestroy {
 
   // 更新可用的子测试项
   updateAvailableSubTests() {
-    if (!this.selectedChannel) return;
+    if (!this.selectedChannel || !this.selectedChannel.moduleType) return;
 
     const moduleType = this.selectedChannel.moduleType;
     
@@ -173,17 +200,17 @@ export class ManualTestComponent implements OnInit, OnDestroy {
     this.availableSubTests.forEach(subTest => {
       switch (subTest.name) {
         case 'WriteValue':
-          subTest.applicable = ['AO', 'DO'].includes(moduleType);
+          subTest.applicable = [ModuleType.AO, ModuleType.DO].includes(moduleType);
           break;
         case 'HighAlarmTest':
         case 'LowAlarmTest':
-          subTest.applicable = ['AI', 'AO'].includes(moduleType);
+          subTest.applicable = [ModuleType.AI, ModuleType.AO].includes(moduleType);
           break;
         case 'CommunicationTest':
-          subTest.applicable = moduleType === 'COMMUNICATION';
+          subTest.applicable = true; // 所有类型都支持通信测试
           break;
         case 'CalibrationTest':
-          subTest.applicable = ['AI', 'AO'].includes(moduleType);
+          subTest.applicable = [ModuleType.AI, ModuleType.AO].includes(moduleType);
           break;
         default:
           subTest.applicable = true;
@@ -215,7 +242,7 @@ export class ManualTestComponent implements OnInit, OnDestroy {
       await this.simulateApiCall(500);
       
       // 模拟读取结果
-      const mockValue = this.generateMockValue(this.selectedChannel.moduleType);
+      const mockValue = this.generateMockValue(this.selectedChannel.moduleType || ModuleType.AI);
       
       this.currentValue = mockValue;
       this.testResult = {
@@ -303,10 +330,10 @@ export class ManualTestComponent implements OnInit, OnDestroy {
     const moduleType = this.selectedChannel.moduleType;
     
     switch (moduleType) {
-      case 'AO':
+      case ModuleType.AO:
         return typeof this.inputValue === 'number' && 
                this.inputValue >= 0 && this.inputValue <= 100;
-      case 'DO':
+      case ModuleType.DO:
         return typeof this.inputValue === 'boolean' || 
                this.inputValue === 0 || this.inputValue === 1;
       default:
@@ -319,9 +346,9 @@ export class ManualTestComponent implements OnInit, OnDestroy {
     if (!this.selectedChannel) return 'text';
     
     switch (this.selectedChannel.moduleType) {
-      case 'AO':
+      case ModuleType.AO:
         return 'number';
-      case 'DO':
+      case ModuleType.DO:
         return 'checkbox';
       default:
         return 'text';
@@ -333,9 +360,9 @@ export class ManualTestComponent implements OnInit, OnDestroy {
     if (!this.selectedChannel) return '';
     
     switch (this.selectedChannel.moduleType) {
-      case 'AO':
+      case ModuleType.AO:
         return '请输入0-100之间的数值';
-      case 'DO':
+      case ModuleType.DO:
         return '选择开关状态';
       default:
         return '请输入值';
@@ -346,10 +373,10 @@ export class ManualTestComponent implements OnInit, OnDestroy {
   updateStatistics() {
     this.statistics = {
       totalChannels: this.channels.length,
-      readyForTest: this.channels.filter(c => c.overallStatus === 'Ready').length,
-      inProgress: this.channels.filter(c => c.overallStatus === 'InProgress').length,
-      completed: this.channels.filter(c => c.overallStatus === 'Completed').length,
-      failed: this.channels.filter(c => c.overallStatus === 'Failed').length
+      readyForTest: this.channels.filter(c => c.overall_status === OverallTestStatus.NotTested).length,
+      inProgress: this.channels.filter(c => c.overall_status === OverallTestStatus.HardPointTesting).length,
+      completed: this.channels.filter(c => c.overall_status === OverallTestStatus.TestCompletedPassed).length,
+      failed: this.channels.filter(c => c.overall_status === OverallTestStatus.TestCompletedFailed).length
     };
   }
 
@@ -367,50 +394,14 @@ export class ManualTestComponent implements OnInit, OnDestroy {
     return new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  private generateMockChannels(): ChannelTestInstance[] {
-    const channels: ChannelTestInstance[] = [];
-    const moduleTypes = ['AI', 'AO', 'DI', 'DO', 'COMMUNICATION'];
-    const statuses = ['Ready', 'InProgress', 'Completed', 'Failed'];
-
-    for (let i = 1; i <= 20; i++) {
-      const moduleType = moduleTypes[Math.floor(Math.random() * moduleTypes.length)];
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
-      
-      channels.push({
-        instanceId: `instance_${i}`,
-        batchId: 'batch_001',
-        channelLabel: `CH_${i.toString().padStart(3, '0')}`,
-        description: `测试通道 ${i} - ${moduleType}类型`,
-        moduleType,
-        overallStatus: status,
-        lastUpdated: new Date().toISOString(),
-        definition: {
-          channelLabel: `CH_${i.toString().padStart(3, '0')}`,
-          description: `测试通道 ${i} - ${moduleType}类型`,
-          moduleType,
-          pointDataType: moduleType === 'AI' || moduleType === 'AO' ? 'Float32' : 'Boolean',
-          plcAddress: `DB1.DBX${i}.0`,
-          expectedValue: moduleType === 'AI' || moduleType === 'AO' ? 50.0 : undefined,
-          tolerance: moduleType === 'AI' || moduleType === 'AO' ? 2.0 : undefined,
-          highAlarmThreshold: moduleType === 'AI' ? 80.0 : undefined,
-          lowAlarmThreshold: moduleType === 'AI' ? 20.0 : undefined
-        }
-      });
-    }
-
-    return channels;
-  }
-
-  private generateMockValue(moduleType: string): any {
+  private generateMockValue(moduleType: ModuleType): any {
     switch (moduleType) {
-      case 'AI':
-      case 'AO':
+      case ModuleType.AI:
+      case ModuleType.AO:
         return Math.round((Math.random() * 100) * 100) / 100;
-      case 'DI':
-      case 'DO':
+      case ModuleType.DI:
+      case ModuleType.DO:
         return Math.random() > 0.5;
-      case 'COMMUNICATION':
-        return Math.random() > 0.8 ? 'Connected' : 'Disconnected';
       default:
         return 'Unknown';
     }

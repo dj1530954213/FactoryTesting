@@ -561,3 +561,106 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
 }
+
+/* 数据类型标签样式 */
+.data-type-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.type-bool { 
+  background: #e8f5e8; 
+  color: #2e7d32; 
+}
+
+.type-float { 
+  background: #e3f2fd; 
+  color: #1565c0; 
+}
+
+.type-int { 
+  background: #f3e5f5; 
+  color: #6a1b9a; 
+}
+
+.type-string { 
+  background: #fff3e0; 
+  color: #ef6c00; 
+}
+
+/* 表格样式优化 */
+.table-header .table-cell {
+  font-weight: 600;
+  background: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.table-cell {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-cell[title] {
+  cursor: help;
+}
+
+/* 响应式表格 */
+@media (max-width: 1200px) {
+  .preview-table {
+    overflow-x: auto;
+  }
+  
+  .table-header,
+  .table-row {
+    min-width: 1000px;
+  }
+}
+
+/* 详细统计信息样式 */
+.detail-stats {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.detail-row:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #495057;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.station-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e9ecef;
+  color: #495057;
+  border: 1px solid #ced4da;
+}

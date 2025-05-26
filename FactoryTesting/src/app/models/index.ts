@@ -135,6 +135,18 @@ export interface SystemStatus {
   version: string;
 }
 
+// 应用配置相关类型
+export interface AppSettings {
+  id: string;
+  theme: string;
+  plc_ip_address?: string;
+  plc_port?: number;
+  default_operator_name?: string;
+  auto_save_interval_minutes?: number;
+  recent_projects: string[];
+  last_backup_time?: string;
+}
+
 // Excel文件处理相关类型
 export interface ParseExcelResponse {
   success: boolean;
@@ -203,4 +215,39 @@ export const SUB_TEST_STATUS_LABELS: { [key in SubTestStatus]: string } = {
   [SubTestStatus.Passed]: '通过',
   [SubTestStatus.Failed]: '失败',
   [SubTestStatus.Skipped]: '跳过'
-}; 
+};
+
+// 报告相关接口
+export interface TestReport {
+  id: string;
+  title: string;
+  batch_id: string;
+  template_id: string;
+  format: 'PDF' | 'Excel';
+  file_path: string;
+  file_size?: number;
+  generated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportGenerationRequest {
+  batch_id: string;
+  template_id: string;
+  format: 'PDF' | 'Excel';
+  options: {
+    include_charts: boolean;
+    include_details: boolean;
+    custom_title?: string;
+    custom_description?: string;
+  };
+} 

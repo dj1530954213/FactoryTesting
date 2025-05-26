@@ -8,12 +8,18 @@ pub enum OverallTestStatus {
     NotTested,
     /// 跳过测试
     Skipped,
+    /// 接线确认需要
+    WiringConfirmationRequired,
     /// 接线已确认，等待开始硬点或手动测试
     WiringConfirmed,
+    /// 硬点测试进行中
+    HardPointTestInProgress,
     /// 硬点测试进行中
     HardPointTesting,
     /// 硬点测试已完成
     HardPointTestCompleted,
+    /// 手动测试进行中
+    ManualTestInProgress,
     /// 手动测试进行中
     ManualTesting,
     /// 测试完成且通过
@@ -126,8 +132,14 @@ pub enum SubTestItem {
     HardPoint,
     /// 趋势检查（AI/AO模块）
     TrendCheck,
+    /// 趋势检查（简化名称）
+    Trend,
     /// 报表检查（AI/AO模块）
     ReportCheck,
+    /// 报表检查（简化名称）
+    Report,
+    /// 维护功能测试（AI/AO模块）
+    Maintenance,
     
     // AI模块特有测试项
     /// 低低报警测试

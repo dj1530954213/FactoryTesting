@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::time::sleep;
 use base64;
 

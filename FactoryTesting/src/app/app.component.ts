@@ -5,10 +5,32 @@ import { TauriApiService } from './services/tauri-api.service';
 import { SystemStatus } from './models';
 import { Subscription } from 'rxjs';
 
+// NG-ZORRO 组件导入
+import { NzLayoutModule } from 'ng-zorro-antd/layout';
+import { NzMenuModule } from 'ng-zorro-antd/menu';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzBadgeModule } from 'ng-zorro-antd/badge';
+import { NzTagModule } from 'ng-zorro-antd/tag';
+import { NzSpaceModule } from 'ng-zorro-antd/space';
+import { NzDividerModule } from 'ng-zorro-antd/divider';
+
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule],
+  imports: [
+    RouterOutlet, 
+    RouterLink, 
+    RouterLinkActive, 
+    CommonModule,
+    // NG-ZORRO 模块
+    NzLayoutModule,
+    NzMenuModule,
+    NzIconModule,
+    NzBadgeModule,
+    NzTagModule,
+    NzSpaceModule,
+    NzDividerModule
+  ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })

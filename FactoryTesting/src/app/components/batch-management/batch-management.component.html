@@ -39,7 +39,7 @@
   <!-- 筛选和搜索 -->
   <div class="filter-section">
     <div class="search-group">
-      <input type="text" placeholder="搜索批次..." class="search-input" [(ngModel)]="searchTerm">
+      <input type="text" placeholder="搜索批次..." class="search-input" [(ngModel)]="searchTerm" (input)="applyFilters()">
       <button class="btn btn-secondary">
         <span class="btn-icon">🔍</span>
         搜索
@@ -47,15 +47,16 @@
     </div>
     
     <div class="filter-group">
-      <select class="filter-select" [(ngModel)]="statusFilter">
+      <select class="filter-select" [(ngModel)]="statusFilter" (change)="applyFilters()">
         <option value="">所有状态</option>
-        <option value="completed">已完成</option>
-        <option value="in-progress">进行中</option>
-        <option value="failed">失败</option>
-        <option value="cancelled">已取消</option>
+        <option value="NotTested">未测试</option>
+        <option value="HardPointTesting">硬点测试中</option>
+        <option value="AlarmTesting">报警测试中</option>
+        <option value="TestCompletedPassed">测试完成并通过</option>
+        <option value="TestCompletedFailed">测试完成并失败</option>
       </select>
       
-      <select class="filter-select" [(ngModel)]="dateFilter">
+      <select class="filter-select" [(ngModel)]="dateFilter" (change)="applyFilters()">
         <option value="">所有时间</option>
         <option value="today">今天</option>
         <option value="week">本周</option>
@@ -82,34 +83,38 @@
 
   <!-- 批次列表 -->
   <div class="batch-list">
-    <div class="batch-card" *ngFor="let batch of filteredBatches" (click)="viewBatchDetails(batch)">
+    <div class="batch-card" *ngFor="let batch of paginatedBatches" (click)="viewBatchDetails(batch)">
       <div class="batch-header">
         <div class="batch-title">
-          <h3>{{ batch.productModel }} - {{ batch.serialNumber }}</h3>
-          <span class="batch-status" [class]="'status-' + batch.status">
-            {{ getStatusLabel(batch.status) }}
+          <h3>{{ batch.product_model || '未知产品' }} - {{ batch.serial_number || '未知序列号' }}</h3>
+          <span class="batch-status" [class]="getStatusClass(batch.overall_status)">
+            {{ getStatusLabel(batch.overall_status) }}
           </span>
         </div>
         <div class="batch-date">
-          {{ batch.createdAt | date:'yyyy-MM-dd HH:mm' }}
+          {{ batch.created_at | date:'yyyy-MM-dd HH:mm' }}
         </div>
       </div>
       
       <div class="batch-content">
         <div class="batch-info">
           <div class="info-item">
-            <span class="info-label">客户:</span>
-            <span class="info-value">{{ batch.customerName || '未指定' }}</span>
-          </div>
-          <div class="info-item">
             <span class="info-label">操作员:</span>
-            <span class="info-value">{{ batch.operatorName || '未指定' }}</span>
+            <span class="info-value">{{ batch.operator_name || '未指定' }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">测试点数:</span>
-            <span class="info-value">{{ batch.totalPoints }}</span>
+            <span class="info-value">{{ batch.total_points }}</span>
           </div>
           <div class="info-item">
+            <span class="info-label">通过点数:</span>
+            <span class="info-value">{{ batch.passed_points || 0 }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">失败点数:</span>
+            <span class="info-value">{{ batch.failed_points || 0 }}</span>
+          </div>
+          <div class="info-item" *ngIf="batch.test_start_time && batch.test_end_time">
             <span class="info-label">耗时:</span>
             <span class="info-value">{{ formatDuration(batch.duration) }}</span>
           </div>
@@ -133,7 +138,7 @@
               <span class="result-icon">❌</span>
               {{ batch.failedPoints }}
             </span>
-            <span class="result-item pending" *ngIf="batch.status === 'in-progress'">
+            <span class="result-item pending" *ngIf="batch.overall_status === 'HardPointTesting' || batch.overall_status === 'AlarmTesting'">
               <span class="result-icon">⏳</span>
               {{ batch.totalPoints - batch.completedPoints }}
             </span>
@@ -145,7 +150,7 @@
         <button class="btn-icon-small" (click)="viewBatchDetails(batch)" title="查看详情">
           👁️
         </button>
-        <button class="btn-icon-small" *ngIf="batch.status === 'in-progress'" 
+        <button class="btn-icon-small" *ngIf="batch.overall_status === 'HardPointTesting' || batch.overall_status === 'AlarmTesting'" 
                 (click)="continueBatch(batch)" title="继续测试">
           ▶️
         </button>

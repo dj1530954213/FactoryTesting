@@ -201,4 +201,205 @@ pub async fn get_batch_channel_definitions(
             Err(format!("获取失败: {}", e))
         }
     }
+}
+
+// ============================================================================
+// 步骤3.4要求的核心业务流程命令
+// ============================================================================
+
+/// 导入Excel并准备批次的参数
+#[derive(Debug, Deserialize)]
+pub struct ImportExcelAndPrepareBatchCmdArgs {
+    pub file_path_str: String,
+    pub product_model: Option<String>,
+    pub serial_number: Option<String>,
+}
+
+/// 导入Excel并准备批次的响应
+#[derive(Debug, Serialize)]
+pub struct ImportAndPrepareBatchResponse {
+    pub batch_info: TestBatchInfo,
+    pub instances: Vec<crate::models::ChannelTestInstance>,
+}
+
+/// 开始批次测试的参数
+#[derive(Debug, Deserialize)]
+pub struct StartTestsForBatchCmdArgs {
+    pub batch_id: String,
+}
+
+/// 获取批次状态的参数
+#[derive(Debug, Deserialize)]
+pub struct GetBatchStatusCmdArgs {
+    pub batch_id: String,
+}
+
+/// 批次详情载荷
+#[derive(Debug, Serialize)]
+pub struct BatchDetailsPayload {
+    pub batch_info: TestBatchInfo,
+    pub instances: Vec<crate::models::ChannelTestInstance>,
+    pub progress: BatchProgressInfo,
+}
+
+/// 批次进度信息
+#[derive(Debug, Serialize)]
+pub struct BatchProgressInfo {
+    pub total_points: u32,
+    pub tested_points: u32,
+    pub passed_points: u32,
+    pub failed_points: u32,
+    pub skipped_points: u32,
+}
+
+/// 导入Excel文件并准备批次
+#[tauri::command]
+pub async fn import_excel_and_prepare_batch_cmd(
+    args: ImportExcelAndPrepareBatchCmdArgs,
+    state: State<'_, AppState>
+) -> Result<ImportAndPrepareBatchResponse, String> {
+    info!("收到导入Excel并准备批次请求: {}", args.file_path_str);
+    
+    // 1. 解析Excel文件
+    let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
+        Ok(defs) => defs,
+        Err(e) => {
+            error!("Excel文件解析失败: {}", e);
+            return Err(format!("Excel文件解析失败: {}", e));
+        }
+    };
+    
+    // 2. 创建测试批次
+    let mut test_batch_info = TestBatchInfo::new(
+        args.product_model.clone(),
+        args.serial_number.clone(),
+    );
+    test_batch_info.total_points = definitions.len() as u32;
+    
+    // 3. 保存批次信息
+    match state.persistence_service.save_batch_info(&test_batch_info).await {
+        Ok(_) => info!("批次信息保存成功: {}", test_batch_info.batch_id),
+        Err(e) => {
+            error!("保存批次信息失败: {}", e);
+            return Err(format!("保存批次信息失败: {}", e));
+        }
+    }
+    
+    // 4. 为每个定义创建测试实例
+    let mut instances = Vec::new();
+    for definition in &definitions {
+        // 保存通道定义
+        if let Err(e) = state.persistence_service.save_channel_definition(definition).await {
+            error!("保存通道定义失败: {} - {}", definition.tag, e);
+        }
+        
+        // 创建测试实例
+        match state.channel_state_manager.create_test_instance(
+            &definition.id,
+            &test_batch_info.batch_id
+        ).await {
+            Ok(instance) => {
+                // 保存测试实例
+                if let Err(e) = state.persistence_service.save_test_instance(&instance).await {
+                    error!("保存测试实例失败: {} - {}", instance.instance_id, e);
+                }
+                instances.push(instance);
+            }
+            Err(e) => {
+                error!("创建测试实例失败: {} - {}", definition.tag, e);
+            }
+        }
+    }
+    
+    info!("成功创建批次，包含{}个测试实例", instances.len());
+    
+    Ok(ImportAndPrepareBatchResponse {
+        batch_info: test_batch_info,
+        instances,
+    })
+}
+
+/// 开始批次测试
+#[tauri::command]
+pub async fn start_tests_for_batch_cmd(
+    args: StartTestsForBatchCmdArgs,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    info!("开始批次测试: {}", args.batch_id);
+    
+    state.test_coordination_service
+        .start_batch_testing(&args.batch_id)
+        .await
+        .map_err(|e| {
+            error!("开始批次测试失败: {}", e);
+            e.to_string()
+        })
+}
+
+/// 获取批次状态
+#[tauri::command]
+pub async fn get_batch_status_cmd(
+    args: GetBatchStatusCmdArgs,
+    state: State<'_, AppState>
+) -> Result<BatchDetailsPayload, String> {
+    info!("获取批次状态: {}", args.batch_id);
+    
+    // 获取批次信息
+    let batch_info = match state.persistence_service.load_batch_info(&args.batch_id).await {
+        Ok(Some(info)) => info,
+        Ok(None) => return Err(format!("批次不存在: {}", args.batch_id)),
+        Err(e) => {
+            error!("获取批次信息失败: {}", e);
+            return Err(format!("获取批次信息失败: {}", e));
+        }
+    };
+    
+    // 获取测试实例
+    let instances = match state.persistence_service.load_test_instances_by_batch(&args.batch_id).await {
+        Ok(instances) => instances,
+        Err(e) => {
+            error!("获取测试实例失败: {}", e);
+            return Err(format!("获取测试实例失败: {}", e));
+        }
+    };
+    
+    // 计算进度信息
+    let total_points = instances.len() as u32;
+    let mut tested_points = 0;
+    let mut passed_points = 0;
+    let mut failed_points = 0;
+    let mut skipped_points = 0;
+    
+    for instance in &instances {
+        match instance.overall_status {
+            crate::models::OverallTestStatus::TestCompletedPassed => {
+                tested_points += 1;
+                passed_points += 1;
+            }
+            crate::models::OverallTestStatus::TestCompletedFailed => {
+                tested_points += 1;
+                failed_points += 1;
+            }
+            crate::models::OverallTestStatus::NotTested => {
+                skipped_points += 1;
+            }
+            _ => {
+                tested_points += 1;
+            }
+        }
+    }
+    
+    let progress = BatchProgressInfo {
+        total_points,
+        tested_points,
+        passed_points,
+        failed_points,
+        skipped_points,
+    };
+    
+    Ok(BatchDetailsPayload {
+        batch_info,
+        instances,
+        progress,
+    })
 } 

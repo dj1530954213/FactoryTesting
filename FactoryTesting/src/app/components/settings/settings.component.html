@@ -1,0 +1,208 @@
+<div class="settings-container">
+  <!-- 页面标题 -->
+  <div class="page-header">
+    <h1>应用设置</h1>
+    <div class="header-actions">
+      <button 
+        type="button" 
+        class="btn btn-secondary"
+        (click)="goToDashboard()">
+        返回仪表板
+      </button>
+    </div>
+  </div>
+
+  <!-- 加载状态 -->
+  <div *ngIf="isLoading" class="loading-container">
+    <div class="loading-spinner"></div>
+    <p>正在加载应用配置...</p>
+  </div>
+
+  <!-- 错误提示 -->
+  <div *ngIf="error" class="alert alert-error">
+    <strong>错误:</strong> {{ error }}
+  </div>
+
+  <!-- 成功提示 -->
+  <div *ngIf="successMessage" class="alert alert-success">
+    <strong>成功:</strong> {{ successMessage }}
+  </div>
+
+  <!-- 设置表单 -->
+  <div *ngIf="!isLoading" class="settings-form">
+    <form #settingsForm="ngForm">
+      
+      <!-- 基础设置 -->
+      <div class="settings-section">
+        <h2>基础设置</h2>
+        
+        <div class="form-group">
+          <label for="theme">界面主题</label>
+          <select 
+            id="theme" 
+            name="theme"
+            [(ngModel)]="settings.theme"
+            (ngModelChange)="onSettingsChange()"
+            class="form-control">
+            <option *ngFor="let option of themeOptions" [value]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <small class="form-text">选择应用程序的界面主题</small>
+        </div>
+
+        <div class="form-group">
+          <label for="defaultOperator">默认操作员</label>
+          <input 
+            type="text" 
+            id="defaultOperator"
+            name="defaultOperator"
+            [(ngModel)]="settings.default_operator_name"
+            (ngModelChange)="onSettingsChange()"
+            class="form-control"
+            placeholder="请输入默认操作员姓名">
+          <small class="form-text">新建测试批次时的默认操作员姓名</small>
+        </div>
+
+        <div class="form-group">
+          <label for="autoSaveInterval">自动保存间隔</label>
+          <select 
+            id="autoSaveInterval" 
+            name="autoSaveInterval"
+            [(ngModel)]="settings.auto_save_interval_minutes"
+            (ngModelChange)="onSettingsChange()"
+            class="form-control">
+            <option *ngFor="let option of autoSaveOptions" [value]="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+          <small class="form-text">自动保存测试数据的时间间隔</small>
+        </div>
+      </div>
+
+      <!-- PLC连接设置 -->
+      <div class="settings-section">
+        <h2>PLC连接设置</h2>
+        
+        <div class="form-group">
+          <label for="plcIp">PLC IP地址</label>
+          <input 
+            type="text" 
+            id="plcIp"
+            name="plcIp"
+            [(ngModel)]="settings.plc_ip_address"
+            (ngModelChange)="onSettingsChange()"
+            class="form-control"
+            placeholder="192.168.1.100"
+            pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+          <small class="form-text">PLC设备的IP地址</small>
+        </div>
+
+        <div class="form-group">
+          <label for="plcPort">PLC端口</label>
+          <input 
+            type="number" 
+            id="plcPort"
+            name="plcPort"
+            [(ngModel)]="settings.plc_port"
+            (ngModelChange)="onSettingsChange()"
+            class="form-control"
+            placeholder="502"
+            min="1"
+            max="65535">
+          <small class="form-text">PLC设备的通信端口（通常为502）</small>
+        </div>
+
+        <div class="form-group">
+          <button 
+            type="button" 
+            class="btn btn-outline"
+            (click)="testPlcConnection()">
+            测试PLC连接
+          </button>
+        </div>
+      </div>
+
+      <!-- 最近项目 -->
+      <div class="settings-section">
+        <h2>最近项目</h2>
+        
+        <div *ngIf="settings.recent_projects.length === 0" class="empty-state">
+          <p>暂无最近项目</p>
+        </div>
+
+        <div *ngIf="settings.recent_projects.length > 0" class="recent-projects">
+          <div *ngFor="let project of settings.recent_projects; let i = index" class="recent-project-item">
+            <span class="project-path">{{ project }}</span>
+            <button 
+              type="button" 
+              class="btn btn-small btn-danger"
+              (click)="removeRecentProject(i)"
+              title="删除此项目">
+              ×
+            </button>
+          </div>
+          
+          <div class="recent-projects-actions">
+            <button 
+              type="button" 
+              class="btn btn-outline btn-danger"
+              (click)="clearRecentProjects()">
+              清除所有最近项目
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系统信息 -->
+      <div class="settings-section">
+        <h2>系统信息</h2>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <label>配置ID</label>
+            <span>{{ settings.id }}</span>
+          </div>
+          
+          <div class="info-item">
+            <label>最后备份时间</label>
+            <span>{{ formatLastBackupTime() }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="form-actions">
+        <button 
+          type="button" 
+          class="btn btn-primary"
+          [disabled]="!hasUnsavedChanges || isSaving"
+          (click)="saveSettings()">
+          <span *ngIf="isSaving">保存中...</span>
+          <span *ngIf="!isSaving">保存设置</span>
+        </button>
+
+        <button 
+          type="button" 
+          class="btn btn-secondary"
+          [disabled]="!hasUnsavedChanges || isSaving"
+          (click)="cancelChanges()">
+          取消更改
+        </button>
+
+        <button 
+          type="button" 
+          class="btn btn-outline btn-danger"
+          [disabled]="isSaving"
+          (click)="resetToDefaults()">
+          重置为默认
+        </button>
+      </div>
+
+      <!-- 未保存更改提示 -->
+      <div *ngIf="hasUnsavedChanges" class="unsaved-changes-notice">
+        <strong>注意:</strong> 您有未保存的更改
+      </div>
+    </form>
+  </div>
+</div>

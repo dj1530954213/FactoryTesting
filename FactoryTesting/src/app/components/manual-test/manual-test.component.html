@@ -104,21 +104,21 @@
         <div 
           class="channel-item" 
           *ngFor="let channel of filteredChannels"
-          [class.selected]="selectedChannel?.instanceId === channel.instanceId"
+          [class.selected]="selectedChannel?.instance_id === channel.instance_id"
           (click)="selectChannel(channel)">
           <div class="channel-header">
             <span class="channel-label">{{ channel.channelLabel }}</span>
-            <span class="channel-status" [class]="'status-' + channel.overallStatus.toLowerCase()">
-              {{ channel.overallStatus }}
+            <span class="channel-status" [class]="'status-' + channel.overall_status.toString().toLowerCase()">
+              {{ channel.overall_status }}
             </span>
           </div>
           <div class="channel-info">
             <div class="channel-description">{{ channel.description }}</div>
             <div class="channel-details">
-              <span class="module-type module-{{ channel.moduleType.toLowerCase() }}">
+              <span class="module-type" [ngClass]="'module-' + (channel.moduleType ? channel.moduleType.toString().toLowerCase() : 'unknown')">
                 {{ channel.moduleType }}
               </span>
-              <span class="plc-address">{{ channel.definition.plcAddress }}</span>
+              <span class="plc-address">{{ channel.definition?.plc_communication_address }}</span>
             </div>
           </div>
         </div>
@@ -165,25 +165,21 @@
           </div>
           <div class="detail-row">
             <label>模块类型:</label>
-            <span class="module-type module-{{ selectedChannel.moduleType.toLowerCase() }}">
+            <span class="module-type" [ngClass]="'module-' + (selectedChannel.moduleType ? selectedChannel.moduleType.toString().toLowerCase() : 'unknown')">
               {{ selectedChannel.moduleType }}
             </span>
           </div>
           <div class="detail-row">
             <label>数据类型:</label>
-            <span>{{ selectedChannel.definition.pointDataType }}</span>
+            <span>{{ selectedChannel.definition?.point_data_type }}</span>
           </div>
           <div class="detail-row">
             <label>PLC地址:</label>
-            <span class="plc-address">{{ selectedChannel.definition.plcAddress }}</span>
+            <span class="plc-address">{{ selectedChannel.definition?.plc_communication_address }}</span>
           </div>
-          <div class="detail-row" *ngIf="selectedChannel.definition.expectedValue !== undefined">
-            <label>期望值:</label>
-            <span>{{ selectedChannel.definition.expectedValue }}</span>
-          </div>
-          <div class="detail-row" *ngIf="selectedChannel.definition.tolerance !== undefined">
-            <label>容差:</label>
-            <span>± {{ selectedChannel.definition.tolerance }}</span>
+          <div class="detail-row" *ngIf="selectedChannel.definition?.analog_range_min !== undefined">
+            <label>模拟量范围:</label>
+            <span>{{ selectedChannel.definition?.analog_range_min }} - {{ selectedChannel.definition?.analog_range_max }}</span>
           </div>
         </div>
       </div>
@@ -221,7 +217,7 @@
           <div class="value-display">
             <span class="value">{{ currentValue }}</span>
             <span class="unit" *ngIf="selectedChannel.moduleType === 'AI' || selectedChannel.moduleType === 'AO'">
-              {{ selectedChannel.definition.pointDataType === 'Float32' ? '' : '' }}
+              {{ selectedChannel.definition?.point_data_type === 'Float' ? '' : '' }}
             </span>
           </div>
         </div>

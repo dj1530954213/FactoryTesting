@@ -27,6 +27,18 @@ export const routes: Routes = [
     loadComponent: () => import('./components/manual-test/manual-test.component').then(m => m.ManualTestComponent)
   },
   {
+    path: 'settings',
+    loadComponent: () => import('./components/settings/settings.component').then(m => m.SettingsComponent)
+  },
+  {
+    path: 'report-generation',
+    loadComponent: () => import('./components/report-generation/report-generation.component').then(m => m.ReportGenerationComponent)
+  },
+  {
+    path: 'system-monitor',
+    loadComponent: () => import('./components/shared/system-monitor.component').then(m => m.SystemMonitorComponent)
+  },
+  {
     path: '**',
     loadComponent: () => import('./components/shared/not-found.component').then(m => m.NotFoundComponent)
   }

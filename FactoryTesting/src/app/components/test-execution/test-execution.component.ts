@@ -338,79 +338,65 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.addLog('info', '开始创建测试批次...');
 
-    // 创建示例通道定义
-    const sampleDefinitions: ChannelPointDefinition[] = [
-      {
-        id: 'def_001',
-        tag: 'AI001',
-        variable_name: 'Temperature_1',
-        description: '温度传感器1',
-        station_name: 'Station1',
-        module_name: 'Module1',
-        module_type: ModuleType.AI,
-        channel_number: 'CH01',
-        point_data_type: PointDataType.Float,
-        plc_communication_address: 'DB1.DBD0',
-        analog_range_min: 0,
-        analog_range_max: 100,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'def_002',
-        tag: 'DI001',
-        variable_name: 'Switch_1',
-        description: '开关状态1',
-        station_name: 'Station1',
-        module_name: 'Module2',
-        module_type: ModuleType.DI,
-        channel_number: 'CH01',
-        point_data_type: PointDataType.Bool,
-        plc_communication_address: 'I0.0',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
-
-    // 创建批次信息
-    const batchInfo: TestBatchInfo = {
-      batch_id: 'batch_' + Date.now(),
-      product_model: this.newBatch.product_model,
-      serial_number: this.newBatch.serial_number,
-      operator_name: this.newBatch.operator_name,
-      total_points: sampleDefinitions.length,
-      passed_points: 0,
-      failed_points: 0,
-      overall_status: OverallTestStatus.NotTested,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    // 创建测试执行请求
-    const request: TestExecutionRequest = {
-      batch_info: batchInfo,
-      channel_definitions: sampleDefinitions,
-      max_concurrent_tests: 3,
-      auto_start: this.autoStart
-    };
-
-    // 提交请求
-    this.tauriApi.submitTestExecution(request).subscribe({
-      next: (response: TestExecutionResponse) => {
-        this.isLoading = false;
-        this.currentBatchId = response.batch_id;
-        this.currentBatchStatus = response.status;
-        this.currentInstanceCount = response.instance_count;
-        
-        this.addLog('success', `批次创建成功: ${response.message}`);
-        
-        if (this.autoStart) {
-          this.startProgressPolling();
+    // 首先获取所有通道定义
+    this.tauriApi.getAllChannelDefinitions().subscribe({
+      next: (definitions) => {
+        if (definitions.length === 0) {
+          this.isLoading = false;
+          this.addLog('error', '没有找到通道定义，请先导入Excel文件');
+          return;
         }
+
+        this.addLog('info', `找到 ${definitions.length} 个通道定义`);
+
+        // 创建批次信息
+        const batchInfo: TestBatchInfo = {
+          batch_id: 'batch_' + Date.now(),
+          product_model: this.newBatch.product_model,
+          serial_number: this.newBatch.serial_number,
+          operator_name: this.newBatch.operator_name,
+          total_points: definitions.length,
+          passed_points: 0,
+          failed_points: 0,
+          overall_status: OverallTestStatus.NotTested,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        // 创建测试执行请求
+        const request: TestExecutionRequest = {
+          batch_info: batchInfo,
+          channel_definitions: definitions,
+          max_concurrent_tests: 3,
+          auto_start: this.autoStart
+        };
+
+        this.addLog('info', `创建测试批次，包含 ${definitions.length} 个通道定义`);
+
+        // 提交请求
+        this.tauriApi.submitTestExecution(request).subscribe({
+          next: (response: TestExecutionResponse) => {
+            this.isLoading = false;
+            this.currentBatchId = response.batch_id;
+            this.currentBatchStatus = response.status;
+            this.currentInstanceCount = response.instance_count;
+            
+            this.addLog('success', `批次创建成功: ${response.message}`);
+            this.addLog('info', `批次ID: ${response.batch_id}, 实例数量: ${response.instance_count}`);
+            
+            if (this.autoStart) {
+              this.startProgressPolling();
+            }
+          },
+          error: (error) => {
+            this.isLoading = false;
+            this.addLog('error', `批次创建失败: ${error}`);
+          }
+        });
       },
       error: (error) => {
         this.isLoading = false;
-        this.addLog('error', `批次创建失败: ${error}`);
+        this.addLog('error', `获取通道定义失败: ${error}`);
       }
     });
   }

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAT_TEST 前后端集成测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #1890ff;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+        }
+        .test-section h3 {
+            color: #262626;
+            margin-top: 0;
+        }
+        .button {
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .button:hover {
+            background-color: #40a9ff;
+        }
+        .button:disabled {
+            background-color: #d9d9d9;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #389e0d;
+        }
+        .error {
+            background-color: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: #cf1322;
+        }
+        .info {
+            background-color: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #0958d9;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-connected {
+            background-color: #52c41a;
+        }
+        .status-disconnected {
+            background-color: #ff4d4f;
+        }
+        .status-unknown {
+            background-color: #faad14;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏭 FAT_TEST 前后端集成测试</h1>
+            <p>测试 Rust 后端与 Angular 前端的 Tauri 通信</p>
+            <div id="connection-status">
+                <span class="status-indicator status-unknown"></span>
+                <span>连接状态检测中...</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- 系统状态测试 -->
+            <div class="test-section">
+                <h3>🔧 系统状态测试</h3>
+                <button class="button" onclick="testSystemStatus()">获取系统状态</button>
+                <button class="button" onclick="testSystemHealth()">检查系统健康</button>
+                <div id="system-result" class="result info" style="display: none;"></div>
+            </div>
+
+            <!-- 数据管理测试 -->
+            <div class="test-section">
+                <h3>📊 数据管理测试</h3>
+                <button class="button" onclick="testGetAllDefinitions()">获取所有通道定义</button>
+                <button class="button" onclick="testGetAllBatches()">获取所有批次</button>
+                <button class="button" onclick="testCreateTestInstance()">创建测试实例</button>
+                <div id="data-result" class="result info" style="display: none;"></div>
+            </div>
+
+            <!-- Excel导入测试 -->
+            <div class="test-section">
+                <h3>📁 Excel导入测试</h3>
+                <button class="button" onclick="testExcelImport()">测试Excel导入</button>
+                <button class="button" onclick="testCreateBatch()">创建测试批次</button>
+                <div id="excel-result" class="result info" style="display: none;"></div>
+            </div>
+
+            <!-- 测试执行测试 -->
+            <div class="test-section">
+                <h3>⚡ 测试执行测试</h3>
+                <button class="button" onclick="testStartBatch()">开始批次测试</button>
+                <button class="button" onclick="testGetProgress()">获取测试进度</button>
+                <button class="button" onclick="testStopBatch()">停止批次测试</button>
+                <div id="execution-result" class="result info" style="display: none;"></div>
+            </div>
+
+            <!-- 报告生成测试 -->
+            <div class="test-section">
+                <h3>📋 报告生成测试</h3>
+                <button class="button" onclick="testGetTemplates()">获取报告模板</button>
+                <button class="button" onclick="testGeneratePDF()">生成PDF报告</button>
+                <button class="button" onclick="testGenerateExcel()">生成Excel报告</button>
+                <div id="report-result" class="result info" style="display: none;"></div>
+            </div>
+
+            <!-- 手动测试 -->
+            <div class="test-section">
+                <h3>🔧 手动测试</h3>
+                <button class="button" onclick="testManualSubTest()">执行手动子测试</button>
+                <button class="button" onclick="testReadChannelValue()">读取通道值</button>
+                <button class="button" onclick="testWriteChannelValue()">写入通道值</button>
+                <div id="manual-result" class="result info" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📝 测试日志</h3>
+            <button class="button" onclick="clearLog()">清空日志</button>
+            <div id="test-log" class="result info" style="min-height: 200px;">
+                测试日志将在这里显示...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 检查是否在Tauri环境中
+        const isTauriEnv = typeof window !== 'undefined' && window.__TAURI__;
+        
+        // 日志函数
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('test-log');
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logEntry;
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLog() {
+            document.getElementById('test-log').textContent = '测试日志已清空...\n';
+        }
+
+        // 显示结果的通用函数
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${isError ? 'error' : 'success'}`;
+            element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        }
+
+        // 更新连接状态
+        function updateConnectionStatus(connected, message = '') {
+            const statusElement = document.getElementById('connection-status');
+            const indicator = statusElement.querySelector('.status-indicator');
+            const text = statusElement.querySelector('span:last-child');
+            
+            if (connected) {
+                indicator.className = 'status-indicator status-connected';
+                text.textContent = '✅ 后端连接正常' + (message ? ` - ${message}` : '');
+            } else {
+                indicator.className = 'status-indicator status-disconnected';
+                text.textContent = '❌ 后端连接失败' + (message ? ` - ${message}` : '');
+            }
+        }
+
+        // Tauri API调用包装函数
+        async function invokeCommand(command, args = {}) {
+            if (!isTauriEnv) {
+                throw new Error('不在Tauri环境中，无法调用后端命令');
+            }
+            
+            try {
+                log(`调用命令: ${command}`, 'info');
+                const result = await window.__TAURI__.invoke(command, args);
+                log(`命令 ${command} 执行成功`, 'info');
+                return result;
+            } catch (error) {
+                log(`命令 ${command} 执行失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // 系统状态测试
+        async function testSystemStatus() {
+            try {
+                const status = await invokeCommand('get_system_status');
+                showResult('system-result', status);
+                updateConnectionStatus(true, `活跃任务: ${status.active_test_tasks}`);
+                log(`系统状态: ${JSON.stringify(status)}`, 'success');
+            } catch (error) {
+                showResult('system-result', `错误: ${error.message}`, true);
+                updateConnectionStatus(false, error.message);
+                log(`获取系统状态失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSystemHealth() {
+            try {
+                const status = await invokeCommand('get_system_status');
+                const isHealthy = status.system_health === 'healthy';
+                showResult('system-result', `系统健康状态: ${isHealthy ? '✅ 健康' : '❌ 异常'}`);
+                log(`系统健康检查: ${isHealthy ? '通过' : '失败'}`, isHealthy ? 'success' : 'error');
+            } catch (error) {
+                showResult('system-result', `健康检查失败: ${error.message}`, true);
+                log(`系统健康检查失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 数据管理测试
+        async function testGetAllDefinitions() {
+            try {
+                const definitions = await invokeCommand('get_all_channel_definitions');
+                showResult('data-result', `获取到 ${definitions.length} 个通道定义:\n${JSON.stringify(definitions.slice(0, 3), null, 2)}${definitions.length > 3 ? '\n...(显示前3个)' : ''}`);
+                log(`成功获取 ${definitions.length} 个通道定义`, 'success');
+            } catch (error) {
+                showResult('data-result', `获取通道定义失败: ${error.message}`, true);
+                log(`获取通道定义失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetAllBatches() {
+            try {
+                const batches = await invokeCommand('get_all_batch_info');
+                showResult('data-result', `获取到 ${batches.length} 个测试批次:\n${JSON.stringify(batches, null, 2)}`);
+                log(`成功获取 ${batches.length} 个测试批次`, 'success');
+            } catch (error) {
+                showResult('data-result', `获取批次信息失败: ${error.message}`, true);
+                log(`获取批次信息失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCreateTestInstance() {
+            try {
+                // 使用测试数据
+                const instance = await invokeCommand('create_test_instance', {
+                    definitionId: 'test_def_001',
+                    batchId: 'test_batch_001'
+                });
+                showResult('data-result', `创建测试实例成功:\n${JSON.stringify(instance, null, 2)}`);
+                log(`成功创建测试实例: ${instance.instance_id}`, 'success');
+            } catch (error) {
+                showResult('data-result', `创建测试实例失败: ${error.message}`, true);
+                log(`创建测试实例失败: ${error.message}`, 'error');
+            }
+        }
+
+        // Excel导入测试
+        async function testExcelImport() {
+            try {
+                const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+                const definitions = await invokeCommand('import_excel_file', { filePath: testFilePath });
+                showResult('excel-result', `Excel导入成功，解析到 ${definitions.length} 个通道定义:\n${JSON.stringify(definitions.slice(0, 2), null, 2)}${definitions.length > 2 ? '\n...(显示前2个)' : ''}`);
+                log(`Excel导入成功，解析到 ${definitions.length} 个通道定义`, 'success');
+            } catch (error) {
+                showResult('excel-result', `Excel导入失败: ${error.message}`, true);
+                log(`Excel导入失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCreateBatch() {
+            try {
+                const batchInfo = {
+                    batch_id: `test_batch_${Date.now()}`,
+                    product_model: '测试产品型号',
+                    serial_number: `SN${Date.now()}`,
+                    customer_name: '测试客户',
+                    operator_name: '测试操作员',
+                    creation_time: new Date().toISOString(),
+                    status: 'Created'
+                };
+                
+                const definitions = [
+                    {
+                        id: `def_${Date.now()}_1`,
+                        tag: 'AI001',
+                        variable_description: '测试AI点1',
+                        station_name: '测试站',
+                        module_name: '测试模块',
+                        module_type: 'AI',
+                        channel_number: 'CH01',
+                        data_type: 'Float',
+                        plc_communication_address: 'DB1.DBD0'
+                    }
+                ];
+                
+                const batchId = await invokeCommand('create_test_batch_with_definitions', {
+                    batchInfo,
+                    definitions
+                });
+                
+                showResult('excel-result', `创建测试批次成功:\n批次ID: ${batchId}\n产品型号: ${batchInfo.product_model}\n序列号: ${batchInfo.serial_number}`);
+                log(`成功创建测试批次: ${batchId}`, 'success');
+            } catch (error) {
+                showResult('excel-result', `创建测试批次失败: ${error.message}`, true);
+                log(`创建测试批次失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 测试执行测试
+        async function testStartBatch() {
+            try {
+                await invokeCommand('start_batch_testing', { batchId: 'test_batch_001' });
+                showResult('execution-result', '批次测试启动成功');
+                log('批次测试启动成功', 'success');
+            } catch (error) {
+                showResult('execution-result', `启动批次测试失败: ${error.message}`, true);
+                log(`启动批次测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetProgress() {
+            try {
+                const progress = await invokeCommand('get_batch_progress', { batchId: 'test_batch_001' });
+                showResult('execution-result', `测试进度:\n${JSON.stringify(progress, null, 2)}`);
+                log(`获取测试进度成功，${progress.length} 个更新`, 'success');
+            } catch (error) {
+                showResult('execution-result', `获取测试进度失败: ${error.message}`, true);
+                log(`获取测试进度失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testStopBatch() {
+            try {
+                await invokeCommand('stop_batch_testing', { batchId: 'test_batch_001' });
+                showResult('execution-result', '批次测试停止成功');
+                log('批次测试停止成功', 'success');
+            } catch (error) {
+                showResult('execution-result', `停止批次测试失败: ${error.message}`, true);
+                log(`停止批次测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 报告生成测试
+        async function testGetTemplates() {
+            try {
+                const templates = await invokeCommand('get_report_templates');
+                showResult('report-result', `获取到 ${templates.length} 个报告模板:\n${JSON.stringify(templates, null, 2)}`);
+                log(`成功获取 ${templates.length} 个报告模板`, 'success');
+            } catch (error) {
+                showResult('report-result', `获取报告模板失败: ${error.message}`, true);
+                log(`获取报告模板失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGeneratePDF() {
+            try {
+                const request = {
+                    batch_ids: ['test_batch_001'],
+                    template_id: 'default_pdf',
+                    output_filename: null,
+                    parameters: {}
+                };
+                
+                const report = await invokeCommand('generate_pdf_report', { request });
+                showResult('report-result', `PDF报告生成成功:\n报告ID: ${report.report_id}\n文件路径: ${report.file_path}\n文件大小: ${report.file_size} 字节`);
+                log(`PDF报告生成成功: ${report.report_id}`, 'success');
+            } catch (error) {
+                showResult('report-result', `生成PDF报告失败: ${error.message}`, true);
+                log(`生成PDF报告失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGenerateExcel() {
+            try {
+                const request = {
+                    batch_ids: ['test_batch_001'],
+                    template_id: 'default_excel',
+                    output_filename: null,
+                    parameters: {}
+                };
+                
+                const report = await invokeCommand('generate_excel_report', { request });
+                showResult('report-result', `Excel报告生成成功:\n报告ID: ${report.report_id}\n文件路径: ${report.file_path}\n文件大小: ${report.file_size} 字节`);
+                log(`Excel报告生成成功: ${report.report_id}`, 'success');
+            } catch (error) {
+                showResult('report-result', `生成Excel报告失败: ${error.message}`, true);
+                log(`生成Excel报告失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 手动测试
+        async function testManualSubTest() {
+            try {
+                const args = {
+                    instance_id: 'test_instance_001',
+                    sub_test_item: 'HardPoint',
+                    params: { percentage: 0.5, tolerance: 0.02 }
+                };
+                
+                const outcome = await invokeCommand('execute_manual_sub_test_cmd', args);
+                showResult('manual-result', `手动子测试执行成功:\n${JSON.stringify(outcome, null, 2)}`);
+                log(`手动子测试执行成功: ${outcome.success ? '通过' : '失败'}`, outcome.success ? 'success' : 'error');
+            } catch (error) {
+                showResult('manual-result', `执行手动子测试失败: ${error.message}`, true);
+                log(`执行手动子测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testReadChannelValue() {
+            try {
+                const args = {
+                    instance_id: 'test_instance_001',
+                    plc_address: 'DB1.DBD0',
+                    data_type: 'Float'
+                };
+                
+                const value = await invokeCommand('read_channel_value_cmd', args);
+                showResult('manual-result', `读取通道值成功:\n地址: ${args.plc_address}\n值: ${JSON.stringify(value)}`);
+                log(`读取通道值成功: ${args.plc_address} = ${JSON.stringify(value)}`, 'success');
+            } catch (error) {
+                showResult('manual-result', `读取通道值失败: ${error.message}`, true);
+                log(`读取通道值失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWriteChannelValue() {
+            try {
+                const args = {
+                    instance_id: 'test_instance_001',
+                    plc_address: 'DB1.DBD0',
+                    data_type: 'Float',
+                    value_to_write: 42.5
+                };
+                
+                await invokeCommand('write_channel_value_cmd', args);
+                showResult('manual-result', `写入通道值成功:\n地址: ${args.plc_address}\n值: ${args.value_to_write}`);
+                log(`写入通道值成功: ${args.plc_address} = ${args.value_to_write}`, 'success');
+            } catch (error) {
+                showResult('manual-result', `写入通道值失败: ${error.message}`, true);
+                log(`写入通道值失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('集成测试页面加载完成', 'info');
+            
+            if (isTauriEnv) {
+                log('✅ 检测到Tauri环境，可以进行后端通信测试', 'success');
+                updateConnectionStatus(true, '环境检测通过');
+                
+                // 自动执行系统状态检查
+                setTimeout(testSystemStatus, 1000);
+            } else {
+                log('❌ 未检测到Tauri环境，请在Tauri应用中打开此页面', 'error');
+                updateConnectionStatus(false, '非Tauri环境');
+                
+                // 禁用所有按钮
+                const buttons = document.querySelectorAll('.button');
+                buttons.forEach(button => {
+                    button.disabled = true;
+                    button.textContent += ' (需要Tauri环境)';
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

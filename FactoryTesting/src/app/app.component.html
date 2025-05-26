@@ -1,72 +1,99 @@
-<div class="app-container">
+<nz-layout class="app-layout">
   <!-- 顶部导航栏 -->
-  <header class="top-nav">
+  <nz-header class="app-header">
     <div class="nav-brand">
-      <span class="brand-icon">🏭</span>
-      <span class="brand-text">工厂测试系统</span>
-      <span class="version-badge">v1.0.0</span>
+      <nz-space nzAlign="center">
+        <span *nzSpaceItem class="brand-icon">🏭</span>
+        <span *nzSpaceItem class="brand-text">工厂测试系统</span>
+        <nz-tag *nzSpaceItem nzColor="blue">v1.0.0</nz-tag>
+      </nz-space>
     </div>
     
-    <nav class="nav-menu">
-      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">📊</span>
+    <ul nz-menu nzMode="horizontal" nzTheme="dark" class="nav-menu">
+      <li nz-menu-item routerLink="/dashboard" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="dashboard" nzTheme="outline"></span>
         仪表板
-      </a>
-      <a routerLink="/data-import" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">📥</span>
+      </li>
+      <li nz-menu-item routerLink="/data-import" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="import" nzTheme="outline"></span>
         数据导入
-      </a>
-      <a routerLink="/test-execution" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">🧪</span>
+      </li>
+      <li nz-menu-item routerLink="/test-execution" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="experiment" nzTheme="outline"></span>
         测试执行
-      </a>
-      <a routerLink="/batch-management" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">📦</span>
+      </li>
+      <li nz-menu-item routerLink="/batch-management" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="container" nzTheme="outline"></span>
         批次管理
-      </a>
-      <a routerLink="/manual-test" routerLinkActive="active" class="nav-item">
-        <span class="nav-icon">🔧</span>
+      </li>
+      <li nz-menu-item routerLink="/manual-test" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="tool" nzTheme="outline"></span>
         手动测试
-      </a>
-    </nav>
+      </li>
+      <li nz-menu-item routerLink="/report-generation" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="file" nzTheme="outline"></span>
+        报告生成
+      </li>
+      <li nz-menu-item routerLink="/system-monitor" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="monitor" nzTheme="outline"></span>
+        系统监控
+      </li>
+      <li nz-menu-item routerLink="/settings" routerLinkActive="ant-menu-item-selected">
+        <span nz-icon nzType="setting" nzTheme="outline"></span>
+        设置
+      </li>
+    </ul>
     
     <div class="nav-status">
-      <div class="status-item">
-        <span class="status-label">系统健康:</span>
-        <span class="status-value" [class]="systemStatus?.system_health === 'healthy' ? 'status-healthy' : 'status-error'">
-          {{ systemStatus?.system_health || 'unknown' }}
-        </span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">版本:</span>
-        <span class="status-value">{{ systemStatus?.version || '0.1.0' }}</span>
-      </div>
-      <div class="connection-status" [class]="isConnected ? 'connected' : 'disconnected'">
-        {{ isConnected ? '已连接' : '未连接' }}
-      </div>
+      <nz-space nzAlign="center">
+        <div *nzSpaceItem class="status-item">
+          <span class="status-label">系统健康:</span>
+          <nz-tag [nzColor]="systemStatus?.system_health === 'healthy' ? 'green' : 'red'">
+            {{ systemStatus?.system_health || 'unknown' }}
+          </nz-tag>
+        </div>
+        <div *nzSpaceItem class="status-item">
+          <span class="status-label">版本:</span>
+          <nz-tag nzColor="blue">{{ systemStatus?.version || '0.1.0' }}</nz-tag>
+        </div>
+        <nz-badge *nzSpaceItem 
+                  [nzStatus]="isConnected ? 'success' : 'error'" 
+                  [nzText]="isConnected ? '已连接' : '未连接'">
+        </nz-badge>
+      </nz-space>
     </div>
-  </header>
+  </nz-header>
 
   <!-- 主内容区域 -->
-  <main class="main-content">
-    <router-outlet></router-outlet>
-  </main>
+  <nz-content class="app-content">
+    <div class="content-wrapper">
+      <router-outlet></router-outlet>
+    </div>
+  </nz-content>
 
   <!-- 底部状态栏 -->
-  <footer class="bottom-status">
-    <div class="status-left">
-      <span class="status-indicator" [class]="isConnected ? 'connected' : 'disconnected'"></span>
-      <span>{{ isConnected ? '系统已连接' : '系统未连接' }}</span>
+  <nz-footer class="app-footer">
+    <div class="footer-content">
+      <div class="status-left">
+        <nz-space nzAlign="center">
+          <nz-badge *nzSpaceItem 
+                    [nzStatus]="isConnected ? 'success' : 'error'" 
+                    [nzText]="isConnected ? '系统已连接' : '系统未连接'">
+          </nz-badge>
+        </nz-space>
+      </div>
+      
+      <div class="status-center">
+        <nz-space nzAlign="center">
+          <span *nzSpaceItem>活动任务: {{ systemStatus?.active_test_tasks || 0 }}</span>
+          <nz-divider *nzSpaceItem nzType="vertical"></nz-divider>
+          <span *nzSpaceItem>最后更新: {{ lastUpdateTime | date:'HH:mm:ss' }}</span>
+        </nz-space>
+      </div>
+      
+      <div class="status-right">
+        <span>工厂测试系统 v{{ systemStatus?.version || '1.0.0' }}</span>
+      </div>
     </div>
-    
-    <div class="status-center">
-      <span>活动任务: {{ systemStatus?.active_test_tasks || 0 }}</span>
-      <span class="separator">|</span>
-      <span>最后更新: {{ lastUpdateTime | date:'HH:mm:ss' }}</span>
-    </div>
-    
-    <div class="status-right">
-      <span>工厂测试系统 v{{ systemStatus?.version || '1.0.0' }}</span>
-    </div>
-  </footer>
-</div>
+  </nz-footer>
+</nz-layout>

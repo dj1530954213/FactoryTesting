@@ -11,6 +11,7 @@ import {
   TestExecutionResponse,
   TestProgressUpdate,
   SystemStatus,
+  AppSettings,
   ParseExcelResponse,
   CreateBatchRequest,
   CreateBatchResponse
@@ -264,6 +265,61 @@ export class TauriApiService {
       map(status => status.version),
       catchError(() => from(['未知']))
     );
+  }
+
+  // ============================================================================
+  // 应用配置相关命令
+  // ============================================================================
+
+  /**
+   * 加载应用配置
+   */
+  loadAppSettings(): Observable<AppSettings> {
+    return from(invoke<AppSettings>('load_app_settings_cmd')).pipe(
+      catchError(error => {
+        console.error('加载应用配置失败:', error);
+        // 返回默认配置
+        const defaultSettings: AppSettings = {
+          id: 'default_settings',
+          theme: 'light',
+          plc_ip_address: '127.0.0.1',
+          plc_port: 502,
+          default_operator_name: undefined,
+          auto_save_interval_minutes: 5,
+          recent_projects: [],
+          last_backup_time: undefined
+        };
+        return from([defaultSettings]);
+      })
+    );
+  }
+
+  /**
+   * 保存应用配置
+   */
+  saveAppSettings(settings: AppSettings): Observable<void> {
+    return from(invoke<void>('save_app_settings_cmd', { settings })).pipe(
+      catchError(error => {
+        console.error('保存应用配置失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  // ============================================================================
+  // 报告生成相关方法
+  // ============================================================================
+
+  generatePdfReport(request: any): Observable<any> {
+    return from(invoke('generate_pdf_report_cmd', { request }));
+  }
+
+  generateExcelReport(request: any): Observable<any> {
+    return from(invoke('generate_excel_report_cmd', { request }));
+  }
+
+  deleteReport(reportId: string): Observable<any> {
+    return from(invoke('delete_report_cmd', { reportId }));
   }
 
   // ============================================================================

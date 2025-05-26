@@ -23,13 +23,12 @@ interface PreviewDataItem {
   moduleType: string;
   channelNumber: string;
   plcAddress: string;
-}
-
-interface BatchInfo {
-  productModel: string;
-  serialNumber: string;
-  customerName: string;
-  operatorName: string;
+  variableName: string;
+  stationName: string;
+  moduleName: string;
+  dataType: string;
+  analogRangeMin?: number;
+  analogRangeMax?: number;
 }
 
 @Component({
@@ -40,7 +39,7 @@ interface BatchInfo {
   styleUrl: './data-import.component.css'
 })
 export class DataImportComponent implements OnInit, OnDestroy {
-  // 步骤控制
+  // 当前步骤：1=选择文件, 2=预览数据, 3=开始测试（删除批次信息步骤）
   currentStep = 1;
   
   // 文件相关
@@ -51,14 +50,6 @@ export class DataImportComponent implements OnInit, OnDestroy {
   
   // 预览数据
   previewData: PreviewDataItem[] = [];
-  
-  // 批次信息
-  batchInfo: BatchInfo = {
-    productModel: '',
-    serialNumber: '',
-    customerName: '',
-    operatorName: ''
-  };
   
   // 状态控制
   isLoading = false;
@@ -82,7 +73,11 @@ export class DataImportComponent implements OnInit, OnDestroy {
 
   // 加载最近使用的文件
   loadRecentFiles() {
-    // 从本地存储加载最近使用的文件
+    // 清除旧的模拟数据，重新开始
+    localStorage.removeItem('recentFiles');
+    this.recentFiles = [];
+    
+    // 从本地存储加载最近使用的文件（现在应该是空的）
     const recentFilesJson = localStorage.getItem('recentFiles');
     if (recentFilesJson) {
       try {
@@ -126,10 +121,8 @@ export class DataImportComponent implements OnInit, OnDestroy {
       console.log('开始文件选择流程');
       console.log('Tauri环境检测结果:', this.tauriApi.isTauriEnvironment());
       
-      // 强制使用Tauri API，因为我们知道应用运行在Tauri环境中
-      const forceTauriApi = true;
-      
-      if (forceTauriApi && typeof window !== 'undefined' && window.__TAURI__) {
+      // 在Tauri环境中，使用Tauri文件对话框
+      if (this.tauriApi.isTauriEnvironment() && typeof window !== 'undefined' && window.__TAURI__) {
         console.log('使用Tauri文件对话框选择文件');
         const { open } = window.__TAURI__.dialog;
         
@@ -149,11 +142,26 @@ export class DataImportComponent implements OnInit, OnDestroy {
           await this.handleFileSelection(selected);
         }
       } else {
-        console.log('Tauri API不可用，使用测试文件路径');
-        // 如果Tauri API不可用，直接使用测试文件
-        const testFilePath = 'C:\\Program Files\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
-        console.log('使用测试文件路径:', testFilePath);
-        await this.handleFileSelection(testFilePath);
+        console.log('非Tauri环境，使用HTML文件选择器');
+        // 在开发环境中，创建一个隐藏的文件输入元素
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xlsx,.xls';
+        input.style.display = 'none';
+        
+        input.onchange = async (event: any) => {
+          const file = event.target.files[0];
+          if (file) {
+            // 在开发环境中，使用测试文件路径（修正路径）
+            const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+            console.log('开发环境：使用测试文件路径:', testFilePath);
+            await this.handleFileSelection(testFilePath, file);
+          }
+        };
+        
+        document.body.appendChild(input);
+        input.click();
+        document.body.removeChild(input);
       }
     } catch (error) {
       console.error('文件选择失败:', error);
@@ -193,12 +201,13 @@ export class DataImportComponent implements OnInit, OnDestroy {
   async selectRecentFile(file: RecentFile) {
     console.log('选择最近使用的文件:', file.name, file.path);
     
-    // 如果是测试文件，使用正确的路径
+    // 检查是否是测试文件，使用正确的路径
     if (file.name === '测试IO.xlsx') {
-      const testFilePath = 'C:\\Program Files\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
-      console.log('使用测试文件路径:', testFilePath);
+      const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+      console.log('识别为测试文件，使用完整路径:', testFilePath);
       await this.handleFileSelection(testFilePath);
     } else {
+      // 对于其他文件，直接使用保存的路径
       await this.handleFileSelection(file.path);
     }
   }
@@ -213,43 +222,61 @@ export class DataImportComponent implements OnInit, OnDestroy {
       console.log('开始解析Excel文件:', filePath);
       console.log('Tauri环境检测:', this.tauriApi.isTauriEnvironment());
       
-      // 强制使用Tauri API，不依赖环境检测
-      const forceTauriApi = true;
+      // 强制尝试使用Tauri API，即使在开发环境中
+      const forceUseTauriApi = true;
       
-      if (forceTauriApi || this.tauriApi.isTauriEnvironment()) {
-        // 在Tauri环境中，调用后端API解析文件
+      if (this.tauriApi.isTauriEnvironment() || forceUseTauriApi) {
+        // 尝试调用后端API解析文件
         try {
-          console.log('调用Tauri API解析Excel文件:', filePath);
+          console.log('尝试调用Tauri API解析Excel文件:', filePath);
           const definitions = await this.tauriApi.importExcelFile(filePath).toPromise();
           
           console.log('Tauri API返回结果:', definitions);
           
           if (definitions && definitions.length > 0) {
-            // 转换数据格式
+            // 转换数据格式为前端预览格式
             this.previewData = definitions.map(def => ({
               tag: def.tag,
-              description: def.description,
+              description: def.description || '',
               moduleType: def.module_type,
               channelNumber: def.channel_number,
-              plcAddress: def.plc_communication_address
+              plcAddress: def.plc_communication_address,
+              variableName: def.variable_name,
+              stationName: def.station_name,
+              moduleName: def.module_name,
+              dataType: def.point_data_type,
+              analogRangeMin: def.analog_range_min,
+              analogRangeMax: def.analog_range_max
             }));
             
             console.log(`成功解析Excel文件，共${definitions.length}个通道定义`);
-            console.log('转换后的预览数据:', this.previewData);
+            console.log('转换后的预览数据:', this.previewData.slice(0, 3)); // 只显示前3个
             this.loadingMessage = `成功解析${definitions.length}个通道定义`;
+            
+            // 显示统计信息
+            const aiCount = this.getModuleTypeCount('AI');
+            const aoCount = this.getModuleTypeCount('AO');
+            const diCount = this.getModuleTypeCount('DI');
+            const doCount = this.getModuleTypeCount('DO');
+            console.log(`模块类型统计: AI:${aiCount}, AO:${aoCount}, DI:${diCount}, DO:${doCount}`);
           } else {
             throw new Error('Excel文件中没有找到有效的通道定义');
           }
         } catch (error) {
           console.error('调用Tauri API失败:', error);
-          throw error;
+          
+          // 如果是在开发环境且API调用失败，抛出错误而不是使用模拟数据
+          if (!this.tauriApi.isTauriEnvironment()) {
+            console.log('Tauri API调用失败，开发环境中无法获取真实数据');
+            throw new Error('无法连接到后端服务，请确保使用正确的启动命令：npm run tauri:dev');
+          } else {
+            throw error;
+          }
         }
       } else {
-        // 在开发环境中，使用模拟数据
-        console.log('开发环境：使用模拟数据');
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟加载时间
-        this.previewData = this.generateMockPreviewData();
-        this.loadingMessage = '开发环境：显示模拟数据';
+        // 在开发环境中，提示用户使用正确的启动方式
+        console.log('开发环境：需要使用Tauri环境');
+        throw new Error('请使用正确的启动命令：npm run tauri:dev');
       }
 
       if (this.previewData.length > 0) {
@@ -265,54 +292,6 @@ export class DataImportComponent implements OnInit, OnDestroy {
       this.isLoading = false;
       this.loadingMessage = '';
     }
-  }
-
-  // 生成模拟预览数据
-  generateMockPreviewData(): PreviewDataItem[] {
-    return [
-      {
-        tag: 'AI001',
-        description: '温度传感器1',
-        moduleType: 'AI',
-        channelNumber: 'CH01',
-        plcAddress: 'DB1.DBD0'
-      },
-      {
-        tag: 'AI002',
-        description: '压力传感器1',
-        moduleType: 'AI',
-        channelNumber: 'CH02',
-        plcAddress: 'DB1.DBD4'
-      },
-      {
-        tag: 'DI001',
-        description: '开关状态1',
-        moduleType: 'DI',
-        channelNumber: 'CH01',
-        plcAddress: 'I0.0'
-      },
-      {
-        tag: 'DI002',
-        description: '开关状态2',
-        moduleType: 'DI',
-        channelNumber: 'CH02',
-        plcAddress: 'I0.1'
-      },
-      {
-        tag: 'AO001',
-        description: '控制阀1',
-        moduleType: 'AO',
-        channelNumber: 'CH01',
-        plcAddress: 'QB0'
-      },
-      {
-        tag: 'DO001',
-        description: '指示灯1',
-        moduleType: 'DO',
-        channelNumber: 'CH01',
-        plcAddress: 'Q0.0'
-      }
-    ];
   }
 
   // 设置拖拽功能
@@ -413,14 +392,25 @@ export class DataImportComponent implements OnInit, OnDestroy {
         
         console.log('拖拽文件:', file.name);
         
-        // 在Tauri环境中，拖拽文件也无法获取完整路径，使用测试文件路径
-        if (typeof window !== 'undefined' && window.__TAURI__) {
-          console.log('Tauri环境中的拖拽文件，使用测试文件路径');
-          const testFilePath = 'C:\\Program Files\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
-          await this.handleFileSelection(testFilePath, file);
+        // 在Tauri环境中，拖拽文件无法获取完整路径，需要特殊处理
+        if (this.tauriApi.isTauriEnvironment()) {
+          console.log('Tauri环境中的拖拽文件处理');
+          
+          // 检查是否是测试文件
+          if (file.name === '测试IO.xlsx') {
+            const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+            console.log('识别为测试文件，使用完整路径:', testFilePath);
+            await this.handleFileSelection(testFilePath, file);
+          } else {
+            // 对于其他文件，提示用户使用文件选择器
+            this.error = '请使用"浏览文件"按钮选择Excel文件，以确保能获取完整的文件路径';
+            setTimeout(() => {
+              this.error = null;
+            }, 5000);
+          }
         } else {
-          console.log('非Tauri环境中的拖拽文件，使用测试文件路径');
-          const testFilePath = 'C:\\Program Files\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+          console.log('开发环境中的拖拽文件，使用测试文件路径');
+          const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
           await this.handleFileSelection(testFilePath, file);
         }
       } else {
@@ -435,6 +425,19 @@ export class DataImportComponent implements OnInit, OnDestroy {
 
   getModuleTypeCount(moduleType: string): number {
     return this.previewData.filter(item => item.moduleType === moduleType).length;
+  }
+
+  getDataTypeCount(dataType: string): number {
+    return this.previewData.filter(item => item.dataType === dataType).length;
+  }
+
+  getUniqueStations(): string[] {
+    const stations = [...new Set(this.previewData.map(item => item.stationName))];
+    return stations.filter(station => station && station.trim() !== '');
+  }
+
+  getStationCount(stationName: string): number {
+    return this.previewData.filter(item => item.stationName === stationName).length;
   }
 
   nextStep() {
@@ -457,7 +460,7 @@ export class DataImportComponent implements OnInit, OnDestroy {
       case 2:
         return this.previewData.length > 0;
       case 3:
-        return this.batchInfo.productModel !== '' && this.batchInfo.serialNumber !== '';
+        return this.previewData.length > 0;
       default:
         return false;
     }
@@ -470,65 +473,61 @@ export class DataImportComponent implements OnInit, OnDestroy {
     
     try {
       if (this.tauriApi.isTauriEnvironment()) {
-        // 在Tauri环境中，调用后端API创建批次
+        // 在Tauri环境中，调用后端API自动创建批次
         try {
-          // 创建批次信息
-          const batchInfo = {
-            batch_id: '', // 后端会生成
-            product_model: this.batchInfo.productModel,
-            serial_number: this.batchInfo.serialNumber,
-            operator_name: this.batchInfo.operatorName || '',
-            total_points: this.previewData.length,
-            passed_points: 0,
-            failed_points: 0,
-            test_start_time: undefined,
-            test_end_time: undefined,
-            overall_status: 'NotTested' as any, // 使用OverallTestStatus.NotTested
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
+          console.log('调用后端API自动创建测试批次');
           
           // 转换PreviewDataItem为ChannelPointDefinition格式
           const channelDefinitions = this.previewData.map(item => ({
             id: '', // 后端会生成
             tag: item.tag,
-            variable_name: item.tag, // 使用tag作为变量名
+            variable_name: item.variableName,
             description: item.description,
-            station_name: 'Station1', // 默认值
-            module_name: 'Module1', // 默认值
+            station_name: item.stationName,
+            module_name: item.moduleName,
             module_type: item.moduleType as any,
             channel_number: item.channelNumber,
-            point_data_type: 'Float' as any, // 默认值
+            point_data_type: item.dataType as any,
             plc_communication_address: item.plcAddress,
+            analog_range_min: item.analogRangeMin,
+            analog_range_max: item.analogRangeMax,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }));
           
-          const batchId = await this.tauriApi.createTestBatchWithDefinitions(batchInfo, channelDefinitions).toPromise();
+          // 调用后端API，让后端自动分配批次信息
+          const createBatchRequest = {
+            file_name: this.selectedFileName,
+            file_path: this.selectedFilePath,
+            preview_data: channelDefinitions,
+            batch_info: {
+              product_model: '', // 后端会自动生成或使用默认值
+              serial_number: '', // 后端会自动生成
+              customer_name: '',
+              operator_name: ''
+            }
+          };
           
-          if (batchId) {
-            console.log('批次创建成功:', batchId);
+          const response = await this.tauriApi.createTestBatch(createBatchRequest).toPromise();
+          
+          if (response && response.success && response.batch_id) {
+            console.log('批次创建成功:', response.batch_id);
             this.loadingMessage = '批次创建成功，正在跳转...';
             
             // 导航到测试执行页面，传递批次ID
             setTimeout(() => {
-              this.router.navigate(['/test-execution'], { queryParams: { batchId } });
+              this.router.navigate(['/test-execution'], { queryParams: { batchId: response.batch_id } });
             }, 1000);
           } else {
-            throw new Error('创建批次失败：未返回批次ID');
+            throw new Error(response?.message || '创建批次失败：未返回有效响应');
           }
         } catch (error) {
           console.error('调用Tauri API创建批次失败:', error);
           throw error;
         }
       } else {
-        // 开发环境：模拟批次创建
-        console.log('开发环境：模拟批次创建');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        this.loadingMessage = '开发环境：模拟批次创建成功';
-        
-        // 导航到测试执行页面
-        this.router.navigate(['/test-execution']);
+        // 开发环境：提示使用正确的启动方式
+        throw new Error('请使用正确的启动命令：npm run tauri:dev');
       }
       
     } catch (error) {
@@ -550,32 +549,53 @@ export class DataImportComponent implements OnInit, OnDestroy {
     this.error = null;
   }
 
-  // 测试Tauri API连接
+  // 测试Tauri API功能
   async testTauriApi() {
-    console.log('=== 开始测试Tauri API ===');
+    console.log('=== 测试Tauri API功能 ===');
     
     try {
-      // 测试系统状态API
-      console.log('测试系统状态API...');
-      const systemStatus = await this.tauriApi.getSystemStatus().toPromise();
-      console.log('系统状态API调用成功:', systemStatus);
+      // 使用正确的测试文件路径
+      const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
+      console.log('测试调用Tauri API解析Excel文件:', testFilePath);
       
-      // 测试Excel导入API
-      console.log('测试Excel导入API...');
-      const testFilePath = 'C:\\Program Files\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
-      const definitions = await this.tauriApi.importExcelFile(testFilePath).toPromise();
-      
-      if (definitions) {
-        console.log('Excel导入API调用成功，解析到', definitions.length, '个定义');
-        console.log('前3个定义:', definitions.slice(0, 3));
-      } else {
-        console.log('Excel导入API返回空结果');
-      }
-      
-      return true;
+      // 正确处理Observable返回类型
+      this.tauriApi.parseExcelFile(testFilePath).subscribe({
+        next: (result) => {
+          console.log('Tauri API调用成功，解析结果:', result);
+          
+          if (result && result.success && result.data && result.data.length > 0) {
+            console.log(`成功解析到 ${result.data.length} 个数据点位`);
+            console.log('前5个数据点位:', result.data.slice(0, 5));
+            
+            // 更新预览数据
+            this.previewData = result.data.map((item: any) => ({
+              tag: item.tag || '',
+              description: item.description || '',
+              moduleType: item.module_type || '',
+              channelNumber: item.channel_number || '',
+              plcAddress: item.plc_communication_address || '',
+              variableName: item.variable_name || '',
+              stationName: item.station_name || '',
+              moduleName: item.module_name || '',
+              dataType: item.point_data_type || '',
+              analogRangeMin: item.analog_range_min,
+              analogRangeMax: item.analog_range_max
+            }));
+            
+            this.selectedFileName = '测试IO.xlsx';
+            this.selectedFilePath = testFilePath;
+            
+            console.log('预览数据已更新，数据点位数量:', this.previewData.length);
+          } else {
+            console.log('API返回空数据或无效数据，结果:', result);
+          }
+        },
+        error: (error) => {
+          console.error('测试Tauri API失败:', error);
+        }
+      });
     } catch (error) {
-      console.error('Tauri API测试失败:', error);
-      return false;
+      console.error('测试Tauri API异常:', error);
     }
   }
 }

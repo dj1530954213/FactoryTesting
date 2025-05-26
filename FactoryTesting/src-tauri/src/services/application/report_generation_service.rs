@@ -4,15 +4,15 @@
 
 use crate::models::{
     TestReport, ReportTemplate, ReportGenerationRequest, ReportType, ReportStatus,
-    TestBatchInfo, ChannelTestInstance, RawTestOutcome, ChannelPointDefinition
+    ChannelTestInstance, RawTestOutcome
 };
 use crate::services::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use chrono::Utc;
-use log::{info, warn, error};
+use log::{info, warn};
 use printpdf::*;
-use rust_xlsxwriter::{Workbook, Worksheet, Format};
+use rust_xlsxwriter::{Workbook, Format};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -39,22 +39,22 @@ pub trait IReportGenerationService: Send + Sync {
     ) -> AppResult<TestReport>;
 
     /// 获取报告列表
-    async fn get_reports(&self, batch_id: Option<&str>) -> AppResult<Vec<TestReport>>;
+    async fn get_reports(&self, _batch_id: Option<&str>) -> AppResult<Vec<TestReport>>;
 
     /// 获取报告模板列表
     async fn get_templates(&self) -> AppResult<Vec<ReportTemplate>>;
 
     /// 创建报告模板
-    async fn create_template(&self, template: ReportTemplate) -> AppResult<()>;
+    async fn create_template(&self, _template: ReportTemplate) -> AppResult<()>;
 
     /// 更新报告模板
-    async fn update_template(&self, template: ReportTemplate) -> AppResult<()>;
+    async fn update_template(&self, _template: ReportTemplate) -> AppResult<()>;
 
     /// 删除报告模板
-    async fn delete_template(&self, template_id: &str) -> AppResult<()>;
+    async fn delete_template(&self, _template_id: &str) -> AppResult<()>;
 
     /// 删除报告文件
-    async fn delete_report(&self, report_id: &str) -> AppResult<()>;
+    async fn delete_report(&self, _report_id: &str) -> AppResult<()>;
 }
 
 /// 报告生成服务实现
@@ -210,7 +210,7 @@ impl ReportGenerationService {
     fn calculate_statistics(
         &self,
         instances: &[ChannelTestInstance],
-        outcomes: &[RawTestOutcome],
+        _outcomes: &[RawTestOutcome],
     ) -> HashMap<String, Value> {
         let mut stats = HashMap::new();
 
@@ -477,7 +477,7 @@ impl IReportGenerationService for ReportGenerationService {
         Ok(report)
     }
 
-    async fn get_reports(&self, batch_id: Option<&str>) -> AppResult<Vec<TestReport>> {
+    async fn get_reports(&self, _batch_id: Option<&str>) -> AppResult<Vec<TestReport>> {
         // TODO: 从数据库获取报告列表
         // 目前返回空列表，实际实现需要数据库支持
         warn!("get_reports 方法尚未完全实现");
@@ -503,25 +503,25 @@ impl IReportGenerationService for ReportGenerationService {
         Ok(vec![default_template])
     }
 
-    async fn create_template(&self, template: ReportTemplate) -> AppResult<()> {
+    async fn create_template(&self, _template: ReportTemplate) -> AppResult<()> {
         // TODO: 保存模板到数据库
         warn!("create_template 方法尚未完全实现");
         Ok(())
     }
 
-    async fn update_template(&self, template: ReportTemplate) -> AppResult<()> {
+    async fn update_template(&self, _template: ReportTemplate) -> AppResult<()> {
         // TODO: 更新数据库中的模板
         warn!("update_template 方法尚未完全实现");
         Ok(())
     }
 
-    async fn delete_template(&self, template_id: &str) -> AppResult<()> {
+    async fn delete_template(&self, _template_id: &str) -> AppResult<()> {
         // TODO: 从数据库删除模板
         warn!("delete_template 方法尚未完全实现");
         Ok(())
     }
 
-    async fn delete_report(&self, report_id: &str) -> AppResult<()> {
+    async fn delete_report(&self, _report_id: &str) -> AppResult<()> {
         // TODO: 删除报告文件和数据库记录
         warn!("delete_report 方法尚未完全实现");
         Ok(())

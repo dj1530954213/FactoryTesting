@@ -127,15 +127,27 @@ impl ExcelImporter {
         }
         
         // 根据真实Excel文件的列索引提取数据
-        let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第7列：位号
-        let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第9列：变量名称（HMI）
-        let description = Self::get_optional_string_value(&row[9], "变量描述");  // 第10列：变量描述（可能为空）
-        let station = Self::get_string_value(&row[7], row_number, "场站名")?;  // 第8列：场站名
-        let module = Self::get_string_value(&row[1], row_number, "模块名称")?;  // 第2列：模块名称
-        let module_type_str = Self::get_string_value(&row[2], row_number, "模块类型")?;  // 第3列：模块类型
-        let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第6列：通道位号
-        let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第11列：数据类型
-        let plc_address = Self::get_string_value(&row[51], row_number, "PLC绝对地址")?;  // 第52列：PLC绝对地址
+        // 实际列映射：
+        // 第0列：序号
+        // 第1列：模块名称  
+        // 第2列：模块类型
+        // 第5列：通道位号
+        // 第6列：位号
+        // 第7列：场站名
+        // 第8列：变量名称（HMI）
+        // 第9列：变量描述
+        // 第10列：数据类型
+        // 第51列：PLC绝对地址
+        
+        let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第6列：位号
+        let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第8列：变量名称（HMI）
+        let description = Self::get_optional_string_value(&row[9], "变量描述");  // 第9列：变量描述（可能为空）
+        let station = Self::get_string_value(&row[7], row_number, "场站名")?;  // 第7列：场站名
+        let module = Self::get_string_value(&row[1], row_number, "模块名称")?;  // 第1列：模块名称
+        let module_type_str = Self::get_string_value(&row[2], row_number, "模块类型")?;  // 第2列：模块类型
+        let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第5列：通道位号
+        let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第10列：数据类型
+        let plc_address = Self::get_string_value(&row[51], row_number, "PLC绝对地址")?;  // 第51列：PLC绝对地址
         
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -197,10 +209,10 @@ impl ExcelImporter {
         match type_str.to_uppercase().as_str() {
             "BOOL" | "BOOLEAN" => Ok(PointDataType::Bool),
             "INT" | "INTEGER" => Ok(PointDataType::Int),
-            "FLOAT" | "REAL" => Ok(PointDataType::Float),
+            "FLOAT" | "REAL" => Ok(PointDataType::Float),  // 支持REAL类型
             "STRING" => Ok(PointDataType::String),
             _ => Err(AppError::validation_error(&format!(
-                "第{}行数据类型'{}'无效，支持的类型: Bool, Int, Float, String", 
+                "第{}行数据类型'{}'无效，支持的类型: Bool, Int, Float/Real, String", 
                 row_number, 
                 type_str
             )))

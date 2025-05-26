@@ -1,0 +1,385 @@
+/* 设置页面容器 */
+.settings-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 页面标题 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.page-header h1 {
+  margin: 0;
+  color: #333;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 加载状态 */
+.loading-container {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 提示消息 */
+.alert {
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.alert-error {
+  background-color: #fff2f0;
+  border: 1px solid #ffccc7;
+  color: #a8071a;
+}
+
+.alert-success {
+  background-color: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #389e0d;
+}
+
+/* 设置表单 */
+.settings-form {
+  margin-top: 20px;
+}
+
+/* 设置分组 */
+.settings-section {
+  margin-bottom: 40px;
+  padding: 24px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.settings-section h2 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 20px;
+  font-weight: 600;
+  border-bottom: 2px solid #1890ff;
+  padding-bottom: 8px;
+}
+
+/* 表单组 */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #333;
+  font-size: 14px;
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  box-sizing: border-box;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.form-control:invalid {
+  border-color: #ff4d4f;
+}
+
+.form-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-decoration: none;
+  background: none;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #1890ff;
+  border-color: #1890ff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #40a9ff;
+  border-color: #40a9ff;
+}
+
+.btn-secondary {
+  background-color: #f5f5f5;
+  border-color: #d9d9d9;
+  color: #333;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border-color: #d9d9d9;
+  color: #333;
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #40a9ff;
+  color: #1890ff;
+}
+
+.btn-danger {
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #ff7875;
+  border-color: #ff7875;
+}
+
+.btn-outline.btn-danger {
+  background-color: transparent;
+  border-color: #ff4d4f;
+  color: #ff4d4f;
+}
+
+.btn-outline.btn-danger:hover:not(:disabled) {
+  background-color: #fff2f0;
+  border-color: #ff4d4f;
+}
+
+.btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: auto;
+}
+
+/* 最近项目 */
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-style: italic;
+}
+
+.recent-projects {
+  margin-top: 10px;
+}
+
+.recent-project-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+.project-path {
+  flex: 1;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #333;
+  word-break: break-all;
+}
+
+.recent-projects-actions {
+  margin-top: 15px;
+  text-align: right;
+}
+
+/* 系统信息 */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item label {
+  font-weight: 600;
+  color: #666;
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-bottom: 0;
+}
+
+.info-item span {
+  font-size: 14px;
+  color: #333;
+  font-family: 'Courier New', monospace;
+}
+
+/* 表单操作按钮 */
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e8e8e8;
+}
+
+/* 未保存更改提示 */
+.unsaved-changes-notice {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background-color: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  color: #d48806;
+  font-size: 14px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .settings-container {
+    margin: 10px;
+    padding: 15px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+  
+  .header-actions {
+    justify-content: center;
+  }
+  
+  .settings-section {
+    padding: 16px;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .recent-project-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .recent-project-item .btn {
+    align-self: flex-end;
+    width: auto;
+  }
+}
+
+/* 深色主题支持 */
+@media (prefers-color-scheme: dark) {
+  .settings-container {
+    background: #1f1f1f;
+    color: #fff;
+  }
+  
+  .page-header h1,
+  .settings-section h2,
+  .form-group label,
+  .info-item span {
+    color: #fff;
+  }
+  
+  .settings-section {
+    background: #2a2a2a;
+    border-color: #404040;
+  }
+  
+  .form-control {
+    background: #2a2a2a;
+    border-color: #404040;
+    color: #fff;
+  }
+  
+  .form-control:focus {
+    border-color: #1890ff;
+    background: #2a2a2a;
+  }
+  
+  .recent-project-item {
+    background: #2a2a2a;
+    border-color: #404040;
+  }
+  
+  .project-path {
+    color: #fff;
+  }
+}

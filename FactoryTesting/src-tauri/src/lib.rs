@@ -13,7 +13,11 @@ pub use tauri_commands::{AppState, SystemStatus, init_app_state};
 
 // 导入新的命令函数
 use commands::data_management::{
-    parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions
+    parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
+    import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd
+};
+use commands::manual_testing::{
+    execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
 };
 
 /// 应用程序主要运行函数
@@ -63,10 +67,18 @@ pub fn run() {
                 tauri_commands::update_report_template,
                 tauri_commands::delete_report_template,
                 tauri_commands::delete_report,
+                tauri_commands::load_app_settings_cmd,
+                tauri_commands::save_app_settings_cmd,
                 parse_excel_file,
                 create_test_batch,
                 get_batch_list,
-                get_batch_channel_definitions
+                get_batch_channel_definitions,
+                import_excel_and_prepare_batch_cmd,
+                start_tests_for_batch_cmd,
+                get_batch_status_cmd,
+                execute_manual_sub_test_cmd,
+                read_channel_value_cmd,
+                write_channel_value_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

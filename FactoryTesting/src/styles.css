@@ -1,1 +1,119 @@
 /* You can add global styles to this file, and also import other style files */
+
+/* 全局样式 */
+
+/* 基础样式重置 */
+html, body { 
+  height: 100%; 
+  margin: 0;
+  padding: 0;
+}
+
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  font-size: 14px;
+  line-height: 1.5715;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #f0f2f5;
+}
+
+/* NG-ZORRO 全局样式覆盖 */
+.ant-layout {
+  background: #f0f2f5;
+}
+
+.ant-layout-header {
+  background: #001529;
+}
+
+.ant-layout-footer {
+  background: #fafafa;
+}
+
+/* 自定义工具类 */
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.mb-24 {
+  margin-bottom: 24px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.mt-24 {
+  margin-top: 24px;
+}
+
+.p-16 {
+  padding: 16px;
+}
+
+.p-24 {
+  padding: 24px;
+}
+
+/* 响应式容器 */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    padding: 0 24px;
+  }
+}
+
+/* 卡片样式增强 */
+.ant-card {
+  box-shadow: 0 1px 2px -2px rgba(0, 0, 0, 0.16), 0 3px 6px 0 rgba(0, 0, 0, 0.12), 0 5px 12px 4px rgba(0, 0, 0, 0.09);
+}
+
+/* 表格样式增强 */
+.ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+/* 状态标签样式 */
+.status-tag {
+  font-weight: 500;
+}
+
+/* 加载状态样式 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+/* 错误状态样式 */
+.error-container {
+  text-align: center;
+  padding: 48px 24px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* 空状态样式 */
+.empty-container {
+  text-align: center;
+  padding: 48px 24px;
+  color: rgba(0, 0, 0, 0.45);
+}

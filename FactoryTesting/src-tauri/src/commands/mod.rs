@@ -3,6 +3,7 @@
 /// 包含所有前端可调用的Tauri命令
 
 pub mod data_management;
+pub mod manual_testing;
 
 // 重新导出命令
 pub use data_management::{
