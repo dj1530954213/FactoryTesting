@@ -5,6 +5,7 @@
 
 /// 测试协调服务 - 协调整个测试流程
 pub mod test_coordination_service;
+pub mod report_generation_service;
 
 // 重新导出常用类型
 pub use test_coordination_service::{
@@ -13,4 +14,7 @@ pub use test_coordination_service::{
     TestExecutionRequest,
     TestExecutionResponse,
     TestProgressUpdate,
-}; 
+};
+
+// 重新导出服务接口和实现
+pub use report_generation_service::*; 

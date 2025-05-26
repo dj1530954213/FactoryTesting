@@ -1,0 +1,354 @@
+[
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AI",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "AO",
+    "point_data_type": "REAL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DI",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  },
+  {
+    "module_type": "DO",
+    "point_data_type": "BOOL"
+  }
+]

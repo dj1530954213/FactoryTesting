@@ -3,7 +3,9 @@ export enum ModuleType {
   AI = 'AI',
   AO = 'AO', 
   DI = 'DI',
-  DO = 'DO'
+  DO = 'DO',
+  AINone = 'AINone',
+  DINone = 'DINone'
 }
 
 export enum PointDataType {
@@ -14,19 +16,20 @@ export enum PointDataType {
 }
 
 export enum OverallTestStatus {
-  NotStarted = 'NotStarted',
-  InProgress = 'InProgress', 
-  Completed = 'Completed',
-  Failed = 'Failed',
-  Cancelled = 'Cancelled'
+  NotTested = 'NotTested',
+  HardPointTesting = 'HardPointTesting',
+  AlarmTesting = 'AlarmTesting', 
+  TestCompletedPassed = 'TestCompletedPassed',
+  TestCompletedFailed = 'TestCompletedFailed'
 }
 
 export enum SubTestItem {
-  AIHardPointPercent = 'AIHardPointPercent',
-  AIAlarmTest = 'AIAlarmTest',
-  DIStateRead = 'DIStateRead',
-  DOStateWrite = 'DOStateWrite',
-  AOOutputTest = 'AOOutputTest'
+  HardPoint = 'HardPoint',
+  LowLowAlarm = 'LowLowAlarm',
+  LowAlarm = 'LowAlarm',
+  HighAlarm = 'HighAlarm',
+  HighHighAlarm = 'HighHighAlarm',
+  StateDisplay = 'StateDisplay'
 }
 
 export enum SubTestStatus {
@@ -81,15 +84,16 @@ export interface ChannelTestInstance {
 }
 
 export interface RawTestOutcome {
-  outcome_id: string;
-  instance_id: string;
+  channel_instance_id: string;
   sub_test_item: SubTestItem;
   success: boolean;
-  measured_value?: number;
-  expected_value?: number;
-  tolerance?: number;
-  error_message?: string;
-  test_timestamp: string;
+  raw_value_read?: string;
+  eng_value_calculated?: string;
+  message?: string;
+  start_time: string;
+  end_time: string;
+  readings?: AnalogReadingPoint[];
+  details?: { [key: string]: any };
 }
 
 export interface AnalogReadingPoint {
@@ -164,7 +168,9 @@ export const MODULE_TYPE_LABELS: { [key in ModuleType]: string } = {
   [ModuleType.AI]: '模拟量输入',
   [ModuleType.AO]: '模拟量输出',
   [ModuleType.DI]: '数字量输入', 
-  [ModuleType.DO]: '数字量输出'
+  [ModuleType.DO]: '数字量输出',
+  [ModuleType.AINone]: '模拟量输入(无)',
+  [ModuleType.DINone]: '数字量输入(无)'
 };
 
 export const POINT_DATA_TYPE_LABELS: { [key in PointDataType]: string } = {
@@ -175,19 +181,20 @@ export const POINT_DATA_TYPE_LABELS: { [key in PointDataType]: string } = {
 };
 
 export const OVERALL_TEST_STATUS_LABELS: { [key in OverallTestStatus]: string } = {
-  [OverallTestStatus.NotStarted]: '未开始',
-  [OverallTestStatus.InProgress]: '进行中',
-  [OverallTestStatus.Completed]: '已完成',
-  [OverallTestStatus.Failed]: '失败',
-  [OverallTestStatus.Cancelled]: '已取消'
+  [OverallTestStatus.NotTested]: '未测试',
+  [OverallTestStatus.HardPointTesting]: '硬点测试中',
+  [OverallTestStatus.AlarmTesting]: '报警测试中',
+  [OverallTestStatus.TestCompletedPassed]: '测试完成并通过',
+  [OverallTestStatus.TestCompletedFailed]: '测试完成并失败'
 };
 
 export const SUB_TEST_ITEM_LABELS: { [key in SubTestItem]: string } = {
-  [SubTestItem.AIHardPointPercent]: 'AI硬点百分比测试',
-  [SubTestItem.AIAlarmTest]: 'AI报警测试',
-  [SubTestItem.DIStateRead]: 'DI状态读取测试',
-  [SubTestItem.DOStateWrite]: 'DO状态写入测试',
-  [SubTestItem.AOOutputTest]: 'AO输出测试'
+  [SubTestItem.HardPoint]: '硬点测试',
+  [SubTestItem.LowLowAlarm]: '低低报警测试',
+  [SubTestItem.LowAlarm]: '低报警测试',
+  [SubTestItem.HighAlarm]: '高报警测试',
+  [SubTestItem.HighHighAlarm]: '高高报警测试',
+  [SubTestItem.StateDisplay]: '状态显示测试'
 };
 
 export const SUB_TEST_STATUS_LABELS: { [key in SubTestStatus]: string } = {

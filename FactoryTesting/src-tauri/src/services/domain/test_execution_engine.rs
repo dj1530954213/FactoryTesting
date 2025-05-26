@@ -1,18 +1,24 @@
 /// 测试执行引擎
 /// 
-/// 负责管理和并发执行测试任务
+/// 负责管理和并发执行测试任务，协调多个测试执行器完成完整的测试序列
 
-use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome};
-use crate::services::infrastructure::{IPlcCommunicationService};
+use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
+use crate::services::infrastructure::IPlcCommunicationService;
+use crate::services::domain::specific_test_executors::{
+    ISpecificTestStepExecutor, AIHardPointPercentExecutor, AIAlarmTestExecutor, DIStateReadExecutor
+};
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use std::collections::HashMap;
+use tokio::sync::{mpsc, Semaphore, RwLock};
+use tokio_util::sync::CancellationToken;
 use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 use log::{debug, info, warn, error};
 
 /// 任务状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TaskStatus {
     Pending,
     Running,
@@ -28,6 +34,7 @@ pub struct TestTask {
     pub instance: ChannelTestInstance,
     pub definition: ChannelPointDefinition,
     pub status: TaskStatus,
+    pub cancellation_token: CancellationToken,
 }
 
 /// 测试执行引擎接口
@@ -49,16 +56,23 @@ pub trait ITestExecutionEngine: Send + Sync {
 
     /// 获取活动任务数量
     async fn get_active_task_count(&self) -> usize;
+
+    /// 停止所有任务
+    async fn stop_all_tasks(&self) -> AppResult<()>;
 }
 
 /// 测试执行引擎实现
 pub struct TestExecutionEngine {
-    /// 最大并发任务数
-    max_concurrent_tasks: usize,
+    /// 并发控制信号量
+    semaphore: Arc<Semaphore>,
     /// 测试台PLC服务
     plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
     /// 目标PLC服务
     plc_service_target: Arc<dyn IPlcCommunicationService>,
+    /// 活动任务管理
+    active_tasks: Arc<RwLock<HashMap<String, TestTask>>>,
+    /// 全局取消令牌
+    global_cancellation_token: CancellationToken,
 }
 
 impl TestExecutionEngine {
@@ -69,10 +83,218 @@ impl TestExecutionEngine {
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> Self {
         Self {
-            max_concurrent_tasks,
+            semaphore: Arc::new(Semaphore::new(max_concurrent_tasks)),
             plc_service_test_rig,
             plc_service_target,
+            active_tasks: Arc::new(RwLock::new(HashMap::new())),
+            global_cancellation_token: CancellationToken::new(),
         }
+    }
+
+    /// 根据点位定义确定测试步骤
+    fn determine_test_steps(&self, definition: &ChannelPointDefinition) -> Vec<Box<dyn ISpecificTestStepExecutor>> {
+        let mut executors: Vec<Box<dyn ISpecificTestStepExecutor>> = Vec::new();
+
+        match definition.module_type {
+            ModuleType::AI | ModuleType::AINone => {
+                // AI点测试序列
+                if definition.test_rig_plc_address.is_some() {
+                    // 硬点测试 - 多个百分比点
+                    let percentages = [0.0, 0.25, 0.5, 0.75, 1.0];
+                    for percentage in percentages {
+                        executors.push(Box::new(AIHardPointPercentExecutor::new(
+                            percentage, 
+                            0.02, // 2% 容差
+                            1000  // 1秒稳定时间
+                        )));
+                    }
+                }
+
+                // 报警测试
+                if definition.sll_set_point_address.is_some() {
+                    executors.push(Box::new(AIAlarmTestExecutor::new(
+                        SubTestItem::LowLowAlarm, 
+                        2000, // 2秒触发延时
+                        1000  // 1秒复位延时
+                    )));
+                }
+                if definition.sl_set_point_address.is_some() {
+                    executors.push(Box::new(AIAlarmTestExecutor::new(
+                        SubTestItem::LowAlarm, 
+                        2000, 
+                        1000
+                    )));
+                }
+                if definition.sh_set_point_address.is_some() {
+                    executors.push(Box::new(AIAlarmTestExecutor::new(
+                        SubTestItem::HighAlarm, 
+                        2000, 
+                        1000
+                    )));
+                }
+                if definition.shh_set_point_address.is_some() {
+                    executors.push(Box::new(AIAlarmTestExecutor::new(
+                        SubTestItem::HighHighAlarm, 
+                        2000, 
+                        1000
+                    )));
+                }
+            },
+            ModuleType::DI | ModuleType::DINone => {
+                // DI点测试序列
+                executors.push(Box::new(DIStateReadExecutor::new(
+                    None, // 不指定期望值，只读取当前状态
+                    500   // 500ms读取延时
+                )));
+            },
+            ModuleType::DO | ModuleType::DONone => {
+                // TODO: 实现DO点测试执行器
+                debug!("DO点测试执行器尚未实现: {}", definition.tag);
+            },
+            ModuleType::AO | ModuleType::AONone => {
+                // TODO: 实现AO点测试执行器
+                debug!("AO点测试执行器尚未实现: {}", definition.tag);
+            },
+            ModuleType::Communication => {
+                // TODO: 实现通信模块测试执行器
+                debug!("通信模块测试执行器尚未实现: {}", definition.tag);
+            },
+            ModuleType::Other(_) => {
+                // TODO: 实现其他类型模块测试执行器
+                debug!("其他类型模块测试执行器尚未实现: {}", definition.tag);
+            },
+        }
+
+        executors
+    }
+
+    /// 执行单个测试实例的完整测试序列
+    async fn execute_test_sequence(
+        &self,
+        task_id: String,
+        instance: ChannelTestInstance,
+        definition: ChannelPointDefinition,
+        result_sender: mpsc::Sender<RawTestOutcome>,
+        task_cancellation_token: CancellationToken,
+    ) {
+        info!("[TestEngine] 开始执行测试序列 - 任务: {}, 实例: {}, 点位: {}", 
+              task_id, instance.instance_id, definition.tag);
+
+        // 更新任务状态为运行中
+        {
+            let mut tasks = self.active_tasks.write().await;
+            if let Some(task) = tasks.get_mut(&task_id) {
+                task.status = TaskStatus::Running;
+            }
+        }
+
+        // 确定测试步骤
+        let executors = self.determine_test_steps(&definition);
+        
+        if executors.is_empty() {
+            warn!("[TestEngine] 没有找到适用的测试执行器 - 点位: {}, 类型: {:?}", 
+                  definition.tag, definition.module_type);
+            
+            // 更新任务状态为失败
+            {
+                let mut tasks = self.active_tasks.write().await;
+                if let Some(task) = tasks.get_mut(&task_id) {
+                    task.status = TaskStatus::Failed;
+                }
+            }
+            return;
+        }
+
+        info!("[TestEngine] 确定了 {} 个测试步骤 - 任务: {}", executors.len(), task_id);
+
+        let mut step_count = 0;
+        let total_steps = executors.len();
+        let mut has_failure = false;
+
+        // 按顺序执行每个测试步骤
+        for executor in executors {
+            // 检查取消令牌
+            if task_cancellation_token.is_cancelled() || self.global_cancellation_token.is_cancelled() {
+                info!("[TestEngine] 任务被取消 - 任务: {}", task_id);
+                
+                // 更新任务状态为已取消
+                {
+                    let mut tasks = self.active_tasks.write().await;
+                    if let Some(task) = tasks.get_mut(&task_id) {
+                        task.status = TaskStatus::Cancelled;
+                    }
+                }
+                return;
+            }
+
+            step_count += 1;
+            
+            // 检查执行器是否支持当前点位定义
+            if !executor.supports_definition(&definition) {
+                debug!("[TestEngine] 跳过不支持的测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}", 
+                       task_id, step_count, total_steps, executor.executor_name());
+                continue;
+            }
+
+            debug!("[TestEngine] 执行测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}", 
+                   task_id, step_count, total_steps, executor.executor_name());
+
+            // 执行测试步骤
+            match executor.execute(
+                &instance,
+                &definition,
+                self.plc_service_test_rig.clone(),
+                self.plc_service_target.clone(),
+            ).await {
+                Ok(outcome) => {
+                    debug!("[TestEngine] 测试步骤完成 - 任务: {}, 步骤: {}/{}, 结果: {}", 
+                           task_id, step_count, total_steps, outcome.success);
+
+                    // 发送测试结果
+                    if let Err(e) = result_sender.send(outcome.clone()).await {
+                        error!("[TestEngine] 发送测试结果失败 - 任务: {}, 错误: {}", task_id, e);
+                    }
+
+                    // 如果是关键步骤失败，可能需要中止后续步骤
+                    if !outcome.success && matches!(outcome.sub_test_item, SubTestItem::HardPoint) {
+                        warn!("[TestEngine] 关键测试步骤失败，中止后续步骤 - 任务: {}", task_id);
+                        has_failure = true;
+                        break;
+                    }
+                },
+                Err(e) => {
+                    error!("[TestEngine] 测试步骤执行失败 - 任务: {}, 步骤: {}/{}, 错误: {}", 
+                           task_id, step_count, total_steps, e);
+
+                    // 创建失败的测试结果
+                    let mut failed_outcome = RawTestOutcome::new(
+                        instance.instance_id.clone(),
+                        executor.item_type(),
+                        false,
+                    );
+                    failed_outcome.message = Some(format!("执行失败: {}", e));
+
+                    // 发送失败结果
+                    if let Err(send_err) = result_sender.send(failed_outcome).await {
+                        error!("[TestEngine] 发送失败结果失败 - 任务: {}, 错误: {}", task_id, send_err);
+                    }
+
+                    has_failure = true;
+                    break;
+                }
+            }
+        }
+
+        // 更新最终任务状态
+        {
+            let mut tasks = self.active_tasks.write().await;
+            if let Some(task) = tasks.get_mut(&task_id) {
+                task.status = if has_failure { TaskStatus::Failed } else { TaskStatus::Completed };
+            }
+        }
+
+        info!("[TestEngine] 测试序列完成 - 任务: {}, 状态: {}", 
+              task_id, if has_failure { "失败" } else { "成功" });
     }
 }
 
@@ -85,32 +307,141 @@ impl ITestExecutionEngine for TestExecutionEngine {
         definition: ChannelPointDefinition,
         result_sender: mpsc::Sender<RawTestOutcome>,
     ) -> AppResult<String> {
-        let task_id = uuid::Uuid::new_v4().to_string();
+        let task_id = Uuid::new_v4().to_string();
+        let task_cancellation_token = self.global_cancellation_token.child_token();
         
-        info!("提交测试任务: {} for instance: {}", task_id, instance.instance_id);
-        
-        // TODO: 实现具体的测试执行逻辑
-        // 这里应该启动一个异步任务来执行测试
-        
-        Ok(task_id)
+        info!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}", 
+              task_id, instance.instance_id, definition.tag);
+
+        // 创建任务记录
+        let task = TestTask {
+            task_id: task_id.clone(),
+            instance: instance.clone(),
+            definition: definition.clone(),
+            status: TaskStatus::Pending,
+            cancellation_token: task_cancellation_token.clone(),
+        };
+
+        // 添加到活动任务列表
+        {
+            let mut tasks = self.active_tasks.write().await;
+            tasks.insert(task_id.clone(), task);
+        }
+
+        // 获取信号量许可并启动异步任务
+        let semaphore = self.semaphore.clone();
+        let active_tasks = self.active_tasks.clone();
+        let plc_test_rig = self.plc_service_test_rig.clone();
+        let plc_target = self.plc_service_target.clone();
+        let global_token = self.global_cancellation_token.clone();
+
+        let engine_clone = TestExecutionEngine {
+            semaphore: semaphore.clone(),
+            plc_service_test_rig: plc_test_rig,
+            plc_service_target: plc_target,
+            active_tasks: active_tasks.clone(),
+            global_cancellation_token: global_token,
+        };
+
+        // 克隆task_id用于返回
+        let return_task_id = task_id.clone();
+
+        tokio::spawn(async move {
+            // 获取信号量许可
+            let _permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    error!("[TestEngine] 获取信号量许可失败 - 任务: {}", task_id);
+                    
+                    // 更新任务状态为失败
+                    {
+                        let mut tasks = active_tasks.write().await;
+                        if let Some(task) = tasks.get_mut(&task_id) {
+                            task.status = TaskStatus::Failed;
+                        }
+                    }
+                    return;
+                }
+            };
+
+            // 执行测试序列
+            engine_clone.execute_test_sequence(
+                task_id.clone(),
+                instance,
+                definition,
+                result_sender,
+                task_cancellation_token,
+            ).await;
+
+            // 任务完成后从活动任务列表中移除
+            {
+                let mut tasks = active_tasks.write().await;
+                tasks.remove(&task_id);
+            }
+
+            debug!("[TestEngine] 任务清理完成 - 任务: {}", task_id);
+        });
+
+        Ok(return_task_id)
     }
 
     /// 获取任务状态
     async fn get_task_status(&self, task_id: &str) -> AppResult<TaskStatus> {
-        // TODO: 实现具体的状态查询逻辑
-        Ok(TaskStatus::Pending)
+        let tasks = self.active_tasks.read().await;
+        match tasks.get(task_id) {
+            Some(task) => Ok(task.status.clone()),
+            None => Err(AppError::not_found_error("任务", &format!("任务不存在: {}", task_id))),
+        }
     }
 
     /// 取消任务
     async fn cancel_task(&self, task_id: &str) -> AppResult<()> {
-        info!("取消任务: {}", task_id);
-        // TODO: 实现具体的任务取消逻辑
-        Ok(())
+        info!("[TestEngine] 取消任务: {}", task_id);
+        
+        let tasks = self.active_tasks.read().await;
+        match tasks.get(task_id) {
+            Some(task) => {
+                task.cancellation_token.cancel();
+                info!("[TestEngine] 任务取消信号已发送: {}", task_id);
+                Ok(())
+            },
+            None => Err(AppError::not_found_error("任务", &format!("任务不存在: {}", task_id))),
+        }
     }
 
     /// 获取活动任务数量
     async fn get_active_task_count(&self) -> usize {
-        // TODO: 实现具体的活动任务计数逻辑
-        0
+        let tasks = self.active_tasks.read().await;
+        tasks.len()
+    }
+
+    /// 停止所有任务
+    async fn stop_all_tasks(&self) -> AppResult<()> {
+        info!("[TestEngine] 停止所有任务");
+        
+        self.global_cancellation_token.cancel();
+        
+        // 等待所有任务完成
+        let mut retry_count = 0;
+        const MAX_RETRIES: usize = 50; // 最多等待5秒
+        
+        while retry_count < MAX_RETRIES {
+            let active_count = self.get_active_task_count().await;
+            if active_count == 0 {
+                break;
+            }
+            
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            retry_count += 1;
+        }
+        
+        let final_count = self.get_active_task_count().await;
+        if final_count > 0 {
+            warn!("[TestEngine] 仍有 {} 个任务未完成", final_count);
+        } else {
+            info!("[TestEngine] 所有任务已停止");
+        }
+        
+        Ok(())
     }
 } 

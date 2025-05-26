@@ -93,6 +93,20 @@ export class TauriApiService {
   // ============================================================================
 
   /**
+   * 导入Excel文件并解析通道定义
+   */
+  importExcelFile(filePath: string): Observable<ChannelPointDefinition[]> {
+    return from(invoke<ChannelPointDefinition[]>('import_excel_file', { filePath }));
+  }
+
+  /**
+   * 创建测试批次并保存通道定义
+   */
+  createTestBatchWithDefinitions(batchInfo: TestBatchInfo, definitions: ChannelPointDefinition[]): Observable<string> {
+    return from(invoke<string>('create_test_batch_with_definitions', { batchInfo, definitions }));
+  }
+
+  /**
    * 获取所有通道定义
    */
   getAllChannelDefinitions(): Observable<ChannelPointDefinition[]> {
@@ -206,7 +220,16 @@ export class TauriApiService {
    * 检查是否在Tauri环境中运行
    */
   isTauriEnvironment(): boolean {
-    return typeof window !== 'undefined' && window.__TAURI__;
+    const hasTauri = typeof window !== 'undefined' && window.__TAURI__;
+    const hasInvoke = typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    
+    console.log('Tauri环境检测:');
+    console.log('  window存在:', typeof window !== 'undefined');
+    console.log('  __TAURI__存在:', typeof window !== 'undefined' && !!window.__TAURI__);
+    console.log('  invoke函数存在:', hasInvoke);
+    console.log('  最终结果:', hasTauri);
+    
+    return hasTauri;
   }
 
   // ============================================================================

@@ -4,11 +4,13 @@
 /// 将后端服务暴露给前端 Angular 应用
 
 use crate::models::{
-    ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, RawTestOutcome
+    ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, RawTestOutcome,
+    TestReport, ReportTemplate, ReportGenerationRequest
 };
 use crate::services::application::{
     ITestCoordinationService, TestCoordinationService,
-    TestExecutionRequest, TestExecutionResponse, TestProgressUpdate
+    TestExecutionRequest, TestExecutionResponse, TestProgressUpdate,
+    IReportGenerationService, ReportGenerationService
 };
 use crate::services::domain::{
     IChannelStateManager, ChannelStateManager,
@@ -16,7 +18,8 @@ use crate::services::domain::{
 };
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
-    IPlcCommunicationService, MockPlcService
+    IPlcCommunicationService, MockPlcService,
+    excel::ExcelImporter
 };
 use crate::utils::error::{AppError, AppResult};
 use std::sync::Arc;
@@ -30,6 +33,7 @@ pub struct AppState {
     pub channel_state_manager: Arc<dyn IChannelStateManager>,
     pub test_execution_engine: Arc<dyn ITestExecutionEngine>,
     pub persistence_service: Arc<dyn IPersistenceService>,
+    pub report_generation_service: Arc<dyn IReportGenerationService>,
 }
 
 impl AppState {
@@ -94,11 +98,21 @@ impl AppState {
             )
         );
         
+        // 创建报告目录
+        let reports_dir = data_dir.join("reports");
+        let report_generation_service = Arc::new(
+            ReportGenerationService::new(
+                persistence_service.clone(),
+                reports_dir,
+            )?
+        );
+        
         Ok(Self {
             test_coordination_service,
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            report_generation_service,
         })
     }
 }
@@ -206,6 +220,51 @@ pub async fn cleanup_completed_batch(
 // ============================================================================
 // 数据管理相关命令
 // ============================================================================
+
+/// 导入Excel文件并解析通道定义
+#[tauri::command]
+pub async fn import_excel_file(
+    file_path: String,
+) -> Result<Vec<ChannelPointDefinition>, String> {
+    ExcelImporter::parse_excel_file(&file_path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 创建测试批次并保存通道定义
+#[tauri::command]
+pub async fn create_test_batch_with_definitions(
+    state: State<'_, AppState>,
+    batch_info: TestBatchInfo,
+    definitions: Vec<ChannelPointDefinition>,
+) -> Result<String, String> {
+    // 保存批次信息
+    state.persistence_service
+        .save_batch_info(&batch_info)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    // 保存通道定义
+    for definition in definitions {
+        state.persistence_service
+            .save_channel_definition(&definition)
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        // 为每个定义创建测试实例
+        let instance = ChannelTestInstance::new(
+            definition.id.clone(),
+            batch_info.batch_id.clone(),
+        );
+        
+        state.persistence_service
+            .save_test_instance(&instance)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    Ok(batch_info.batch_id)
+}
 
 /// 获取所有通道定义
 #[tauri::command]
@@ -345,4 +404,103 @@ pub async fn get_system_status(
 /// 初始化应用状态
 pub async fn init_app_state() -> AppResult<AppState> {
     AppState::new().await
+}
+
+// ============================================================================
+// 报告生成相关命令
+// ============================================================================
+
+/// 生成PDF报告
+#[tauri::command]
+pub async fn generate_pdf_report(
+    state: State<'_, AppState>,
+    request: ReportGenerationRequest,
+) -> Result<TestReport, String> {
+    state.report_generation_service
+        .generate_pdf_report(request, "system") // TODO: 从认证系统获取用户ID
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 生成Excel报告
+#[tauri::command]
+pub async fn generate_excel_report(
+    state: State<'_, AppState>,
+    request: ReportGenerationRequest,
+) -> Result<TestReport, String> {
+    state.report_generation_service
+        .generate_excel_report(request, "system") // TODO: 从认证系统获取用户ID
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 获取报告列表
+#[tauri::command]
+pub async fn get_reports(
+    state: State<'_, AppState>,
+    batch_id: Option<String>,
+) -> Result<Vec<TestReport>, String> {
+    state.report_generation_service
+        .get_reports(batch_id.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 获取报告模板列表
+#[tauri::command]
+pub async fn get_report_templates(
+    state: State<'_, AppState>,
+) -> Result<Vec<ReportTemplate>, String> {
+    state.report_generation_service
+        .get_templates()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 创建报告模板
+#[tauri::command]
+pub async fn create_report_template(
+    state: State<'_, AppState>,
+    template: ReportTemplate,
+) -> Result<(), String> {
+    state.report_generation_service
+        .create_template(template)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 更新报告模板
+#[tauri::command]
+pub async fn update_report_template(
+    state: State<'_, AppState>,
+    template: ReportTemplate,
+) -> Result<(), String> {
+    state.report_generation_service
+        .update_template(template)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 删除报告模板
+#[tauri::command]
+pub async fn delete_report_template(
+    state: State<'_, AppState>,
+    template_id: String,
+) -> Result<(), String> {
+    state.report_generation_service
+        .delete_template(&template_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 删除报告
+#[tauri::command]
+pub async fn delete_report(
+    state: State<'_, AppState>,
+    report_id: String,
+) -> Result<(), String> {
+    state.report_generation_service
+        .delete_report(&report_id)
+        .await
+        .map_err(|e| e.to_string())
 } 

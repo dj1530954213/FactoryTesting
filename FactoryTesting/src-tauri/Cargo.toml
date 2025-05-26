@@ -35,6 +35,21 @@ base64 = "0.22.0"
 env_logger = "0.11.8"
 calamine = "0.22"
 
+# 报告生成系统依赖
+printpdf = "0.7"
+tera = "1.19"
+rust_xlsxwriter = "0.64"
+
+# 数据分析依赖
+statrs = "0.16"
+
+# 用户权限管理依赖
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+
+# 配置管理依赖
+config = "0.14"
+
 [dev-dependencies]
 tempfile = "3.0"
 mockall = "0.12"

@@ -1,0 +1,618 @@
+[
+  {
+    "tag": "1",
+    "description": "AI",
+    "moduleType": "1_2_AI_0",
+    "channelNumber": "PT_2101",
+    "plcAddress": "PT_2101"
+  },
+  {
+    "tag": "2",
+    "description": "AI",
+    "moduleType": "1_2_AI_1",
+    "channelNumber": "PT_2102",
+    "plcAddress": "PT_2102"
+  },
+  {
+    "tag": "3",
+    "description": "AI",
+    "moduleType": "1_2_AI_2",
+    "channelNumber": "TT_4101",
+    "plcAddress": "TT_4101"
+  },
+  {
+    "tag": "4",
+    "description": "AI",
+    "moduleType": "1_2_AI_3",
+    "channelNumber": "TT_4102",
+    "plcAddress": "TT_4102"
+  },
+  {
+    "tag": "5",
+    "description": "AI",
+    "moduleType": "1_2_AI_4",
+    "channelNumber": "YLDW1_2_AI_4",
+    "plcAddress": "YLDW1_2_AI_4"
+  },
+  {
+    "tag": "6",
+    "description": "AI",
+    "moduleType": "1_2_AI_5",
+    "channelNumber": "YLDW1_2_AI_5",
+    "plcAddress": "YLDW1_2_AI_5"
+  },
+  {
+    "tag": "7",
+    "description": "AI",
+    "moduleType": "1_2_AI_6",
+    "channelNumber": "YLDW1_2_AI_6",
+    "plcAddress": "YLDW1_2_AI_6"
+  },
+  {
+    "tag": "8",
+    "description": "AI",
+    "moduleType": "1_2_AI_7",
+    "channelNumber": "YLDW1_2_AI_7",
+    "plcAddress": "YLDW1_2_AI_7"
+  },
+  {
+    "tag": "9",
+    "description": "AI",
+    "moduleType": "1_3_AI_0",
+    "channelNumber": "FCV_7101_AI",
+    "plcAddress": "FCV_7101_AI"
+  },
+  {
+    "tag": "10",
+    "description": "AI",
+    "moduleType": "1_3_AI_1",
+    "channelNumber": "FIQ_5701",
+    "plcAddress": "FIQ_5701"
+  },
+  {
+    "tag": "11",
+    "description": "AI",
+    "moduleType": "1_3_AI_2",
+    "channelNumber": "FIQ_5702",
+    "plcAddress": "FIQ_5702"
+  },
+  {
+    "tag": "12",
+    "description": "AI",
+    "moduleType": "1_3_AI_3",
+    "channelNumber": "PCV_8301_AI",
+    "plcAddress": "PCV_8301_AI"
+  },
+  {
+    "tag": "13",
+    "description": "AI",
+    "moduleType": "1_3_AI_4",
+    "channelNumber": "YLDW1_3_AI_4",
+    "plcAddress": "YLDW1_3_AI_4"
+  },
+  {
+    "tag": "14",
+    "description": "AI",
+    "moduleType": "1_3_AI_5",
+    "channelNumber": "YLDW1_3_AI_5",
+    "plcAddress": "YLDW1_3_AI_5"
+  },
+  {
+    "tag": "15",
+    "description": "AI",
+    "moduleType": "1_3_AI_6",
+    "channelNumber": "YLDW1_3_AI_6",
+    "plcAddress": "YLDW1_3_AI_6"
+  },
+  {
+    "tag": "16",
+    "description": "AI",
+    "moduleType": "1_3_AI_7",
+    "channelNumber": "YLDW1_3_AI_7",
+    "plcAddress": "YLDW1_3_AI_7"
+  },
+  {
+    "tag": "17",
+    "description": "AO",
+    "moduleType": "1_4_AO_0",
+    "channelNumber": "FCV_7101_AO",
+    "plcAddress": "FCV_7101_AO"
+  },
+  {
+    "tag": "18",
+    "description": "AO",
+    "moduleType": "1_4_AO_1",
+    "channelNumber": "YLDW1_4_AO_1",
+    "plcAddress": "YLDW1_4_AO_1"
+  },
+  {
+    "tag": "19",
+    "description": "AO",
+    "moduleType": "1_4_AO_2",
+    "channelNumber": "YLDW1_4_AO_2",
+    "plcAddress": "YLDW1_4_AO_2"
+  },
+  {
+    "tag": "20",
+    "description": "AO",
+    "moduleType": "1_4_AO_3",
+    "channelNumber": "YLDW1_4_AO_3",
+    "plcAddress": "YLDW1_4_AO_3"
+  },
+  {
+    "tag": "21",
+    "description": "AO",
+    "moduleType": "1_4_AO_4",
+    "channelNumber": "YLDW1_4_AO_4",
+    "plcAddress": "YLDW1_4_AO_4"
+  },
+  {
+    "tag": "22",
+    "description": "AO",
+    "moduleType": "1_4_AO_5",
+    "channelNumber": "YLDW1_4_AO_5",
+    "plcAddress": "YLDW1_4_AO_5"
+  },
+  {
+    "tag": "23",
+    "description": "AO",
+    "moduleType": "1_4_AO_6",
+    "channelNumber": "YLDW1_4_AO_6",
+    "plcAddress": "YLDW1_4_AO_6"
+  },
+  {
+    "tag": "24",
+    "description": "AO",
+    "moduleType": "1_4_AO_7",
+    "channelNumber": "YLDW1_4_AO_7",
+    "plcAddress": "YLDW1_4_AO_7"
+  },
+  {
+    "tag": "25",
+    "description": "DI",
+    "moduleType": "1_5_DI_0",
+    "channelNumber": "ESDV6101_1",
+    "plcAddress": "ESDV6101_1"
+  },
+  {
+    "tag": "26",
+    "description": "DI",
+    "moduleType": "1_5_DI_1",
+    "channelNumber": "ESDV6101_2",
+    "plcAddress": "ESDV6101_2"
+  },
+  {
+    "tag": "27",
+    "description": "DI",
+    "moduleType": "1_5_DI_2",
+    "channelNumber": "ESDV6101_Z0",
+    "plcAddress": "ESDV6101_Z0"
+  },
+  {
+    "tag": "28",
+    "description": "DI",
+    "moduleType": "1_5_DI_3",
+    "channelNumber": "ESDV6101_ZC",
+    "plcAddress": "ESDV6101_ZC"
+  },
+  {
+    "tag": "29",
+    "description": "DI",
+    "moduleType": "1_5_DI_4",
+    "channelNumber": "SQ6103_Z0",
+    "plcAddress": "SQ6103_Z0"
+  },
+  {
+    "tag": "30",
+    "description": "DI",
+    "moduleType": "1_5_DI_5",
+    "channelNumber": "SQ6103_ZC",
+    "plcAddress": "SQ6103_ZC"
+  },
+  {
+    "tag": "31",
+    "description": "DI",
+    "moduleType": "1_5_DI_6",
+    "channelNumber": "SQ6104_Z0",
+    "plcAddress": "SQ6104_Z0"
+  },
+  {
+    "tag": "32",
+    "description": "DI",
+    "moduleType": "1_5_DI_7",
+    "channelNumber": "SQ6104_ZC",
+    "plcAddress": "SQ6104_ZC"
+  },
+  {
+    "tag": "33",
+    "description": "DI",
+    "moduleType": "1_5_DI_8",
+    "channelNumber": "FCV7101_FL",
+    "plcAddress": "FCV7101_FL"
+  },
+  {
+    "tag": "34",
+    "description": "DI",
+    "moduleType": "1_5_DI_9",
+    "channelNumber": "SQ6101_Z0",
+    "plcAddress": "SQ6101_Z0"
+  },
+  {
+    "tag": "35",
+    "description": "DI",
+    "moduleType": "1_5_DI_10",
+    "channelNumber": "SQ6101_ZC",
+    "plcAddress": "SQ6101_ZC"
+  },
+  {
+    "tag": "36",
+    "description": "DI",
+    "moduleType": "1_5_DI_11",
+    "channelNumber": "SSV8301_S0",
+    "plcAddress": "SSV8301_S0"
+  },
+  {
+    "tag": "37",
+    "description": "DI",
+    "moduleType": "1_5_DI_12",
+    "channelNumber": "SSV8301_SC",
+    "plcAddress": "SSV8301_SC"
+  },
+  {
+    "tag": "38",
+    "description": "DI",
+    "moduleType": "1_5_DI_13",
+    "channelNumber": "YLDW1_5_DI_13",
+    "plcAddress": "YLDW1_5_DI_13"
+  },
+  {
+    "tag": "39",
+    "description": "DI",
+    "moduleType": "1_5_DI_14",
+    "channelNumber": "YLDW1_5_DI_14",
+    "plcAddress": "YLDW1_5_DI_14"
+  },
+  {
+    "tag": "40",
+    "description": "DI",
+    "moduleType": "1_5_DI_15",
+    "channelNumber": "YLDW1_5_DI_15",
+    "plcAddress": "YLDW1_5_DI_15"
+  },
+  {
+    "tag": "41",
+    "description": "DI",
+    "moduleType": "1_6_DI_0",
+    "channelNumber": "AIA_301H",
+    "plcAddress": "AIA_301H"
+  },
+  {
+    "tag": "42",
+    "description": "DI",
+    "moduleType": "1_6_DI_1",
+    "channelNumber": "AIA_301HH",
+    "plcAddress": "AIA_301HH"
+  },
+  {
+    "tag": "43",
+    "description": "DI",
+    "moduleType": "1_6_DI_2",
+    "channelNumber": "AIA_302H",
+    "plcAddress": "AIA_302H"
+  },
+  {
+    "tag": "44",
+    "description": "DI",
+    "moduleType": "1_6_DI_3",
+    "channelNumber": "AIA_302HH",
+    "plcAddress": "AIA_302HH"
+  },
+  {
+    "tag": "45",
+    "description": "DI",
+    "moduleType": "1_6_DI_4",
+    "channelNumber": "ESD0001_1",
+    "plcAddress": "ESD0001_1"
+  },
+  {
+    "tag": "46",
+    "description": "DI",
+    "moduleType": "1_6_DI_5",
+    "channelNumber": "ESD0001_2",
+    "plcAddress": "ESD0001_2"
+  },
+  {
+    "tag": "47",
+    "description": "DI",
+    "moduleType": "1_6_DI_6",
+    "channelNumber": "ESD1001_1",
+    "plcAddress": "ESD1001_1"
+  },
+  {
+    "tag": "48",
+    "description": "DI",
+    "moduleType": "1_6_DI_7",
+    "channelNumber": "ESD1001_2",
+    "plcAddress": "ESD1001_2"
+  },
+  {
+    "tag": "49",
+    "description": "DI",
+    "moduleType": "1_6_DI_8",
+    "channelNumber": "YLDW1_6_DI_8",
+    "plcAddress": "YLDW1_6_DI_8"
+  },
+  {
+    "tag": "50",
+    "description": "DI",
+    "moduleType": "1_6_DI_9",
+    "channelNumber": "YLDW1_6_DI_9",
+    "plcAddress": "YLDW1_6_DI_9"
+  },
+  {
+    "tag": "51",
+    "description": "DI",
+    "moduleType": "1_6_DI_10",
+    "channelNumber": "YLDW1_6_DI_10",
+    "plcAddress": "YLDW1_6_DI_10"
+  },
+  {
+    "tag": "52",
+    "description": "DI",
+    "moduleType": "1_6_DI_11",
+    "channelNumber": "YLDW1_6_DI_11",
+    "plcAddress": "YLDW1_6_DI_11"
+  },
+  {
+    "tag": "53",
+    "description": "DI",
+    "moduleType": "1_6_DI_12",
+    "channelNumber": "YLDW1_6_DI_12",
+    "plcAddress": "YLDW1_6_DI_12"
+  },
+  {
+    "tag": "54",
+    "description": "DI",
+    "moduleType": "1_6_DI_13",
+    "channelNumber": "YLDW1_6_DI_13",
+    "plcAddress": "YLDW1_6_DI_13"
+  },
+  {
+    "tag": "55",
+    "description": "DI",
+    "moduleType": "1_6_DI_14",
+    "channelNumber": "YLDW1_6_DI_14",
+    "plcAddress": "YLDW1_6_DI_14"
+  },
+  {
+    "tag": "56",
+    "description": "DI",
+    "moduleType": "1_6_DI_15",
+    "channelNumber": "YLDW1_6_DI_15",
+    "plcAddress": "YLDW1_6_DI_15"
+  },
+  {
+    "tag": "57",
+    "description": "DO",
+    "moduleType": "1_7_DO_0",
+    "channelNumber": "DO_1_CL_1",
+    "plcAddress": "DO_1_CL_1"
+  },
+  {
+    "tag": "58",
+    "description": "DO",
+    "moduleType": "1_7_DO_1",
+    "channelNumber": "DO_2_OP_1",
+    "plcAddress": "DO_2_OP_1"
+  },
+  {
+    "tag": "59",
+    "description": "DO",
+    "moduleType": "1_7_DO_2",
+    "channelNumber": "SQ6103_S0",
+    "plcAddress": "SQ6103_S0"
+  },
+  {
+    "tag": "60",
+    "description": "DO",
+    "moduleType": "1_7_DO_3",
+    "channelNumber": "SQ6103_SC",
+    "plcAddress": "SQ6103_SC"
+  },
+  {
+    "tag": "61",
+    "description": "DO",
+    "moduleType": "1_7_DO_4",
+    "channelNumber": "SQ6104_S0",
+    "plcAddress": "SQ6104_S0"
+  },
+  {
+    "tag": "62",
+    "description": "DO",
+    "moduleType": "1_7_DO_5",
+    "channelNumber": "SQ6104_SC",
+    "plcAddress": "SQ6104_SC"
+  },
+  {
+    "tag": "63",
+    "description": "DO",
+    "moduleType": "1_7_DO_6",
+    "channelNumber": "SQ6102_SC",
+    "plcAddress": "SQ6102_SC"
+  },
+  {
+    "tag": "64",
+    "description": "DO",
+    "moduleType": "1_7_DO_7",
+    "channelNumber": "SQ6102_ESD",
+    "plcAddress": "SQ6102_ESD"
+  },
+  {
+    "tag": "65",
+    "description": "DO",
+    "moduleType": "1_7_DO_8",
+    "channelNumber": "SA0001",
+    "plcAddress": "SA0001"
+  },
+  {
+    "tag": "66",
+    "description": "DO",
+    "moduleType": "1_7_DO_9",
+    "channelNumber": "SA1001",
+    "plcAddress": "SA1001"
+  },
+  {
+    "tag": "67",
+    "description": "DO",
+    "moduleType": "1_7_DO_10",
+    "channelNumber": "YLDW1_7_DO_10",
+    "plcAddress": "YLDW1_7_DO_10"
+  },
+  {
+    "tag": "68",
+    "description": "DO",
+    "moduleType": "1_7_DO_11",
+    "channelNumber": "YLDW1_7_DO_11",
+    "plcAddress": "YLDW1_7_DO_11"
+  },
+  {
+    "tag": "69",
+    "description": "DO",
+    "moduleType": "1_7_DO_12",
+    "channelNumber": "YLDW1_7_DO_12",
+    "plcAddress": "YLDW1_7_DO_12"
+  },
+  {
+    "tag": "70",
+    "description": "DO",
+    "moduleType": "1_7_DO_13",
+    "channelNumber": "YLDW1_7_DO_13",
+    "plcAddress": "YLDW1_7_DO_13"
+  },
+  {
+    "tag": "71",
+    "description": "DO",
+    "moduleType": "1_7_DO_14",
+    "channelNumber": "YLDW1_7_DO_14",
+    "plcAddress": "YLDW1_7_DO_14"
+  },
+  {
+    "tag": "72",
+    "description": "DO",
+    "moduleType": "1_7_DO_15",
+    "channelNumber": "YLDW1_7_DO_15",
+    "plcAddress": "YLDW1_7_DO_15"
+  },
+  {
+    "tag": "73",
+    "description": "DO",
+    "moduleType": "1_8_DO_0",
+    "channelNumber": "DO_1_CL_2",
+    "plcAddress": "DO_1_CL_2"
+  },
+  {
+    "tag": "74",
+    "description": "DO",
+    "moduleType": "1_8_DO_1",
+    "channelNumber": "DO_2_OP_2",
+    "plcAddress": "DO_2_OP_2"
+  },
+  {
+    "tag": "75",
+    "description": "DO",
+    "moduleType": "1_8_DO_2",
+    "channelNumber": "YLDW1_8_DO_2",
+    "plcAddress": "YLDW1_8_DO_2"
+  },
+  {
+    "tag": "76",
+    "description": "DO",
+    "moduleType": "1_8_DO_3",
+    "channelNumber": "YLDW1_8_DO_3",
+    "plcAddress": "YLDW1_8_DO_3"
+  },
+  {
+    "tag": "77",
+    "description": "DO",
+    "moduleType": "1_8_DO_4",
+    "channelNumber": "YLDW1_8_DO_4",
+    "plcAddress": "YLDW1_8_DO_4"
+  },
+  {
+    "tag": "78",
+    "description": "DO",
+    "moduleType": "1_8_DO_5",
+    "channelNumber": "YLDW1_8_DO_5",
+    "plcAddress": "YLDW1_8_DO_5"
+  },
+  {
+    "tag": "79",
+    "description": "DO",
+    "moduleType": "1_8_DO_6",
+    "channelNumber": "YLDW1_8_DO_6",
+    "plcAddress": "YLDW1_8_DO_6"
+  },
+  {
+    "tag": "80",
+    "description": "DO",
+    "moduleType": "1_8_DO_7",
+    "channelNumber": "YLDW1_8_DO_7",
+    "plcAddress": "YLDW1_8_DO_7"
+  },
+  {
+    "tag": "81",
+    "description": "DO",
+    "moduleType": "1_8_DO_8",
+    "channelNumber": "YLDW1_8_DO_8",
+    "plcAddress": "YLDW1_8_DO_8"
+  },
+  {
+    "tag": "82",
+    "description": "DO",
+    "moduleType": "1_8_DO_9",
+    "channelNumber": "YLDW1_8_DO_9",
+    "plcAddress": "YLDW1_8_DO_9"
+  },
+  {
+    "tag": "83",
+    "description": "DO",
+    "moduleType": "1_8_DO_10",
+    "channelNumber": "YLDW1_8_DO_10",
+    "plcAddress": "YLDW1_8_DO_10"
+  },
+  {
+    "tag": "84",
+    "description": "DO",
+    "moduleType": "1_8_DO_11",
+    "channelNumber": "YLDW1_8_DO_11",
+    "plcAddress": "YLDW1_8_DO_11"
+  },
+  {
+    "tag": "85",
+    "description": "DO",
+    "moduleType": "1_8_DO_12",
+    "channelNumber": "YLDW1_8_DO_12",
+    "plcAddress": "YLDW1_8_DO_12"
+  },
+  {
+    "tag": "86",
+    "description": "DO",
+    "moduleType": "1_8_DO_13",
+    "channelNumber": "YLDW1_8_DO_13",
+    "plcAddress": "YLDW1_8_DO_13"
+  },
+  {
+    "tag": "87",
+    "description": "DO",
+    "moduleType": "1_8_DO_14",
+    "channelNumber": "YLDW1_8_DO_14",
+    "plcAddress": "YLDW1_8_DO_14"
+  },
+  {
+    "tag": "88",
+    "description": "DO",
+    "moduleType": "1_8_DO_15",
+    "channelNumber": "YLDW1_8_DO_15",
+    "plcAddress": "YLDW1_8_DO_15"
+  }
+]

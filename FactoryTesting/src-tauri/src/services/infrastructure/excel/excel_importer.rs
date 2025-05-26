@@ -79,28 +79,37 @@ impl ExcelImporter {
     
     /// 验证Excel文件的标题行格式
     fn validate_header_row(row: &[calamine::DataType]) -> AppResult<()> {
+        // 根据真实Excel文件的列名更新期望的标题
         let expected_headers = vec![
-            "标签", "变量名", "描述", "工位", "模块", "模块类型", "通道号", "数据类型", "PLC地址"
+            "序号", "模块名称", "模块类型", "供电类型（有源/无源）", "线制", 
+            "通道位号", "位号", "场站名", "变量名称（HMI）", "变量描述", 
+            "数据类型", "读写属性"
         ];
         
-        if row.len() < expected_headers.len() {
+        if row.len() < 12 {  // 至少需要前12列
             return Err(AppError::validation_error(&format!(
-                "Excel标题行列数不足，期望{}列，实际{}列", 
-                expected_headers.len(), 
+                "Excel标题行列数不足，期望至少12列，实际{}列", 
                 row.len()
             )));
         }
         
-        for (i, expected) in expected_headers.iter().enumerate() {
-            let actual_string = row[i].to_string();
-            let actual = actual_string.trim();
-            if actual != *expected {
-                return Err(AppError::validation_error(&format!(
-                    "Excel标题行第{}列不匹配，期望'{}'，实际'{}'", 
-                    i + 1, 
-                    expected, 
-                    actual
-                )));
+        // 验证关键列的存在（不要求完全匹配所有列名）
+        let key_columns = vec![
+            (2, "模块类型"),
+            (6, "位号"), 
+            (8, "变量名称（HMI）"),
+            (9, "变量描述"),
+            (10, "数据类型")
+        ];
+        
+        for (index, expected) in key_columns {
+            if index < row.len() {
+                let actual_string = row[index].to_string();
+                let actual = actual_string.trim();
+                if !actual.contains(expected) {
+                    log::warn!("Excel标题行第{}列可能不匹配，期望包含'{}'，实际'{}'", 
+                              index + 1, expected, actual);
+                }
             }
         }
         
@@ -109,24 +118,24 @@ impl ExcelImporter {
     
     /// 解析Excel数据行为ChannelPointDefinition
     fn parse_data_row(row: &[calamine::DataType], row_number: usize) -> AppResult<ChannelPointDefinition> {
-        if row.len() < 9 {
+        if row.len() < 53 {  // 根据真实Excel文件，至少需要53列
             return Err(AppError::validation_error(&format!(
-                "第{}行数据列数不足，期望9列，实际{}列", 
+                "第{}行数据列数不足，期望53列，实际{}列", 
                 row_number, 
                 row.len()
             )));
         }
         
-        // 提取各列数据
-        let tag = Self::get_string_value(&row[0], row_number, "标签")?;
-        let variable_name = Self::get_string_value(&row[1], row_number, "变量名")?;
-        let description = Self::get_string_value(&row[2], row_number, "描述")?;
-        let station = Self::get_string_value(&row[3], row_number, "工位")?;
-        let module = Self::get_string_value(&row[4], row_number, "模块")?;
-        let module_type_str = Self::get_string_value(&row[5], row_number, "模块类型")?;
-        let channel_number = Self::get_string_value(&row[6], row_number, "通道号")?;
-        let data_type_str = Self::get_string_value(&row[7], row_number, "数据类型")?;
-        let plc_address = Self::get_string_value(&row[8], row_number, "PLC地址")?;
+        // 根据真实Excel文件的列索引提取数据
+        let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第7列：位号
+        let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第9列：变量名称（HMI）
+        let description = Self::get_optional_string_value(&row[9], "变量描述");  // 第10列：变量描述（可能为空）
+        let station = Self::get_string_value(&row[7], row_number, "场站名")?;  // 第8列：场站名
+        let module = Self::get_string_value(&row[1], row_number, "模块名称")?;  // 第2列：模块名称
+        let module_type_str = Self::get_string_value(&row[2], row_number, "模块类型")?;  // 第3列：模块类型
+        let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第6列：通道位号
+        let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第11列：数据类型
+        let plc_address = Self::get_string_value(&row[51], row_number, "PLC绝对地址")?;  // 第52列：PLC绝对地址
         
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -161,6 +170,11 @@ impl ExcelImporter {
             )));
         }
         Ok(value)
+    }
+    
+    /// 从Excel单元格获取可选字符串值（允许为空）
+    fn get_optional_string_value(cell: &calamine::DataType, _column_name: &str) -> String {
+        cell.to_string().trim().to_string()
     }
     
     /// 解析模块类型字符串
@@ -199,23 +213,86 @@ mod tests {
     use super::*;
     use tempfile::NamedTempFile;
     use std::io::Write;
-    
+
     #[tokio::test]
-    async fn test_parse_module_type() {
+    async fn test_parse_real_excel_file() {
+        // 测试真实Excel文件
+        let real_file_path = r"C:\Program Files\Git\code\FactoryTesting\测试文件\测试IO.xlsx";
+        
+        if std::path::Path::new(real_file_path).exists() {
+            println!("测试真实Excel文件: {}", real_file_path);
+            
+            let result = ExcelImporter::parse_excel_file(real_file_path).await;
+            
+            match result {
+                Ok(definitions) => {
+                    println!("成功解析Excel文件！");
+                    println!("总共解析了 {} 个通道定义", definitions.len());
+                    
+                    // 显示前几个定义的详细信息
+                    for (i, def) in definitions.iter().take(5).enumerate() {
+                        println!("\n第{}个定义:", i + 1);
+                        println!("  位号: {}", def.tag);
+                        println!("  变量名: {}", def.variable_name);
+                        println!("  描述: {}", def.variable_description);
+                        println!("  模块类型: {:?}", def.module_type);
+                        println!("  数据类型: {:?}", def.data_type);
+                        println!("  PLC地址: {}", def.plc_communication_address);
+                    }
+                    
+                    // 验证数据的基本正确性
+                    assert!(!definitions.is_empty(), "应该解析出至少一个通道定义");
+                    
+                    // 验证每个定义都有必要的字段
+                    for def in &definitions {
+                        assert!(!def.tag.is_empty(), "位号不能为空");
+                        assert!(!def.variable_name.is_empty(), "变量名不能为空");
+                        // 描述可能为空，所以不验证
+                        assert!(!def.plc_communication_address.is_empty(), "PLC地址不能为空");
+                    }
+                    
+                    // 统计不同模块类型的数量
+                    let ai_count = definitions.iter().filter(|d| matches!(d.module_type, ModuleType::AI)).count();
+                    let ao_count = definitions.iter().filter(|d| matches!(d.module_type, ModuleType::AO)).count();
+                    let di_count = definitions.iter().filter(|d| matches!(d.module_type, ModuleType::DI)).count();
+                    let do_count = definitions.iter().filter(|d| matches!(d.module_type, ModuleType::DO)).count();
+                    
+                    println!("\n模块类型统计:");
+                    println!("  AI: {} 个", ai_count);
+                    println!("  AO: {} 个", ao_count);
+                    println!("  DI: {} 个", di_count);
+                    println!("  DO: {} 个", do_count);
+                    
+                    // 验证至少有一些数据
+                    assert!(ai_count + ao_count + di_count + do_count > 0, "应该有至少一个有效的模块类型");
+                }
+                Err(e) => {
+                    panic!("解析Excel文件失败: {:?}", e);
+                }
+            }
+        } else {
+            println!("真实Excel文件不存在，跳过测试: {}", real_file_path);
+        }
+    }
+
+    #[test]
+    fn test_parse_module_type() {
         assert_eq!(ExcelImporter::parse_module_type("AI", 1).unwrap(), ModuleType::AI);
-        assert_eq!(ExcelImporter::parse_module_type("ao", 1).unwrap(), ModuleType::AO);
-        assert_eq!(ExcelImporter::parse_module_type("Di", 1).unwrap(), ModuleType::DI);
+        assert_eq!(ExcelImporter::parse_module_type("AO", 1).unwrap(), ModuleType::AO);
+        assert_eq!(ExcelImporter::parse_module_type("DI", 1).unwrap(), ModuleType::DI);
         assert_eq!(ExcelImporter::parse_module_type("DO", 1).unwrap(), ModuleType::DO);
+        assert_eq!(ExcelImporter::parse_module_type("ai", 1).unwrap(), ModuleType::AI);
         
         assert!(ExcelImporter::parse_module_type("INVALID", 1).is_err());
     }
-    
-    #[tokio::test]
-    async fn test_parse_data_type() {
+
+    #[test]
+    fn test_parse_data_type() {
         assert_eq!(ExcelImporter::parse_data_type("BOOL", 1).unwrap(), PointDataType::Bool);
-        assert_eq!(ExcelImporter::parse_data_type("int", 1).unwrap(), PointDataType::Int);
-        assert_eq!(ExcelImporter::parse_data_type("Float", 1).unwrap(), PointDataType::Float);
+        assert_eq!(ExcelImporter::parse_data_type("REAL", 1).unwrap(), PointDataType::Float);
+        assert_eq!(ExcelImporter::parse_data_type("INT", 1).unwrap(), PointDataType::Int);
         assert_eq!(ExcelImporter::parse_data_type("STRING", 1).unwrap(), PointDataType::String);
+        assert_eq!(ExcelImporter::parse_data_type("float", 1).unwrap(), PointDataType::Float);
         
         assert!(ExcelImporter::parse_data_type("INVALID", 1).is_err());
     }

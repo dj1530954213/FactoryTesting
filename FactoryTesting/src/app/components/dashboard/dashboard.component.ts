@@ -115,12 +115,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       
       // 计算待测批次数量
       this.pendingBatches = (allBatches || []).filter(batch => 
-        batch.overall_status === OverallTestStatus.NotStarted
+        batch.overall_status === OverallTestStatus.NotTested
       ).length;
       
       // 计算总体成功率
       const completedBatches = (allBatches || []).filter(batch => 
-        batch.overall_status === OverallTestStatus.Completed
+        batch.overall_status === OverallTestStatus.TestCompletedPassed ||
+        batch.overall_status === OverallTestStatus.TestCompletedFailed
       );
       if (completedBatches.length > 0) {
         const totalTests = completedBatches.reduce((sum, batch) => sum + (batch.total_points || 0), 0);

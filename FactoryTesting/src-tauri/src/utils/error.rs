@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio_modbus;
+use rust_xlsxwriter;
 
 /// 应用程序统一错误类型
 /// 用于封装系统中可能出现的各种错误，提供统一的错误处理机制
@@ -106,6 +107,38 @@ pub enum AppError {
     /// 未实现的功能错误
     #[error("未实现的功能: {feature_name}")]
     NotImplemented { feature_name: String },
+
+    /// PDF生成错误
+    #[error("PDF生成错误: {message}")]
+    PdfError { message: String },
+
+    /// Excel生成错误
+    #[error("Excel生成错误: {message}")]
+    ExcelError { message: String },
+
+    /// 模板引擎错误
+    #[error("模板引擎错误: {message}")]
+    TemplateError { message: String },
+
+    /// 报告生成错误
+    #[error("报告生成错误: {message}")]
+    ReportGenerationError { message: String },
+
+    /// 数据分析错误
+    #[error("数据分析错误: {message}")]
+    AnalysisError { message: String },
+
+    /// 配置管理错误
+    #[error("配置管理错误: {message}")]
+    ConfigManagementError { message: String },
+
+    /// 用户认证错误
+    #[error("用户认证错误: {message}")]
+    AuthenticationError { message: String },
+
+    /// 权限验证错误
+    #[error("权限验证错误: {message}")]
+    AuthorizationError { message: String },
 }
 
 impl AppError {
@@ -269,6 +302,62 @@ impl AppError {
         }
     }
 
+    /// 创建PDF生成错误
+    pub fn pdf_error(message: impl Into<String>) -> Self {
+        Self::PdfError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建Excel生成错误
+    pub fn excel_error(message: impl Into<String>) -> Self {
+        Self::ExcelError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建模板引擎错误
+    pub fn template_error(message: impl Into<String>) -> Self {
+        Self::TemplateError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建报告生成错误
+    pub fn report_generation_error(message: impl Into<String>) -> Self {
+        Self::ReportGenerationError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建数据分析错误
+    pub fn analysis_error(message: impl Into<String>) -> Self {
+        Self::AnalysisError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建配置管理错误
+    pub fn config_management_error(message: impl Into<String>) -> Self {
+        Self::ConfigManagementError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建用户认证错误
+    pub fn authentication_error(message: impl Into<String>) -> Self {
+        Self::AuthenticationError {
+            message: message.into(),
+        }
+    }
+
+    /// 创建权限验证错误
+    pub fn authorization_error(message: impl Into<String>) -> Self {
+        Self::AuthorizationError {
+            message: message.into(),
+        }
+    }
+
     /// 获取错误的简短描述
     pub fn error_code(&self) -> &'static str {
         match self {
@@ -293,6 +382,14 @@ impl AppError {
             AppError::ServiceHealthCheckError { .. } => "SERVICE_HEALTH_CHECK_ERROR",
             AppError::JsonError { .. } => "JSON_ERROR",
             AppError::NotImplemented { .. } => "NOT_IMPLEMENTED_ERROR",
+            AppError::PdfError { .. } => "PDF_ERROR",
+            AppError::ExcelError { .. } => "EXCEL_ERROR",
+            AppError::TemplateError { .. } => "TEMPLATE_ERROR",
+            AppError::ReportGenerationError { .. } => "REPORT_GENERATION_ERROR",
+            AppError::AnalysisError { .. } => "ANALYSIS_ERROR",
+            AppError::ConfigManagementError { .. } => "CONFIG_MANAGEMENT_ERROR",
+            AppError::AuthenticationError { .. } => "AUTHENTICATION_ERROR",
+            AppError::AuthorizationError { .. } => "AUTHORIZATION_ERROR",
             AppError::UnknownError { .. } => "UNKNOWN_ERROR",
         }
     }
@@ -334,5 +431,12 @@ pub type AppResult<T> = Result<T, AppError>;
 impl From<tokio_modbus::Error> for AppError {
     fn from(err: tokio_modbus::Error) -> Self {
         AppError::PlcCommunicationError { message: format!("Modbus error: {}", err) }
+    }
+}
+
+/// rust_xlsxwriter 错误到 AppError 的转换
+impl From<rust_xlsxwriter::XlsxError> for AppError {
+    fn from(err: rust_xlsxwriter::XlsxError) -> Self {
+        AppError::ExcelError { message: format!("Excel error: {}", err) }
     }
 } 

@@ -1,0 +1,7 @@
+标签,变量名,描述,工位,模块,模块类型,通道号,数据类型,PLC地址
+AI001,Temperature_1,反应器温度,Station1,Module1,AI,CH01,Float,DB1.DBD0
+AI002,Pressure_1,压力传感器1,Station1,Module1,AI,CH02,Float,DB1.DBD4
+DI001,Switch_1,开关状态1,Station1,Module2,DI,CH01,Bool,I0.0
+DI002,Switch_2,开关状态2,Station1,Module2,DI,CH02,Bool,I0.1
+AO001,Valve_1,控制阀1,Station1,Module3,AO,CH01,Float,QB0
+DO001,Light_1,指示灯1,Station1,Module4,DO,CH01,Bool,Q0.0 

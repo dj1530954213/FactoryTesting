@@ -4,16 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
-import { 
-  ChannelTestInstance, 
-  TestBatchInfo, 
-  ChannelPointDefinition,
-  RawTestOutcome,
+import {
+  TestExecutionRequest,
+  TestExecutionResponse,
   TestProgressUpdate,
-  OverallTestStatus,
-  SubTestStatus,
-  OVERALL_TEST_STATUS_LABELS,
-  SUB_TEST_STATUS_LABELS
+  ChannelPointDefinition,
+  ChannelTestInstance,
+  TestBatchInfo,
+  RawTestOutcome,
+  ModuleType,
+  PointDataType,
+  OverallTestStatus
 } from '../../models';
 
 interface TestExecutionData {
@@ -38,337 +39,620 @@ interface TestStatistics {
   selector: 'app-test-execution',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './test-execution.component.html',
-  styleUrl: './test-execution.component.css'
+  template: `
+    <div class="test-execution-container">
+      <h2>测试执行管理</h2>
+      
+      <!-- 批次创建区域 -->
+      <div class="section">
+        <h3>创建测试批次</h3>
+        <div class="form-group">
+          <label>产品型号:</label>
+          <input [(ngModel)]="newBatch.product_model" placeholder="输入产品型号">
+        </div>
+        <div class="form-group">
+          <label>序列号:</label>
+          <input [(ngModel)]="newBatch.serial_number" placeholder="输入序列号">
+        </div>
+        <div class="form-group">
+          <label>操作员:</label>
+          <input [(ngModel)]="newBatch.operator_name" placeholder="输入操作员姓名">
+        </div>
+        <div class="form-group">
+          <label>自动开始:</label>
+          <input type="checkbox" [(ngModel)]="autoStart">
+        </div>
+        <button (click)="createAndSubmitBatch()" [disabled]="isLoading">
+          {{ isLoading ? '创建中...' : '创建并提交测试' }}
+        </button>
+      </div>
+
+      <!-- 当前批次控制区域 -->
+      <div class="section" *ngIf="currentBatchId">
+        <h3>批次控制 - {{ currentBatchId }}</h3>
+        <div class="control-buttons">
+          <button (click)="startBatch()" [disabled]="!canStart()">开始测试</button>
+          <button (click)="pauseBatch()" [disabled]="!canPause()">暂停测试</button>
+          <button (click)="resumeBatch()" [disabled]="!canResume()">恢复测试</button>
+          <button (click)="stopBatch()" [disabled]="!canStop()">停止测试</button>
+          <button (click)="cleanupBatch()" [disabled]="!canCleanup()">清理批次</button>
+        </div>
+        <div class="status-info">
+          <p>状态: {{ currentBatchStatus }}</p>
+          <p>实例数量: {{ currentInstanceCount }}</p>
+        </div>
+      </div>
+
+      <!-- 进度显示区域 -->
+      <div class="section" *ngIf="currentBatchId">
+        <h3>测试进度</h3>
+        <div class="progress-container">
+          <div class="progress-summary">
+            <p>总进度: {{ getOverallProgress() }}%</p>
+            <p>完成实例: {{ getCompletedInstances() }} / {{ progressUpdates.length }}</p>
+          </div>
+          <div class="progress-list">
+            <div *ngFor="let progress of progressUpdates" class="progress-item">
+              <div class="progress-header">
+                <span class="point-tag">{{ progress.point_tag }}</span>
+                <span class="status" [class]="getStatusClass(progress.overall_status)">
+                  {{ getStatusLabel(progress.overall_status) }}
+                </span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" 
+                     [style.width.%]="getProgressPercentage(progress)">
+                </div>
+              </div>
+              <div class="progress-details">
+                <span>{{ progress.completed_sub_tests }} / {{ progress.total_sub_tests }} 子测试</span>
+                <span class="timestamp">{{ formatTimestamp(progress.timestamp) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 测试结果区域 -->
+      <div class="section" *ngIf="currentBatchId">
+        <h3>测试结果</h3>
+        <div class="results-summary">
+          <p>总结果: {{ testResults.length }} 个</p>
+          <p>成功: {{ getSuccessCount() }}</p>
+          <p>失败: {{ getFailureCount() }}</p>
+        </div>
+        <div class="results-list">
+          <div *ngFor="let result of testResults" class="result-item">
+            <div class="result-header">
+              <span class="instance-id">{{ result.channel_instance_id }}</span>
+              <span class="success-status" [class]="result.success ? 'success' : 'failure'">
+                {{ result.success ? '成功' : '失败' }}
+              </span>
+            </div>
+            <div class="result-details">
+              <p>子测试项: {{ getSubTestItemLabel(result.sub_test_item) }}</p>
+              <p *ngIf="result.message">消息: {{ result.message }}</p>
+              <p>时间: {{ formatTimestamp(result.start_time) }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 系统状态区域 -->
+      <div class="section">
+        <h3>系统状态</h3>
+        <div class="system-status" *ngIf="systemStatus">
+          <p>活动任务: {{ systemStatus.active_test_tasks }}</p>
+          <p>系统健康: {{ systemStatus.system_health }}</p>
+          <p>版本: {{ systemStatus.version }}</p>
+        </div>
+      </div>
+
+      <!-- 日志区域 -->
+      <div class="section">
+        <h3>操作日志</h3>
+        <div class="log-container">
+          <div *ngFor="let log of logs" class="log-item" [class]="log.level">
+            <span class="timestamp">{{ formatTimestamp(log.timestamp) }}</span>
+            <span class="message">{{ log.message }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+  styles: [`
+    .test-execution-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: inline-block;
+      width: 100px;
+      font-weight: bold;
+    }
+
+    .form-group input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 200px;
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .control-buttons button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .control-buttons button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .progress-item {
+      margin-bottom: 15px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #4caf50;
+      transition: width 0.3s ease;
+    }
+
+    .progress-details {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .status.not-tested { color: #999; }
+    .status.hard-point-testing { color: #ff9800; }
+    .status.test-completed-passed { color: #4caf50; }
+    .status.test-completed-failed { color: #f44336; }
+
+    .result-item {
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .success { color: #4caf50; font-weight: bold; }
+    .failure { color: #f44336; font-weight: bold; }
+
+    .log-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: white;
+    }
+
+    .log-item {
+      margin-bottom: 5px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .log-item.info { color: #2196f3; }
+    .log-item.success { color: #4caf50; }
+    .log-item.error { color: #f44336; }
+    .log-item.warning { color: #ff9800; }
+  `]
 })
 export class TestExecutionComponent implements OnInit, OnDestroy {
-  // 核心数据
+  // 状态变量
+  isLoading = false;
   currentBatchId: string | null = null;
-  executionData: TestExecutionData | null = null;
-  statistics: TestStatistics = {
-    total: 0,
-    completed: 0,
-    passed: 0,
-    failed: 0,
-    inProgress: 0,
-    notStarted: 0,
-    successRate: 0
+  currentBatchStatus = 'unknown';
+  currentInstanceCount = 0;
+  autoStart = false;
+
+  // 数据
+  newBatch: Partial<TestBatchInfo> = {
+    product_model: 'TestProduct_V1.0',
+    serial_number: 'SN' + Date.now(),
+    operator_name: '测试操作员'
   };
 
-  // 界面状态
-  isLoading = false;
-  loadingMessage = '';
-  error: string | null = null;
-  isTestRunning = false;
-  isPaused = false;
+  progressUpdates: TestProgressUpdate[] = [];
+  testResults: RawTestOutcome[] = [];
+  systemStatus: any = null;
+  logs: Array<{timestamp: string, level: string, message: string}> = [];
 
-  // 筛选和显示选项
-  statusFilter = '';
-  moduleTypeFilter = '';
-  searchTerm = '';
-  showOnlyFailed = false;
-  autoRefresh = true;
-  refreshInterval = 2000; // 2秒刷新一次
-
-  // 分页
-  currentPage = 1;
-  pageSize = 20;
-  totalPages = 1;
-
-  // 订阅管理
+  // 订阅
   private subscriptions: Subscription[] = [];
+  private progressPolling: Subscription | null = null;
 
-  // 枚举引用
-  OverallTestStatus = OverallTestStatus;
-  SubTestStatus = SubTestStatus;
-  OVERALL_TEST_STATUS_LABELS = OVERALL_TEST_STATUS_LABELS;
-  SUB_TEST_STATUS_LABELS = SUB_TEST_STATUS_LABELS;
-  
-  // 工具类引用
-  Math = Math;
-
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private tauriApi: TauriApiService
-  ) {}
+  constructor(private tauriApi: TauriApiService) {}
 
   ngOnInit() {
-    // 获取路由参数中的批次ID
-    this.route.queryParams.subscribe(params => {
-      this.currentBatchId = params['batchId'] || null;
-      if (this.currentBatchId) {
-        this.loadTestExecution();
-        this.startAutoRefresh();
-      }
-    });
+    this.addLog('info', '测试执行组件已初始化');
+    
+    // 订阅系统状态
+    this.subscriptions.push(
+      this.tauriApi.systemStatus$.subscribe(status => {
+        this.systemStatus = status;
+      })
+    );
   }
 
   ngOnDestroy() {
     this.subscriptions.forEach(sub => sub.unsubscribe());
+    if (this.progressPolling) {
+      this.progressPolling.unsubscribe();
+    }
   }
 
-  async loadTestExecution() {
-    if (!this.currentBatchId) return;
+  // 创建并提交测试批次
+  createAndSubmitBatch() {
+    this.isLoading = true;
+    this.addLog('info', '开始创建测试批次...');
 
-    try {
-      this.isLoading = true;
-      this.loadingMessage = '加载测试数据...';
-      this.error = null;
-
-      // 并行加载所有相关数据
-      const [batchInfo, instances, definitions, outcomes, progress] = await Promise.all([
-        this.tauriApi.getAllBatchInfo().toPromise(),
-        this.tauriApi.getBatchTestInstances(this.currentBatchId).toPromise(),
-        this.tauriApi.getAllChannelDefinitions().toPromise(),
-        this.tauriApi.getBatchResults(this.currentBatchId).toPromise(),
-        this.tauriApi.getBatchProgress(this.currentBatchId).toPromise()
-      ]);
-
-      // 找到当前批次
-      const currentBatch = (batchInfo || []).find(b => b.batch_id === this.currentBatchId);
-      if (!currentBatch) {
-        throw new Error('未找到指定的测试批次');
+    // 创建示例通道定义
+    const sampleDefinitions: ChannelPointDefinition[] = [
+      {
+        id: 'def_001',
+        tag: 'AI001',
+        variable_name: 'Temperature_1',
+        description: '温度传感器1',
+        station_name: 'Station1',
+        module_name: 'Module1',
+        module_type: ModuleType.AI,
+        channel_number: 'CH01',
+        point_data_type: PointDataType.Float,
+        plc_communication_address: 'DB1.DBD0',
+        analog_range_min: 0,
+        analog_range_max: 100,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'def_002',
+        tag: 'DI001',
+        variable_name: 'Switch_1',
+        description: '开关状态1',
+        station_name: 'Station1',
+        module_name: 'Module2',
+        module_type: ModuleType.DI,
+        channel_number: 'CH01',
+        point_data_type: PointDataType.Bool,
+        plc_communication_address: 'I0.0',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
+    ];
 
-      this.executionData = {
-        batch: currentBatch,
-        instances: instances || [],
-        definitions: definitions || [],
-        outcomes: outcomes || [],
-        progress: progress || []
-      };
+    // 创建批次信息
+    const batchInfo: TestBatchInfo = {
+      batch_id: 'batch_' + Date.now(),
+      product_model: this.newBatch.product_model,
+      serial_number: this.newBatch.serial_number,
+      operator_name: this.newBatch.operator_name,
+      total_points: sampleDefinitions.length,
+      passed_points: 0,
+      failed_points: 0,
+      overall_status: OverallTestStatus.NotTested,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
 
-      this.updateStatistics();
-      this.updateTestStatus();
+    // 创建测试执行请求
+    const request: TestExecutionRequest = {
+      batch_info: batchInfo,
+      channel_definitions: sampleDefinitions,
+      max_concurrent_tests: 3,
+      auto_start: this.autoStart
+    };
 
-    } catch (error) {
-      console.error('加载测试执行数据失败:', error);
-      this.error = '加载数据失败，请稍后重试';
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-  updateStatistics() {
-    if (!this.executionData) return;
-
-    const instances = this.executionData.instances;
-    this.statistics.total = instances.length;
-    this.statistics.completed = instances.filter(i => 
-      i.overall_status === OverallTestStatus.Completed
-    ).length;
-    this.statistics.failed = instances.filter(i => 
-      i.overall_status === OverallTestStatus.Failed
-    ).length;
-    this.statistics.inProgress = instances.filter(i => 
-      i.overall_status === OverallTestStatus.InProgress
-    ).length;
-    this.statistics.notStarted = instances.filter(i => 
-      i.overall_status === OverallTestStatus.NotStarted
-    ).length;
-    this.statistics.passed = this.statistics.completed - this.statistics.failed;
-    
-    this.statistics.successRate = this.statistics.total > 0 
-      ? Math.round((this.statistics.passed / this.statistics.total) * 100) 
-      : 0;
-  }
-
-  updateTestStatus() {
-    if (!this.executionData) return;
-
-    const batch = this.executionData.batch;
-    this.isTestRunning = batch.overall_status === OverallTestStatus.InProgress;
-    this.isPaused = false; // TODO: 添加暂停状态检测
-  }
-
-  startAutoRefresh() {
-    if (this.autoRefresh) {
-      const refreshSub = interval(this.refreshInterval).subscribe(() => {
-        if (this.currentBatchId && this.isTestRunning) {
-          this.loadTestExecution();
+    // 提交请求
+    this.tauriApi.submitTestExecution(request).subscribe({
+      next: (response: TestExecutionResponse) => {
+        this.isLoading = false;
+        this.currentBatchId = response.batch_id;
+        this.currentBatchStatus = response.status;
+        this.currentInstanceCount = response.instance_count;
+        
+        this.addLog('success', `批次创建成功: ${response.message}`);
+        
+        if (this.autoStart) {
+          this.startProgressPolling();
         }
-      });
-      this.subscriptions.push(refreshSub);
-    }
+      },
+      error: (error) => {
+        this.isLoading = false;
+        this.addLog('error', `批次创建失败: ${error}`);
+      }
+    });
   }
 
-  // 测试控制方法
-  async startTest() {
+  // 开始批次测试
+  startBatch() {
     if (!this.currentBatchId) return;
 
-    try {
-      this.loadingMessage = '启动测试...';
-      await this.tauriApi.startBatchTesting(this.currentBatchId).toPromise();
-      this.isTestRunning = true;
-      this.loadTestExecution();
-    } catch (error) {
-      console.error('启动测试失败:', error);
-      this.error = '启动测试失败';
-    }
+    this.addLog('info', '开始批次测试...');
+    this.tauriApi.startBatchTesting(this.currentBatchId).subscribe({
+      next: () => {
+        this.currentBatchStatus = 'running';
+        this.addLog('success', '批次测试已开始');
+        this.startProgressPolling();
+      },
+      error: (error) => {
+        this.addLog('error', `开始测试失败: ${error}`);
+      }
+    });
   }
 
-  async pauseTest() {
+  // 暂停批次测试
+  pauseBatch() {
     if (!this.currentBatchId) return;
 
-    try {
-      this.loadingMessage = '暂停测试...';
-      await this.tauriApi.pauseBatchTesting(this.currentBatchId).toPromise();
-      this.isPaused = true;
-      this.loadTestExecution();
-    } catch (error) {
-      console.error('暂停测试失败:', error);
-      this.error = '暂停测试失败';
-    }
+    this.addLog('info', '暂停批次测试...');
+    this.tauriApi.pauseBatchTesting(this.currentBatchId).subscribe({
+      next: () => {
+        this.currentBatchStatus = 'paused';
+        this.addLog('warning', '批次测试已暂停');
+        this.stopProgressPolling();
+      },
+      error: (error) => {
+        this.addLog('error', `暂停测试失败: ${error}`);
+      }
+    });
   }
 
-  async resumeTest() {
+  // 恢复批次测试
+  resumeBatch() {
     if (!this.currentBatchId) return;
 
-    try {
-      this.loadingMessage = '恢复测试...';
-      await this.tauriApi.resumeBatchTesting(this.currentBatchId).toPromise();
-      this.isPaused = false;
-      this.loadTestExecution();
-    } catch (error) {
-      console.error('恢复测试失败:', error);
-      this.error = '恢复测试失败';
-    }
+    this.addLog('info', '恢复批次测试...');
+    this.tauriApi.resumeBatchTesting(this.currentBatchId).subscribe({
+      next: () => {
+        this.currentBatchStatus = 'running';
+        this.addLog('success', '批次测试已恢复');
+        this.startProgressPolling();
+      },
+      error: (error) => {
+        this.addLog('error', `恢复测试失败: ${error}`);
+      }
+    });
   }
 
-  async stopTest() {
+  // 停止批次测试
+  stopBatch() {
     if (!this.currentBatchId) return;
 
-    if (!confirm('确定要停止当前测试吗？这将终止所有正在进行的测试任务。')) {
-      return;
+    this.addLog('info', '停止批次测试...');
+    this.tauriApi.stopBatchTesting(this.currentBatchId).subscribe({
+      next: () => {
+        this.currentBatchStatus = 'stopped';
+        this.addLog('warning', '批次测试已停止');
+        this.stopProgressPolling();
+      },
+      error: (error) => {
+        this.addLog('error', `停止测试失败: ${error}`);
+      }
+    });
+  }
+
+  // 清理批次
+  cleanupBatch() {
+    if (!this.currentBatchId) return;
+
+    this.addLog('info', '清理批次...');
+    this.tauriApi.cleanupCompletedBatch(this.currentBatchId).subscribe({
+      next: () => {
+        this.addLog('success', '批次已清理');
+        this.resetState();
+      },
+      error: (error) => {
+        this.addLog('error', `清理批次失败: ${error}`);
+      }
+    });
+  }
+
+  // 开始进度轮询
+  private startProgressPolling() {
+    if (this.progressPolling) {
+      this.progressPolling.unsubscribe();
     }
 
-    try {
-      this.loadingMessage = '停止测试...';
-      await this.tauriApi.stopBatchTesting(this.currentBatchId).toPromise();
-      this.isTestRunning = false;
-      this.isPaused = false;
-      this.loadTestExecution();
-    } catch (error) {
-      console.error('停止测试失败:', error);
-      this.error = '停止测试失败';
+    this.progressPolling = interval(2000).subscribe(() => {
+      if (this.currentBatchId) {
+        this.updateProgress();
+        this.updateResults();
+      }
+    });
+  }
+
+  // 停止进度轮询
+  private stopProgressPolling() {
+    if (this.progressPolling) {
+      this.progressPolling.unsubscribe();
+      this.progressPolling = null;
     }
   }
 
-  // 数据获取和显示方法
-  getFilteredInstances(): ChannelTestInstance[] {
-    if (!this.executionData) return [];
+  // 更新进度
+  private updateProgress() {
+    if (!this.currentBatchId) return;
 
-    let filtered = this.executionData.instances;
-
-    // 状态筛选
-    if (this.statusFilter) {
-      filtered = filtered.filter(instance => 
-        instance.overall_status === this.statusFilter
-      );
-    }
-
-    // 模块类型筛选
-    if (this.moduleTypeFilter) {
-      const definitions = this.executionData.definitions;
-      filtered = filtered.filter(instance => {
-        const definition = definitions.find(d => d.id === instance.definition_id);
-        return definition?.module_type === this.moduleTypeFilter;
-      });
-    }
-
-    // 搜索筛选
-    if (this.searchTerm) {
-      const definitions = this.executionData.definitions;
-      const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(instance => {
-        const definition = definitions.find(d => d.id === instance.definition_id);
-        return definition?.tag.toLowerCase().includes(term) ||
-               definition?.description.toLowerCase().includes(term);
-      });
-    }
-
-    // 只显示失败项
-    if (this.showOnlyFailed) {
-      filtered = filtered.filter(instance => 
-        instance.overall_status === OverallTestStatus.Failed
-      );
-    }
-
-    return filtered;
+    this.tauriApi.getBatchProgress(this.currentBatchId).subscribe({
+      next: (progress) => {
+        this.progressUpdates = progress;
+      },
+      error: (error) => {
+        console.error('获取进度失败:', error);
+      }
+    });
   }
 
-  getDefinitionForInstance(instance: ChannelTestInstance): ChannelPointDefinition | undefined {
-    return this.executionData?.definitions.find(d => d.id === instance.definition_id);
+  // 更新结果
+  private updateResults() {
+    if (!this.currentBatchId) return;
+
+    this.tauriApi.getBatchResults(this.currentBatchId).subscribe({
+      next: (results) => {
+        this.testResults = results;
+      },
+      error: (error) => {
+        console.error('获取结果失败:', error);
+      }
+    });
   }
 
-  getLatestOutcomeForInstance(instance: ChannelTestInstance): RawTestOutcome | undefined {
-    if (!this.executionData) return undefined;
+  // 重置状态
+  private resetState() {
+    this.currentBatchId = null;
+    this.currentBatchStatus = 'unknown';
+    this.currentInstanceCount = 0;
+    this.progressUpdates = [];
+    this.testResults = [];
+    this.stopProgressPolling();
+  }
+
+  // 添加日志
+  private addLog(level: string, message: string) {
+    this.logs.unshift({
+      timestamp: new Date().toISOString(),
+      level,
+      message
+    });
+
+    // 限制日志数量
+    if (this.logs.length > 100) {
+      this.logs = this.logs.slice(0, 100);
+    }
+  }
+
+  // 辅助方法
+  canStart(): boolean {
+    return this.currentBatchId !== null && 
+           (this.currentBatchStatus === 'submitted' || this.currentBatchStatus === 'paused');
+  }
+
+  canPause(): boolean {
+    return this.currentBatchId !== null && this.currentBatchStatus === 'running';
+  }
+
+  canResume(): boolean {
+    return this.currentBatchId !== null && this.currentBatchStatus === 'paused';
+  }
+
+  canStop(): boolean {
+    return this.currentBatchId !== null && 
+           (this.currentBatchStatus === 'running' || this.currentBatchStatus === 'paused');
+  }
+
+  canCleanup(): boolean {
+    return this.currentBatchId !== null && 
+           (this.currentBatchStatus === 'stopped' || this.currentBatchStatus === 'completed');
+  }
+
+  getOverallProgress(): number {
+    if (this.progressUpdates.length === 0) return 0;
     
-    return this.executionData.outcomes
-      .filter(o => o.instance_id === instance.instance_id)
-      .sort((a, b) => new Date(b.test_timestamp).getTime() - new Date(a.test_timestamp).getTime())[0];
+    const totalProgress = this.progressUpdates.reduce((sum, progress) => {
+      return sum + this.getProgressPercentage(progress);
+    }, 0);
+    
+    return Math.round(totalProgress / this.progressUpdates.length);
+  }
+
+  getCompletedInstances(): number {
+    return this.progressUpdates.filter(p => 
+      p.completed_sub_tests >= p.total_sub_tests
+    ).length;
+  }
+
+  getProgressPercentage(progress: TestProgressUpdate): number {
+    if (progress.total_sub_tests === 0) return 0;
+    return Math.round((progress.completed_sub_tests / progress.total_sub_tests) * 100);
   }
 
   getStatusClass(status: OverallTestStatus): string {
-    const classMap: { [key in OverallTestStatus]: string } = {
-      [OverallTestStatus.NotStarted]: 'status-not-started',
-      [OverallTestStatus.InProgress]: 'status-in-progress',
-      [OverallTestStatus.Completed]: 'status-completed',
-      [OverallTestStatus.Failed]: 'status-failed',
-      [OverallTestStatus.Cancelled]: 'status-cancelled'
-    };
-    return classMap[status] || 'status-unknown';
+    return status.toString().toLowerCase().replace(/_/g, '-');
   }
 
   getStatusLabel(status: OverallTestStatus): string {
-    return OVERALL_TEST_STATUS_LABELS[status] || '未知';
+    const labels: {[key: string]: string} = {
+      'NotTested': '未测试',
+      'HardPointTesting': '硬点测试中',
+      'TestCompletedPassed': '测试通过',
+      'TestCompletedFailed': '测试失败'
+    };
+    return labels[status] || status;
+  }
+
+  getSubTestItemLabel(item: string): string {
+    const labels: {[key: string]: string} = {
+      'HardPoint': '硬点测试',
+      'LowLowAlarm': '低低报警',
+      'LowAlarm': '低报警',
+      'HighAlarm': '高报警',
+      'HighHighAlarm': '高高报警',
+      'StateDisplay': '状态显示'
+    };
+    return labels[item] || item;
+  }
+
+  getSuccessCount(): number {
+    return this.testResults.filter(r => r.success).length;
+  }
+
+  getFailureCount(): number {
+    return this.testResults.filter(r => !r.success).length;
   }
 
   formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString('zh-CN');
-  }
-
-  formatDuration(startTime?: string, endTime?: string): string {
-    if (!startTime) return '未开始';
-    if (!endTime) return '进行中';
-    
-    const start = new Date(startTime).getTime();
-    const end = new Date(endTime).getTime();
-    const duration = Math.round((end - start) / 1000);
-    
-    if (duration < 60) return `${duration}秒`;
-    if (duration < 3600) return `${Math.round(duration / 60)}分钟`;
-    return `${Math.round(duration / 3600)}小时`;
-  }
-
-  // 导航和操作方法
-  goToDashboard() {
-    this.router.navigate(['/dashboard']);
-  }
-
-  goToBatchManagement() {
-    this.router.navigate(['/batch-management']);
-  }
-
-  exportResults() {
-    if (!this.currentBatchId) return;
-    console.log('导出测试结果:', this.currentBatchId);
-    // TODO: 实现结果导出功能
-  }
-
-  refreshData() {
-    this.loadTestExecution();
-  }
-
-  toggleAutoRefresh() {
-    this.autoRefresh = !this.autoRefresh;
-    if (this.autoRefresh) {
-      this.startAutoRefresh();
-    } else {
-      // 停止自动刷新
-      this.subscriptions.forEach(sub => sub.unsubscribe());
-      this.subscriptions = [];
-    }
   }
 }
