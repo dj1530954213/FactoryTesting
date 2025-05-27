@@ -65,7 +65,24 @@ impl SqliteOrmPersistenceService {
         let db_url = if determined_db_file_path.to_str() == Some(":memory:") {
             "sqlite::memory:".to_string()
         } else {
-            format!("{}{}", SQLITE_URL_PREFIX, determined_db_file_path.to_string_lossy())
+            // 确保使用绝对路径，并正确处理Windows路径
+            let absolute_path = if determined_db_file_path.is_absolute() {
+                determined_db_file_path.clone()
+            } else {
+                std::env::current_dir()
+                    .map_err(|e| AppError::io_error("获取当前目录失败".to_string(), e.kind().to_string()))?
+                    .join(&determined_db_file_path)
+            };
+            
+            // 在Windows上，需要使用正确的路径格式
+            #[cfg(windows)]
+            {
+                format!("sqlite:///{}", absolute_path.to_string_lossy().replace('\\', "/"))
+            }
+            #[cfg(not(windows))]
+            {
+                format!("sqlite://{}", absolute_path.to_string_lossy())
+            }
         };
 
         if determined_db_file_path.to_str() != Some(":memory:") {
@@ -117,7 +134,19 @@ impl SqliteOrmPersistenceService {
         db.execute(backend.build(&stmt_raw_test_outcomes))
             .await.map_err(|e| AppError::persistence_error(format!("创建 raw_test_outcomes 表失败: {}", e)))?;
 
-        // 可以添加更多的表创建逻辑...
+        // 创建测试PLC配置相关表
+        let stmt_test_plc_channel_configs = schema.create_table_from_entity(entities::test_plc_channel_config::Entity).if_not_exists().to_owned();
+        db.execute(backend.build(&stmt_test_plc_channel_configs))
+            .await.map_err(|e| AppError::persistence_error(format!("创建 test_plc_channel_configs 表失败: {}", e)))?;
+
+        let stmt_plc_connection_configs = schema.create_table_from_entity(entities::plc_connection_config::Entity).if_not_exists().to_owned();
+        db.execute(backend.build(&stmt_plc_connection_configs))
+            .await.map_err(|e| AppError::persistence_error(format!("创建 plc_connection_configs 表失败: {}", e)))?;
+
+        let stmt_channel_mapping_configs = schema.create_table_from_entity(entities::channel_mapping_config::Entity).if_not_exists().to_owned();
+        db.execute(backend.build(&stmt_channel_mapping_configs))
+            .await.map_err(|e| AppError::persistence_error(format!("创建 channel_mapping_configs 表失败: {}", e)))?;
+
         log::info!("数据库表结构设置完成或已存在。");
         Ok(())
     }
@@ -303,13 +332,194 @@ impl PersistenceService for SqliteOrmPersistenceService {
         Ok(models.iter().map(|m| m.into()).collect())
     }
 
-    async fn load_test_outcomes_by_batch(&self, _batch_id: &str) -> AppResult<Vec<RawTestOutcome>> {
-        log::warn!("load_test_outcomes_by_batch 当前实现为加载所有 RawTestOutcome，请根据实际需求调整。");
+    /// 按批次ID查询测试结果
+    async fn load_test_outcomes_by_batch(&self, batch_id: &str) -> AppResult<Vec<RawTestOutcome>> {
+        // 由于 raw_test_outcome 表中没有直接的 test_batch_id 字段，
+        // 我们需要通过 channel_test_instance 表来关联查询
+        // 这里先简化实现，返回所有测试结果
+        // TODO: 实现正确的关联查询
         let models = entities::raw_test_outcome::Entity::find()
             .all(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("加载批次 {} 的所有测试结果失败 (简化实现): {}", _batch_id, e)))?;
+            .map_err(|e| AppError::persistence_error(format!("按批次ID查询测试结果失败: {}", e)))?;
+        
+        // 过滤属于指定批次的结果
+        // 这需要通过 channel_instance_id 关联到 channel_test_instance 表
+        // 暂时返回所有结果，后续可以优化为正确的关联查询
         Ok(models.iter().map(|m| m.into()).collect())
+    }
+
+    // 测试PLC配置相关方法
+    
+    /// 保存测试PLC通道配置
+    async fn save_test_plc_channel(&self, channel: &crate::models::test_plc_config::TestPlcChannelConfig) -> AppResult<()> {
+        use sea_orm::{ActiveModelTrait, Set};
+        
+        debug!("开始保存测试PLC通道配置: ID={:?}, 地址={}", channel.id, channel.channel_address);
+        
+        let active_model: entities::test_plc_channel_config::ActiveModel = channel.into();
+        
+        // 检查是否有ID，如果有ID则尝试更新，否则插入
+        if let Some(id) = &channel.id {
+            debug!("通道配置有ID，检查是否存在: {}", id);
+            
+            // 检查记录是否存在
+            let existing = entities::test_plc_channel_config::Entity::find_by_id(id.clone())
+                .one(self.db_conn.as_ref())
+                .await
+                .map_err(|e| {
+                    error!("检查测试PLC通道配置是否存在失败: {}", e);
+                    AppError::persistence_error(format!("检查测试PLC通道配置是否存在失败: {}", e))
+                })?;
+            
+            if existing.is_some() {
+                debug!("记录存在，执行更新操作");
+                // 记录存在，执行更新
+                active_model.update(self.db_conn.as_ref())
+                    .await
+                    .map_err(|e| {
+                        error!("更新测试PLC通道配置失败: {}", e);
+                        AppError::persistence_error(format!("更新测试PLC通道配置失败: {}", e))
+                    })?;
+                info!("测试PLC通道配置更新成功: {}", channel.channel_address);
+            } else {
+                debug!("记录不存在，执行插入操作");
+                // 记录不存在，执行插入
+                active_model.insert(self.db_conn.as_ref())
+                    .await
+                    .map_err(|e| {
+                        error!("插入测试PLC通道配置失败: {}", e);
+                        AppError::persistence_error(format!("插入测试PLC通道配置失败: {}", e))
+                    })?;
+                info!("测试PLC通道配置插入成功: {}", channel.channel_address);
+            }
+        } else {
+            debug!("通道配置无ID，执行插入操作");
+            // 没有ID，执行插入
+            active_model.insert(self.db_conn.as_ref())
+                .await
+                .map_err(|e| {
+                    error!("插入新测试PLC通道配置失败: {}", e);
+                    AppError::persistence_error(format!("插入新测试PLC通道配置失败: {}", e))
+                })?;
+            info!("新测试PLC通道配置插入成功: {}", channel.channel_address);
+        }
+        
+        debug!("测试PLC通道配置保存操作完成");
+        Ok(())
+    }
+    
+    /// 加载测试PLC通道配置
+    async fn load_test_plc_channel(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::TestPlcChannelConfig>> {
+        let model = entities::test_plc_channel_config::Entity::find_by_id(id.to_string())
+            .one(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载测试PLC通道配置失败: {}", e)))?;
+        Ok(model.map(|m| (&m).into()))
+    }
+    
+    /// 加载所有测试PLC通道配置
+    async fn load_all_test_plc_channels(&self) -> AppResult<Vec<crate::models::test_plc_config::TestPlcChannelConfig>> {
+        let models = entities::test_plc_channel_config::Entity::find()
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载所有测试PLC通道配置失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+    
+    /// 删除测试PLC通道配置
+    async fn delete_test_plc_channel(&self, id: &str) -> AppResult<()> {
+        let delete_result = entities::test_plc_channel_config::Entity::delete_by_id(id.to_string())
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("删除测试PLC通道配置失败: {}", e)))?;
+        if delete_result.rows_affected == 0 {
+            Err(AppError::not_found_error("TestPlcChannelConfig", format!("未找到ID为 {} 的测试PLC通道配置进行删除", id)))
+        } else {
+            Ok(())
+        }
+    }
+    
+    /// 保存PLC连接配置
+    async fn save_plc_connection(&self, connection: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<()> {
+        let active_model: entities::plc_connection_config::ActiveModel = connection.into();
+        entities::plc_connection_config::Entity::insert(active_model)
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("保存PLC连接配置失败: {}", e)))?;
+        Ok(())
+    }
+    
+    /// 加载PLC连接配置
+    async fn load_plc_connection(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::PlcConnectionConfig>> {
+        let model = entities::plc_connection_config::Entity::find_by_id(id.to_string())
+            .one(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载PLC连接配置失败: {}", e)))?;
+        Ok(model.map(|m| (&m).into()))
+    }
+    
+    /// 加载所有PLC连接配置
+    async fn load_all_plc_connections(&self) -> AppResult<Vec<crate::models::test_plc_config::PlcConnectionConfig>> {
+        let models = entities::plc_connection_config::Entity::find()
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载所有PLC连接配置失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+    
+    /// 删除PLC连接配置
+    async fn delete_plc_connection(&self, id: &str) -> AppResult<()> {
+        let delete_result = entities::plc_connection_config::Entity::delete_by_id(id.to_string())
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("删除PLC连接配置失败: {}", e)))?;
+        if delete_result.rows_affected == 0 {
+            Err(AppError::not_found_error("PlcConnectionConfig", format!("未找到ID为 {} 的PLC连接配置进行删除", id)))
+        } else {
+            Ok(())
+        }
+    }
+    
+    /// 保存通道映射配置
+    async fn save_channel_mapping(&self, mapping: &crate::models::test_plc_config::ChannelMappingConfig) -> AppResult<()> {
+        let active_model: entities::channel_mapping_config::ActiveModel = mapping.into();
+        entities::channel_mapping_config::Entity::insert(active_model)
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("保存通道映射配置失败: {}", e)))?;
+        Ok(())
+    }
+    
+    /// 加载通道映射配置
+    async fn load_channel_mapping(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::ChannelMappingConfig>> {
+        let model = entities::channel_mapping_config::Entity::find_by_id(id.to_string())
+            .one(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载通道映射配置失败: {}", e)))?;
+        Ok(model.map(|m| (&m).into()))
+    }
+    
+    /// 加载所有通道映射配置
+    async fn load_all_channel_mappings(&self) -> AppResult<Vec<crate::models::test_plc_config::ChannelMappingConfig>> {
+        let models = entities::channel_mapping_config::Entity::find()
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载所有通道映射配置失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+    
+    /// 删除通道映射配置
+    async fn delete_channel_mapping(&self, id: &str) -> AppResult<()> {
+        let delete_result = entities::channel_mapping_config::Entity::delete_by_id(id.to_string())
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("删除通道映射配置失败: {}", e)))?;
+        if delete_result.rows_affected == 0 {
+            Err(AppError::not_found_error("ChannelMappingConfig", format!("未找到ID为 {} 的通道映射配置进行删除", id)))
+        } else {
+            Ok(())
+        }
     }
 }
 

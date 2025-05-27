@@ -69,6 +69,44 @@ pub trait PersistenceService: BaseService {
     
     /// 按批次ID查询测试结果
     async fn load_test_outcomes_by_batch(&self, batch_id: &str) -> AppResult<Vec<RawTestOutcome>>;
+    
+    /// 测试PLC配置相关方法
+    
+    /// 保存测试PLC通道配置
+    async fn save_test_plc_channel(&self, channel: &crate::models::test_plc_config::TestPlcChannelConfig) -> AppResult<()>;
+    
+    /// 加载测试PLC通道配置
+    async fn load_test_plc_channel(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::TestPlcChannelConfig>>;
+    
+    /// 加载所有测试PLC通道配置
+    async fn load_all_test_plc_channels(&self) -> AppResult<Vec<crate::models::test_plc_config::TestPlcChannelConfig>>;
+    
+    /// 删除测试PLC通道配置
+    async fn delete_test_plc_channel(&self, id: &str) -> AppResult<()>;
+    
+    /// 保存PLC连接配置
+    async fn save_plc_connection(&self, connection: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<()>;
+    
+    /// 加载PLC连接配置
+    async fn load_plc_connection(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::PlcConnectionConfig>>;
+    
+    /// 加载所有PLC连接配置
+    async fn load_all_plc_connections(&self) -> AppResult<Vec<crate::models::test_plc_config::PlcConnectionConfig>>;
+    
+    /// 删除PLC连接配置
+    async fn delete_plc_connection(&self, id: &str) -> AppResult<()>;
+    
+    /// 保存通道映射配置
+    async fn save_channel_mapping(&self, mapping: &crate::models::test_plc_config::ChannelMappingConfig) -> AppResult<()>;
+    
+    /// 加载通道映射配置
+    async fn load_channel_mapping(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::ChannelMappingConfig>>;
+    
+    /// 加载所有通道映射配置
+    async fn load_all_channel_mappings(&self) -> AppResult<Vec<crate::models::test_plc_config::ChannelMappingConfig>>;
+    
+    /// 删除通道映射配置
+    async fn delete_channel_mapping(&self, id: &str) -> AppResult<()>;
 }
 
 /// PLC通信服务trait

@@ -250,4 +250,7 @@ export interface ReportGenerationRequest {
     custom_title?: string;
     custom_description?: string;
   };
-} 
+}
+
+// 新增测试PLC配置模型导出
+export * from './test-plc-config.model'; 

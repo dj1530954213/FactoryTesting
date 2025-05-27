@@ -10,6 +10,9 @@ pub mod specific_test_executors;
 /// 测试执行引擎 - 管理和并发执行测试序列
 pub mod test_execution_engine;
 
+/// 测试PLC配置服务 - 管理测试PLC配置
+pub mod test_plc_config_service;
+
 // 重新导出常用类型
 pub use channel_state_manager::{IChannelStateManager, ChannelStateManager};
 pub use specific_test_executors::{
@@ -23,4 +26,5 @@ pub use test_execution_engine::{
     TestExecutionEngine,
     TaskStatus,
     TestTask
-}; 
+};
+pub use test_plc_config_service::{ITestPlcConfigService, TestPlcConfigService}; 

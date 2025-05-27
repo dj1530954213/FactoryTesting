@@ -7,12 +7,22 @@ license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
+default-run = "app"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# 二进制配置
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+[[bin]]
+name = "create_db"
+path = "src/bin/create_db.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.2.0", features = [] }

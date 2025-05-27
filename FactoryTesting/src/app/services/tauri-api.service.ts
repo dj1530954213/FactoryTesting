@@ -221,13 +221,13 @@ export class TauriApiService {
    * 检查是否在Tauri环境中运行
    */
   isTauriEnvironment(): boolean {
-    const hasTauri = typeof window !== 'undefined' && window.__TAURI__;
+    const hasTauri = typeof window !== 'undefined' && !!window.__TAURI__;
     const hasInvoke = typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
     
     console.log('Tauri环境检测:');
     console.log('  window存在:', typeof window !== 'undefined');
     console.log('  __TAURI__存在:', typeof window !== 'undefined' && !!window.__TAURI__);
-    console.log('  invoke函数存在:', hasInvoke);
+    console.log('  invoke函数存在:', !!hasInvoke);
     console.log('  最终结果:', hasTauri);
     
     return hasTauri;
@@ -341,5 +341,19 @@ export class TauriApiService {
       .subscribe(status => {
         this.systemStatusSubject.next(status);
       });
+  }
+
+  /**
+   * 自动分配批次 - 根据导入的通道定义自动创建测试批次和实例
+   */
+  autoAllocateBatch(batchData: any): Observable<any> {
+    return from(invoke('auto_allocate_batch_cmd', { batchData }));
+  }
+
+  /**
+   * 解析Excel文件并自动创建批次
+   */
+  parseExcelAndCreateBatch(filePath: string, fileName: string): Observable<any> {
+    return from(invoke('parse_excel_and_create_batch_cmd', { filePath, fileName }));
   }
 } 

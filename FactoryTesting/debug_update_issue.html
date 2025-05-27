@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试PLC配置更新问题调试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #f6f6f6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .info {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>测试PLC配置更新问题调试</h1>
+        
+        <div class="test-section">
+            <h3>1. 获取现有通道配置</h3>
+            <button onclick="getChannels()">获取通道配置</button>
+            <div id="channels-result" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. 更新通道配置测试</h3>
+            <button onclick="updateFirstChannel()" id="update-btn">更新第一个通道</button>
+            <div id="update-result" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. 应用状态监控</h3>
+            <button onclick="startMonitoring()" id="monitor-btn">开始监控</button>
+            <button onclick="stopMonitoring()" id="stop-monitor-btn">停止监控</button>
+            <div id="monitor-result" class="log"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. 调试日志</h3>
+            <button onclick="clearLogs()">清除日志</button>
+            <div id="debug-log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let channels = [];
+        let monitorInterval = null;
+        
+        function log(message, type = 'info') {
+            const debugLog = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            debugLog.appendChild(logEntry);
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLogs() {
+            document.getElementById('debug-log').innerHTML = '';
+            document.getElementById('channels-result').innerHTML = '';
+            document.getElementById('update-result').innerHTML = '';
+            document.getElementById('monitor-result').innerHTML = '';
+        }
+
+        async function getChannels() {
+            try {
+                log('开始获取通道配置...', 'info');
+                
+                const result = await window.__TAURI__.core.invoke('get_test_plc_channels_cmd', {
+                    channelTypeFilter: null,
+                    enabledOnly: null
+                });
+                
+                channels = result;
+                log(`成功获取 ${channels.length} 个通道配置`, 'success');
+                
+                const resultDiv = document.getElementById('channels-result');
+                resultDiv.innerHTML = `
+                    <div class="success">成功获取 ${channels.length} 个通道配置</div>
+                    <pre>${JSON.stringify(channels.slice(0, 3), null, 2)}</pre>
+                    ${channels.length > 3 ? '<div>... (显示前3个)</div>' : ''}
+                `;
+                
+                // 启用更新按钮
+                document.getElementById('update-btn').disabled = false;
+                
+            } catch (error) {
+                log(`获取通道配置失败: ${error}`, 'error');
+                document.getElementById('channels-result').innerHTML = 
+                    `<div class="error">获取失败: ${error}</div>`;
+            }
+        }
+
+        async function updateFirstChannel() {
+            if (channels.length === 0) {
+                log('请先获取通道配置', 'error');
+                return;
+            }
+
+            try {
+                const updateBtn = document.getElementById('update-btn');
+                updateBtn.disabled = true;
+                updateBtn.textContent = '更新中...';
+                
+                log('开始更新第一个通道配置...', 'info');
+                
+                const firstChannel = { ...channels[0] };
+                // 修改描述以测试更新
+                firstChannel.description = `测试更新 - ${new Date().toLocaleTimeString()}`;
+                
+                log(`更新通道数据: ${JSON.stringify(firstChannel, null, 2)}`, 'info');
+                
+                const result = await window.__TAURI__.core.invoke('save_test_plc_channel_cmd', {
+                    channel: firstChannel
+                });
+                
+                log('通道配置更新成功!', 'success');
+                
+                const resultDiv = document.getElementById('update-result');
+                resultDiv.innerHTML = `
+                    <div class="success">更新成功!</div>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                `;
+                
+                // 检查应用是否还在运行
+                setTimeout(() => {
+                    log('检查应用状态...', 'info');
+                    checkAppStatus();
+                }, 1000);
+                
+            } catch (error) {
+                log(`更新通道配置失败: ${error}`, 'error');
+                document.getElementById('update-result').innerHTML = 
+                    `<div class="error">更新失败: ${error}</div>`;
+            } finally {
+                const updateBtn = document.getElementById('update-btn');
+                updateBtn.disabled = false;
+                updateBtn.textContent = '更新第一个通道';
+            }
+        }
+
+        function startMonitoring() {
+            if (monitorInterval) {
+                log('监控已在运行', 'info');
+                return;
+            }
+            
+            log('开始监控应用状态...', 'info');
+            document.getElementById('monitor-btn').disabled = true;
+            document.getElementById('stop-monitor-btn').disabled = false;
+            
+            monitorInterval = setInterval(() => {
+                checkAppStatus();
+            }, 2000);
+        }
+
+        function stopMonitoring() {
+            if (monitorInterval) {
+                clearInterval(monitorInterval);
+                monitorInterval = null;
+                log('停止监控', 'info');
+                document.getElementById('monitor-btn').disabled = false;
+                document.getElementById('stop-monitor-btn').disabled = true;
+            }
+        }
+
+        async function checkAppStatus() {
+            try {
+                // 尝试调用一个简单的命令来检查应用是否响应
+                await window.__TAURI__.core.invoke('get_test_plc_channels_cmd', {
+                    channelTypeFilter: null,
+                    enabledOnly: null
+                });
+                
+                const monitorDiv = document.getElementById('monitor-result');
+                const timestamp = new Date().toLocaleTimeString();
+                monitorDiv.innerHTML = `<div class="success">[${timestamp}] 应用正常运行</div>`;
+                
+            } catch (error) {
+                log(`应用状态检查失败: ${error}`, 'error');
+                const monitorDiv = document.getElementById('monitor-result');
+                const timestamp = new Date().toLocaleTimeString();
+                monitorDiv.innerHTML = `<div class="error">[${timestamp}] 应用可能已重启或崩溃: ${error}</div>`;
+                
+                // 停止监控
+                stopMonitoring();
+            }
+        }
+
+        // 页面加载时的初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            log('调试页面已加载', 'info');
+            
+            // 检查Tauri API是否可用
+            if (window.__TAURI__) {
+                log('Tauri API 可用', 'success');
+            } else {
+                log('Tauri API 不可用 - 请在Tauri应用中打开此页面', 'error');
+            }
+        });
+
+        // 监听窗口关闭事件
+        window.addEventListener('beforeunload', () => {
+            if (monitorInterval) {
+                clearInterval(monitorInterval);
+            }
+        });
+    </script>
+</body>
+</html> 

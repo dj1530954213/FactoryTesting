@@ -19,6 +19,11 @@ use commands::data_management::{
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
 };
+use commands::test_plc_config::{
+    get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
+    get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
+    get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd
+};
 
 /// 应用程序主要运行函数
 /// 
@@ -78,7 +83,16 @@ pub fn run() {
                 get_batch_status_cmd,
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
-                write_channel_value_cmd
+                write_channel_value_cmd,
+                get_test_plc_channels_cmd,
+                save_test_plc_channel_cmd,
+                delete_test_plc_channel_cmd,
+                get_plc_connections_cmd,
+                save_plc_connection_cmd,
+                test_plc_connection_cmd,
+                get_channel_mappings_cmd,
+                generate_channel_mappings_cmd,
+                initialize_default_test_plc_channels_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

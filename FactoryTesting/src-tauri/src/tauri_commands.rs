@@ -14,7 +14,8 @@ use crate::services::application::{
 };
 use crate::services::domain::{
     IChannelStateManager, ChannelStateManager,
-    ITestExecutionEngine, TestExecutionEngine
+    ITestExecutionEngine, TestExecutionEngine,
+    ITestPlcConfigService, TestPlcConfigService
 };
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
@@ -41,6 +42,7 @@ pub struct AppState {
     pub persistence_service: Arc<dyn IPersistenceService>,
     pub report_generation_service: Arc<dyn IReportGenerationService>,
     pub app_settings_service: Arc<dyn AppSettingsService>,
+    pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
 }
 
 /// 系统状态信息
@@ -57,9 +59,31 @@ impl AppState {
         // 创建数据库配置
         let config = crate::services::infrastructure::persistence::PersistenceConfig::default();
 
-        // 创建持久化服务
+        // 创建持久化服务 - 使用实际的SQLite文件而不是内存数据库
+        let db_file_path = config.storage_root_dir.join("factory_testing_data.sqlite");
+        
+        // 确保数据库目录存在
+        if let Some(parent_dir) = db_file_path.parent() {
+            tokio::fs::create_dir_all(parent_dir).await.map_err(|e| 
+                AppError::io_error(
+                    format!("创建数据库目录失败: {:?}", parent_dir),
+                    e.kind().to_string()
+                )
+            )?;
+        }
+        
+        // 如果数据库文件不存在，创建一个空文件
+        if !db_file_path.exists() {
+            tokio::fs::write(&db_file_path, "").await.map_err(|e| 
+                AppError::io_error(
+                    format!("创建数据库文件失败: {:?}", db_file_path),
+                    e.kind().to_string()
+                )
+            )?;
+        }
+        
         let persistence_service: Arc<dyn IPersistenceService> = Arc::new(
-            SqliteOrmPersistenceService::new(config, Some(std::path::Path::new(":memory:"))).await?
+            SqliteOrmPersistenceService::new(config.clone(), Some(&db_file_path)).await?
         );
 
         // 创建应用配置服务
@@ -109,6 +133,11 @@ impl AppState {
             )?
         );
 
+        // 创建测试PLC配置服务
+        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
+            TestPlcConfigService::new(persistence_service.clone())
+        );
+
         Ok(Self {
             test_coordination_service,
             channel_state_manager,
@@ -116,6 +145,7 @@ impl AppState {
             persistence_service,
             report_generation_service,
             app_settings_service,
+            test_plc_config_service,
         })
     }
 }

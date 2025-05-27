@@ -108,4 +108,23 @@ export class AppComponent implements OnInit, OnDestroy {
   getCurrentTime(): string {
     return new Date().toLocaleTimeString();
   }
+
+  // 获取测试进度百分比
+  getTestProgress(): number {
+    if (!this.systemStatus) {
+      return 0;
+    }
+    
+    // 基于活动任务数量计算进度
+    // 这里可以根据实际业务逻辑调整计算方式
+    const activeTasks = this.systemStatus.active_test_tasks || 0;
+    const maxTasks = 100; // 假设最大任务数为100
+    
+    if (activeTasks === 0) {
+      return 0;
+    }
+    
+    // 简单的进度计算，实际应用中可能需要更复杂的逻辑
+    return Math.min(Math.round((activeTasks / maxTasks) * 100), 100);
+  }
 }

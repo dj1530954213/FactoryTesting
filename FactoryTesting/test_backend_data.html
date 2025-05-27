@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试PLC配置数据验证</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            color: #1890ff;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #f6ffed;
+            border-color: #52c41a;
+        }
+        .error {
+            background-color: #fff2f0;
+            border-color: #ff4d4f;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .data-table th {
+            background-color: #fafafa;
+            font-weight: bold;
+        }
+        button {
+            background-color: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #40a9ff;
+        }
+        .loading {
+            color: #1890ff;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="header">🔍 测试PLC配置数据验证工具</h1>
+        
+        <div class="test-section">
+            <h3>📊 数据获取测试</h3>
+            <button onclick="testGetChannels()">获取测试PLC通道配置</button>
+            <button onclick="testGetConnections()">获取PLC连接配置</button>
+            <button onclick="initializeDefaultData()">初始化默认数据</button>
+            <div id="test-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 数据显示</h3>
+            <div id="data-display"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔧 调试信息</h3>
+            <div id="debug-info"></div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟Tauri API调用（用于测试）
+        const mockTauriInvoke = async (command, args = {}) => {
+            console.log(`🔧 模拟调用: ${command}`, args);
+            
+            // 模拟数据
+            if (command === 'get_test_plc_channels_cmd') {
+                return [
+                    {
+                        id: "1",
+                        channelAddress: "AI1_1",
+                        channelType: 0,
+                        communicationAddress: "40101",
+                        powerSupplyType: "24V DC",
+                        description: "模拟量输入通道 1",
+                        isEnabled: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    },
+                    {
+                        id: "2",
+                        channelAddress: "AI1_2", 
+                        channelType: 0,
+                        communicationAddress: "40103",
+                        powerSupplyType: "24V DC",
+                        description: "模拟量输入通道 2",
+                        isEnabled: true,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    }
+                ];
+            }
+            
+            if (command === 'get_plc_connections_cmd') {
+                return [
+                    {
+                        id: "conn1",
+                        name: "测试PLC连接",
+                        plcType: "ModbusTcp",
+                        ipAddress: "192.168.1.100",
+                        port: 502,
+                        timeout: 5000,
+                        retryCount: 3,
+                        isTestPlc: true,
+                        description: "主测试PLC连接",
+                        isEnabled: true,
+                        connectionStatus: "Disconnected"
+                    }
+                ];
+            }
+            
+            if (command === 'initialize_default_test_plc_channels_cmd') {
+                return null; // 成功返回
+            }
+            
+            throw new Error(`未知命令: ${command}`);
+        };
+
+        // 检查是否在Tauri环境中
+        const isInTauri = typeof window.__TAURI__ !== 'undefined';
+        const invoke = isInTauri ? window.__TAURI__.invoke : mockTauriInvoke;
+
+        function updateResults(elementId, content, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = content;
+            element.className = `test-section ${isSuccess ? 'success' : 'error'}`;
+        }
+
+        function updateDebug(message) {
+            const debugElement = document.getElementById('debug-info');
+            const timestamp = new Date().toLocaleTimeString();
+            debugElement.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        }
+
+        async function testGetChannels() {
+            updateResults('test-results', '<div class="loading">正在获取测试PLC通道配置...</div>');
+            updateDebug('开始获取测试PLC通道配置');
+            
+            try {
+                const channels = await invoke('get_test_plc_channels_cmd', {
+                    channelTypeFilter: null,
+                    enabledOnly: null
+                });
+                
+                updateDebug(`成功获取 ${channels.length} 个通道配置`);
+                
+                let tableHtml = `
+                    <h4>✅ 成功获取 ${channels.length} 个测试PLC通道配置</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>通道位号</th>
+                                <th>通道类型</th>
+                                <th>通讯地址</th>
+                                <th>供电类型</th>
+                                <th>描述</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                channels.forEach(channel => {
+                    const typeLabels = {
+                        0: 'AI', 1: 'AO', 2: 'DI', 3: 'DO',
+                        4: 'AI无源', 5: 'AO无源', 6: 'DI无源', 7: 'DO无源'
+                    };
+                    
+                    tableHtml += `
+                        <tr>
+                            <td>${channel.channelAddress || '❌ 空'}</td>
+                            <td>${typeLabels[channel.channelType] || channel.channelType}</td>
+                            <td>${channel.communicationAddress || '❌ 空'}</td>
+                            <td>${channel.powerSupplyType || '❌ 空'}</td>
+                            <td>${channel.description || '-'}</td>
+                            <td>${channel.isEnabled ? '✅ 启用' : '❌ 禁用'}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += '</tbody></table>';
+                updateResults('test-results', tableHtml, true);
+                
+                // 检查数据完整性
+                const emptyChannelAddress = channels.filter(c => !c.channelAddress).length;
+                const emptyCommunicationAddress = channels.filter(c => !c.communicationAddress).length;
+                
+                if (emptyChannelAddress > 0 || emptyCommunicationAddress > 0) {
+                    updateDebug(`⚠️ 数据完整性问题: ${emptyChannelAddress} 个空通道位号, ${emptyCommunicationAddress} 个空通讯地址`);
+                } else {
+                    updateDebug('✅ 数据完整性检查通过');
+                }
+                
+            } catch (error) {
+                updateDebug(`❌ 获取通道配置失败: ${error.message}`);
+                updateResults('test-results', `<h4>❌ 获取失败</h4><p>错误: ${error.message}</p>`, false);
+            }
+        }
+
+        async function testGetConnections() {
+            updateResults('test-results', '<div class="loading">正在获取PLC连接配置...</div>');
+            updateDebug('开始获取PLC连接配置');
+            
+            try {
+                const connections = await invoke('get_plc_connections_cmd');
+                
+                updateDebug(`成功获取 ${connections.length} 个连接配置`);
+                
+                let tableHtml = `
+                    <h4>✅ 成功获取 ${connections.length} 个PLC连接配置</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>连接名称</th>
+                                <th>PLC类型</th>
+                                <th>IP地址</th>
+                                <th>端口</th>
+                                <th>用途</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                connections.forEach(conn => {
+                    tableHtml += `
+                        <tr>
+                            <td>${conn.name}</td>
+                            <td>${conn.plcType}</td>
+                            <td>${conn.ipAddress}</td>
+                            <td>${conn.port}</td>
+                            <td>${conn.isTestPlc ? '测试PLC' : '被测PLC'}</td>
+                            <td>${conn.connectionStatus}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += '</tbody></table>';
+                updateResults('test-results', tableHtml, true);
+                
+            } catch (error) {
+                updateDebug(`❌ 获取连接配置失败: ${error.message}`);
+                updateResults('test-results', `<h4>❌ 获取失败</h4><p>错误: ${error.message}</p>`, false);
+            }
+        }
+
+        async function initializeDefaultData() {
+            updateResults('test-results', '<div class="loading">正在初始化默认数据...</div>');
+            updateDebug('开始初始化默认数据');
+            
+            try {
+                await invoke('initialize_default_test_plc_channels_cmd');
+                updateDebug('✅ 默认数据初始化成功');
+                updateResults('test-results', '<h4>✅ 默认数据初始化成功</h4><p>88个测试PLC通道配置已创建</p>', true);
+                
+                // 自动获取数据验证
+                setTimeout(() => {
+                    testGetChannels();
+                }, 1000);
+                
+            } catch (error) {
+                updateDebug(`❌ 初始化默认数据失败: ${error.message}`);
+                updateResults('test-results', `<h4>❌ 初始化失败</h4><p>错误: ${error.message}</p>`, false);
+            }
+        }
+
+        // 页面加载时的初始化
+        window.onload = function() {
+            updateDebug(`🚀 页面加载完成，Tauri环境: ${isInTauri ? '是' : '否（使用模拟数据）'}`);
+            
+            if (isInTauri) {
+                updateDebug('🔗 检测到Tauri环境，将使用真实后端API');
+                // 自动测试获取数据
+                setTimeout(() => {
+                    testGetChannels();
+                }, 500);
+            } else {
+                updateDebug('🔧 未检测到Tauri环境，使用模拟数据进行测试');
+                // 显示模拟数据
+                setTimeout(() => {
+                    testGetChannels();
+                }, 500);
+            }
+        };
+    </script>
+</body>
+</html> 

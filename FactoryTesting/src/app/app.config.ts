@@ -1,4 +1,4 @@
-import { ApplicationConfig, provideZoneChangeDetection, importProvidersFrom } from '@angular/core';
+import { ApplicationConfig, provideZoneChangeDetection, importProvidersFrom, ErrorHandler, Injectable } from '@angular/core';
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
@@ -11,6 +11,31 @@ import { provideHttpClient } from '@angular/common/http';
 
 registerLocaleData(zh);
 
+@Injectable()
+export class GlobalErrorHandler implements ErrorHandler {
+  handleError(error: any): void {
+    console.error('全局错误处理器捕获到错误:', error);
+    console.error('错误堆栈:', error.stack);
+    console.error('错误详情:', {
+      message: error.message,
+      name: error.name,
+      cause: error.cause,
+      stack: error.stack
+    });
+    
+    // 不重新抛出错误，避免应用崩溃
+    // throw error;
+  }
+}
+
 export const appConfig: ApplicationConfig = {
-  providers: [provideZoneChangeDetection({ eventCoalescing: true }), provideRouter(routes), provideAnimationsAsync(), provideAnimationsAsync(), provideNzI18n(zh_CN), importProvidersFrom(FormsModule), provideAnimationsAsync(), provideHttpClient()]
+  providers: [
+    provideZoneChangeDetection({ eventCoalescing: true }), 
+    provideRouter(routes), 
+    provideAnimationsAsync(), 
+    provideNzI18n(zh_CN), 
+    importProvidersFrom(FormsModule), 
+    provideHttpClient(),
+    { provide: ErrorHandler, useClass: GlobalErrorHandler }
+  ]
 };

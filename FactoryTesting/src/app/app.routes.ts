@@ -6,38 +6,70 @@ export const routes: Routes = [
     redirectTo: '/dashboard',
     pathMatch: 'full'
   },
+  // 主要功能区域路由
   {
     path: 'dashboard',
     loadComponent: () => import('./components/dashboard/dashboard.component').then(m => m.DashboardComponent)
   },
   {
+    path: 'test-plc-config',
+    loadComponent: () => import('./components/test-plc-config/test-plc-config.component').then(m => m.TestPlcConfigComponent)
+  },
+  {
+    path: 'data-management',
+    loadComponent: () => import('./components/data-management/data-management.component').then(m => m.DataManagementComponent)
+  },
+  {
+    path: 'test-area',
+    loadComponent: () => import('./components/test-area/test-area.component').then(m => m.TestAreaComponent)
+  },
+  {
+    path: 'result-export',
+    loadComponent: () => import('./components/result-export/result-export.component').then(m => m.ResultExportComponent)
+  },
+  {
+    path: 'system-settings',
+    loadComponent: () => import('./components/system-settings/system-settings.component').then(m => m.SystemSettingsComponent)
+  },
+  
+  // 向后兼容的路由重定向
+  {
     path: 'data-import',
-    loadComponent: () => import('./components/data-import/data-import.component').then(m => m.DataImportComponent)
+    redirectTo: '/data-management',
+    pathMatch: 'full'
   },
   {
     path: 'test-execution',
-    loadComponent: () => import('./components/test-execution/test-execution.component').then(m => m.TestExecutionComponent)
+    redirectTo: '/test-area',
+    pathMatch: 'full'
   },
   {
     path: 'batch-management',
-    loadComponent: () => import('./components/batch-management/batch-management.component').then(m => m.BatchManagementComponent)
+    redirectTo: '/test-area',
+    pathMatch: 'full'
   },
   {
     path: 'manual-test',
-    loadComponent: () => import('./components/manual-test/manual-test.component').then(m => m.ManualTestComponent)
+    redirectTo: '/test-area',
+    pathMatch: 'full'
   },
   {
     path: 'settings',
-    loadComponent: () => import('./components/settings/settings.component').then(m => m.SettingsComponent)
+    redirectTo: '/system-settings',
+    pathMatch: 'full'
   },
   {
     path: 'report-generation',
-    loadComponent: () => import('./components/report-generation/report-generation.component').then(m => m.ReportGenerationComponent)
+    redirectTo: '/result-export',
+    pathMatch: 'full'
   },
   {
     path: 'system-monitor',
-    loadComponent: () => import('./components/shared/system-monitor.component').then(m => m.SystemMonitorComponent)
+    redirectTo: '/dashboard',
+    pathMatch: 'full'
   },
+  
+  // 404页面
   {
     path: '**',
     loadComponent: () => import('./components/shared/not-found.component').then(m => m.NotFoundComponent)

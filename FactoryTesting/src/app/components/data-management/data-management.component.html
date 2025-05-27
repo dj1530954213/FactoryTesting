@@ -1,0 +1,221 @@
+<div class="data-management-container">
+  <div class="page-header">
+    <h2>
+      <span nz-icon nzType="database" nzTheme="outline"></span>
+      数据导入及恢复
+    </h2>
+    <p>导入新的点表或恢复之前的数据继续测试</p>
+  </div>
+
+  <!-- 工作流程步骤 -->
+  <nz-card nzTitle="数据管理工作流程" class="workflow-card">
+    <nz-steps [nzCurrent]="currentStep" nzDirection="horizontal">
+      <nz-step nzTitle="选择文件" nzDescription="选择要导入的Excel点表文件"></nz-step>
+      <nz-step nzTitle="数据导入" nzDescription="解析并导入点表数据"></nz-step>
+      <nz-step nzTitle="导入完成" nzDescription="查看导入结果和统计信息"></nz-step>
+    </nz-steps>
+  </nz-card>
+
+  <!-- 数据导入区域 -->
+  <div class="import-section" *ngIf="currentStep <= 2">
+    <nz-card nzTitle="数据导入" class="import-card">
+      <div *ngIf="currentStep === 0" class="file-selection">
+        <nz-alert 
+          nzType="info" 
+          nzMessage="文件选择" 
+          nzDescription="请选择包含测试点表数据的Excel文件。支持.xlsx和.xls格式。"
+          nzShowIcon
+          class="import-alert">
+        </nz-alert>
+        
+        <div class="upload-area">
+          <input 
+            type="file" 
+            accept=".xlsx,.xls" 
+            (change)="onFileSelected($event)"
+            #fileInput
+            style="display: none;">
+          
+          <div class="upload-dragger" (click)="fileInput.click()">
+            <p class="upload-icon">
+              <span nz-icon nzType="inbox" nzTheme="outline"></span>
+            </p>
+            <p class="upload-text">点击或拖拽文件到此区域上传</p>
+            <p class="upload-hint">支持单个Excel文件上传，文件大小不超过10MB</p>
+          </div>
+        </div>
+
+        <div *ngIf="selectedFile" class="selected-file">
+          <nz-tag nzColor="blue">
+            <span nz-icon nzType="file-excel" nzTheme="outline"></span>
+            {{ selectedFile.name }}
+          </nz-tag>
+          <nz-space style="margin-top: 16px;">
+            <button *nzSpaceItem nz-button nzType="primary" (click)="startImport()">
+              <span nz-icon nzType="upload" nzTheme="outline"></span>
+              开始导入
+            </button>
+            <button *nzSpaceItem nz-button nzType="default" (click)="resetImport()">
+              <span nz-icon nzType="reload" nzTheme="outline"></span>
+              重新选择
+            </button>
+          </nz-space>
+        </div>
+      </div>
+
+      <div *ngIf="currentStep === 1" class="import-progress">
+        <nz-alert 
+          nzType="info" 
+          nzMessage="正在导入数据" 
+          nzDescription="系统正在解析Excel文件并导入点表数据，请稍候..."
+          nzShowIcon
+          class="import-alert">
+        </nz-alert>
+        
+        <div class="progress-section">
+          <h4>导入进度</h4>
+          <nz-progress 
+            [nzPercent]="importProgress" 
+            nzStatus="active"
+            [nzShowInfo]="true">
+          </nz-progress>
+        </div>
+      </div>
+
+      <div *ngIf="currentStep === 2 && importResult" class="import-result">
+        <nz-alert 
+          [nzType]="importResult.success ? 'success' : 'error'" 
+          [nzMessage]="importResult.success ? '导入成功' : '导入失败'" 
+          [nzDescription]="getImportResultDescription()"
+          nzShowIcon
+          class="import-alert">
+        </nz-alert>
+        
+        <div class="result-stats">
+          <nz-space nzDirection="vertical" style="width: 100%;">
+            <div *nzSpaceItem class="stat-item">
+              <span class="stat-label">总通道数:</span>
+              <nz-tag nzColor="blue">{{ importResult.totalChannels }}</nz-tag>
+            </div>
+            <div *nzSpaceItem class="stat-item">
+              <span class="stat-label">成功导入:</span>
+              <nz-tag nzColor="green">{{ importResult.successChannels }}</nz-tag>
+            </div>
+            <div *nzSpaceItem class="stat-item" [hidden]="importResult.failedChannels === 0">
+              <span class="stat-label">导入失败:</span>
+              <nz-tag nzColor="red">{{ importResult.failedChannels }}</nz-tag>
+            </div>
+          </nz-space>
+        </div>
+
+        <!-- 自动生成的批次信息 -->
+        <div *ngIf="importResult.batchInfo" class="batch-info">
+          <h4>
+            <span nz-icon nzType="container" nzTheme="outline"></span>
+            自动创建的测试批次
+          </h4>
+          <nz-card nzSize="small" class="batch-card">
+            <nz-space nzDirection="vertical" style="width: 100%;">
+              <div *nzSpaceItem class="batch-item">
+                <span class="batch-label">批次ID:</span>
+                <nz-tag nzColor="purple">{{ importResult.batchInfo.batch_id }}</nz-tag>
+              </div>
+              <div *nzSpaceItem class="batch-item">
+                <span class="batch-label">产品型号:</span>
+                <nz-tag nzColor="blue">{{ importResult.batchInfo.product_model }}</nz-tag>
+              </div>
+              <div *nzSpaceItem class="batch-item">
+                <span class="batch-label">序列号:</span>
+                <nz-tag nzColor="cyan">{{ importResult.batchInfo.serial_number }}</nz-tag>
+              </div>
+              <div *nzSpaceItem class="batch-item">
+                <span class="batch-label">创建时间:</span>
+                <span class="batch-value">{{ formatDateTime(importResult.batchInfo.creation_time) }}</span>
+              </div>
+              <div *nzSpaceItem class="batch-item">
+                <span class="batch-label">状态:</span>
+                <nz-tag nzColor="orange">{{ importResult.batchInfo.status_summary }}</nz-tag>
+              </div>
+            </nz-space>
+          </nz-card>
+        </div>
+
+        <nz-space style="margin-top: 24px;">
+          <button *nzSpaceItem nz-button nzType="primary" (click)="resetImport()">
+            <span nz-icon nzType="plus" nzTheme="outline"></span>
+            导入新文件
+          </button>
+          <button *nzSpaceItem nz-button nzType="default" routerLink="/test-area">
+            <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+            开始测试
+          </button>
+          <button *nzSpaceItem nz-button nzType="default" routerLink="/dashboard">
+            <span nz-icon nzType="dashboard" nzTheme="outline"></span>
+            返回仪表盘
+          </button>
+        </nz-space>
+      </div>
+    </nz-card>
+  </div>
+
+  <!-- 历史数据恢复区域 -->
+  <nz-card nzTitle="历史数据恢复" class="history-card">
+    <nz-alert 
+      nzType="info" 
+      nzMessage="数据恢复" 
+      nzDescription="可以恢复之前保存的测试数据，继续未完成的测试任务。"
+      nzShowIcon
+      class="history-alert">
+    </nz-alert>
+
+    <div class="history-actions">
+      <nz-space>
+        <button *nzSpaceItem nz-button nzType="primary" (click)="showHistoryModal()">
+          <span nz-icon nzType="history" nzTheme="outline"></span>
+          查看历史数据
+        </button>
+        <button *nzSpaceItem nz-button nzType="default" (click)="exportCurrentData()">
+          <span nz-icon nzType="download" nzTheme="outline"></span>
+          导出当前数据
+        </button>
+      </nz-space>
+    </div>
+  </nz-card>
+
+  <!-- 历史数据模态框 -->
+  <nz-modal 
+    [(nzVisible)]="isHistoryModalVisible"
+    nzTitle="历史数据管理"
+    nzWidth="800px"
+    (nzOnCancel)="closeHistoryModal()"
+    [nzFooter]="null">
+    
+    <ng-container *nzModalContent>
+      <div *ngIf="historicalData.length === 0" class="empty-state">
+        <nz-empty nzNotFoundContent="暂无历史数据"></nz-empty>
+      </div>
+      
+      <nz-list *ngIf="historicalData.length > 0" [nzDataSource]="historicalData" nzBordered>
+        <nz-list-item *ngFor="let item of historicalData">
+          <nz-list-item-meta
+            [nzTitle]="item.name"
+            [nzDescription]="'创建时间: ' + item.date + ' | 通道数: ' + item.channelCount">
+          </nz-list-item-meta>
+          
+          <ul nz-list-item-actions>
+            <nz-list-item-action>
+              <nz-tag [nzColor]="getStatusColor(item.status)">
+                {{ getStatusText(item.status) }}
+              </nz-tag>
+            </nz-list-item-action>
+            <nz-list-item-action>
+              <button nz-button nzType="primary" nzSize="small" (click)="restoreData(item)">
+                恢复
+              </button>
+            </nz-list-item-action>
+          </ul>
+        </nz-list-item>
+      </nz-list>
+    </ng-container>
+  </nz-modal>
+</div> 

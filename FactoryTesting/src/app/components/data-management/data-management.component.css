@@ -1,0 +1,246 @@
+.data-management-container {
+  padding: 24px;
+  background: #f5f5f5;
+  min-height: 100vh;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: #1890ff;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.page-header h2 span {
+  margin-right: 8px;
+}
+
+.page-header p {
+  margin: 8px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.workflow-card {
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.import-section {
+  margin-bottom: 24px;
+}
+
+.import-card, .history-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.import-alert, .history-alert {
+  margin-bottom: 24px;
+}
+
+.upload-area {
+  margin: 24px 0;
+}
+
+.upload-dragger {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.upload-dragger:hover {
+  border-color: #1890ff;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #d9d9d9;
+  margin-bottom: 16px;
+}
+
+.upload-text {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.upload-hint {
+  font-size: 14px;
+  color: #999;
+}
+
+.selected-file {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.progress-section {
+  margin: 24px 0;
+}
+
+.progress-section h4 {
+  margin-bottom: 12px;
+  color: #262626;
+}
+
+.import-result {
+  margin-top: 24px;
+}
+
+.result-stats {
+  margin: 24px 0;
+  padding: 16px;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #262626;
+}
+
+.history-actions {
+  margin-top: 24px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .data-management-container {
+    padding: 16px;
+  }
+  
+  .page-header h2 {
+    font-size: 20px;
+  }
+  
+  .upload-dragger {
+    padding: 30px 15px;
+  }
+  
+  .upload-icon {
+    font-size: 36px;
+  }
+}
+
+/* 表单样式优化 */
+.ant-form-item {
+  margin-bottom: 16px;
+}
+
+.ant-btn {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* 状态标签样式 */
+.ant-tag {
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* 卡片样式 */
+.ant-card-head {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ant-card-head-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #262626;
+}
+
+/* 步骤条样式 */
+.ant-steps {
+  margin: 24px 0;
+}
+
+/* 进度条样式 */
+.ant-progress {
+  margin: 16px 0;
+}
+
+/* 模态框样式 */
+.ant-modal-content {
+  border-radius: 8px;
+}
+
+/* 列表样式 */
+.ant-list-item {
+  padding: 16px 24px;
+}
+
+.ant-list-item-meta-title {
+  font-weight: 500;
+  color: #262626;
+}
+
+.ant-list-item-meta-description {
+  color: #666;
+}
+
+/* 批次信息样式 */
+.batch-info {
+  margin: 24px 0;
+  padding: 16px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+
+.batch-info h4 {
+  margin: 0 0 16px 0;
+  color: #0369a1;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.batch-info h4 span {
+  margin-right: 8px;
+}
+
+.batch-card {
+  background: #ffffff;
+  border: 1px solid #e0f2fe;
+}
+
+.batch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.batch-label {
+  font-weight: 500;
+  color: #374151;
+  min-width: 80px;
+}
+
+.batch-value {
+  color: #6b7280;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+} 
