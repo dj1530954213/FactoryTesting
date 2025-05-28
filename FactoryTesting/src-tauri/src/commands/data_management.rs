@@ -660,4 +660,136 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
         ip_address: "127.0.0.1".to_string(),
         comparison_tables,
     })
+}
+
+/// 解析Excel文件并创建批次的参数
+#[derive(Debug, Deserialize)]
+pub struct ParseExcelAndCreateBatchCmdArgs {
+    pub file_path: String,
+    pub file_name: String,
+}
+
+/// 解析Excel文件并创建批次的响应
+#[derive(Debug, Serialize)]
+pub struct ParseExcelAndCreateBatchResponse {
+    pub success: bool,
+    pub message: String,
+    pub batch_id: Option<String>,
+    pub definitions_count: usize,
+    pub batch_info: Option<TestBatchInfo>,
+}
+
+/// 解析Excel文件并自动创建批次
+/// 
+/// 这个命令将Excel解析和批次创建合并为一个操作，
+/// 简化前端的调用流程
+/// 
+/// # 参数
+/// * `args` - 包含文件路径和文件名的参数
+/// * `state` - 应用状态
+/// 
+/// # 返回
+/// * `Result<ParseExcelAndCreateBatchResponse, String>` - 操作结果
+#[tauri::command]
+pub async fn parse_excel_and_create_batch_cmd(
+    args: ParseExcelAndCreateBatchCmdArgs,
+    state: State<'_, AppState>
+) -> Result<ParseExcelAndCreateBatchResponse, String> {
+    info!("收到解析Excel并创建批次请求: 文件={}, 路径={}", args.file_name, args.file_path);
+    
+    // 第一步：解析Excel文件
+    let definitions = match ExcelImporter::parse_excel_file(&args.file_path).await {
+        Ok(defs) => {
+            info!("Excel文件解析成功，共解析{}个通道定义", defs.len());
+            defs
+        }
+        Err(e) => {
+            error!("Excel文件解析失败: {}", e);
+            return Ok(ParseExcelAndCreateBatchResponse {
+                success: false,
+                message: format!("Excel解析失败: {}", e),
+                batch_id: None,
+                definitions_count: 0,
+                batch_info: None,
+            });
+        }
+    };
+    
+    if definitions.is_empty() {
+        warn!("Excel文件中没有找到有效的通道定义");
+        return Ok(ParseExcelAndCreateBatchResponse {
+            success: false,
+            message: "Excel文件中没有找到有效的通道定义".to_string(),
+            batch_id: None,
+            definitions_count: 0,
+            batch_info: None,
+        });
+    }
+    
+    // 第二步：创建测试批次
+    let mut test_batch = TestBatchInfo::new(
+        Some("自动导入".to_string()), // 默认产品型号
+        None, // 序列号留空，用户可以后续修改
+    );
+    
+    // 设置批次信息
+    test_batch.total_points = definitions.len() as u32;
+    test_batch.batch_name = format!("从{}导入", args.file_name);
+    
+    // 获取持久化服务
+    let persistence_service = &state.persistence_service;
+    
+    // 第三步：保存批次信息
+    match persistence_service.save_batch_info(&test_batch).await {
+        Ok(_) => {
+            info!("测试批次创建成功: {}", test_batch.batch_id);
+        }
+        Err(e) => {
+            error!("创建测试批次失败: {}", e);
+            return Ok(ParseExcelAndCreateBatchResponse {
+                success: false,
+                message: format!("创建批次失败: {}", e),
+                batch_id: None,
+                definitions_count: definitions.len(),
+                batch_info: None,
+            });
+        }
+    }
+    
+    // 第四步：保存通道定义
+    let mut saved_count = 0;
+    let mut errors = Vec::new();
+    
+    for definition in &definitions {
+        match persistence_service.save_channel_definition(definition).await {
+            Ok(_) => saved_count += 1,
+            Err(e) => {
+                let error_msg = format!("保存通道定义失败: {} - {}", definition.tag, e);
+                error!("{}", error_msg);
+                errors.push(error_msg);
+            }
+        }
+    }
+    
+    // 第五步：返回结果
+    let success = saved_count > 0;
+    let message = if success {
+        if errors.is_empty() {
+            format!("成功创建批次并保存{}个通道定义", saved_count)
+        } else {
+            format!("批次创建成功，保存{}个通道定义，{}个失败", saved_count, errors.len())
+        }
+    } else {
+        format!("批次创建失败，无法保存任何通道定义。错误: {}", errors.join("; "))
+    };
+    
+    info!("{}", message);
+    
+    Ok(ParseExcelAndCreateBatchResponse {
+        success,
+        message,
+        batch_id: if success { Some(test_batch.batch_id.clone()) } else { None },
+        definitions_count: definitions.len(),
+        batch_info: if success { Some(test_batch) } else { None },
+    })
 } 

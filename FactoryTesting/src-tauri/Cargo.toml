@@ -40,6 +40,7 @@ async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 tauri = { version = "2.2.0", features = [] }
 tauri-plugin-log = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
 tokio-util = "0.7"
 tokio-modbus = "0.16.1"
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }

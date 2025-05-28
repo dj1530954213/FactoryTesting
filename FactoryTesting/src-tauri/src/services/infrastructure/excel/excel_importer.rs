@@ -237,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_real_excel_file() {
         // 测试真实Excel文件
-        let real_file_path = r"C:\Program Files\Git\code\FactoryTesting\测试文件\测试IO.xlsx";
+        let real_file_path = r"D:\GIT\Git\code\FactoryTesting\测试文件\测试IO.xlsx";
         
         if std::path::Path::new(real_file_path).exists() {
             println!("测试真实Excel文件: {}", real_file_path);

@@ -7,10 +7,9 @@ use chrono::Utc;
 use log::{info, debug, warn};
 
 use crate::models::test_plc_config::*;
-use crate::services::traits::{BaseService, PersistenceService};
+use crate::services::traits::BaseService;
+use crate::services::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
-use crate::models::entities;
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
 
 /// 测试PLC配置管理服务接口
 #[async_trait]
@@ -45,12 +44,12 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
 
 /// 测试PLC配置管理服务实现
 pub struct TestPlcConfigService {
-    persistence_service: Arc<dyn PersistenceService>,
+    persistence_service: Arc<dyn IPersistenceService>,
 }
 
 impl TestPlcConfigService {
     /// 创建新的测试PLC配置服务实例
-    pub fn new(persistence_service: Arc<dyn PersistenceService>) -> Self {
+    pub fn new(persistence_service: Arc<dyn IPersistenceService>) -> Self {
         Self {
             persistence_service,
         }

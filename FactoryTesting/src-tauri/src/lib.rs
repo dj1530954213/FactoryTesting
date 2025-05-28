@@ -18,7 +18,8 @@ pub use database_migration::DatabaseMigration;
 use commands::data_management::{
     parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
     import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
-    prepare_test_instances_for_batch_cmd, import_excel_and_allocate_channels_cmd
+    prepare_test_instances_for_batch_cmd, import_excel_and_allocate_channels_cmd,
+    parse_excel_and_create_batch_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
@@ -50,8 +51,10 @@ pub fn run() {
 
         // 启动 Tauri 应用
         tauri::Builder::default()
+            .plugin(tauri_plugin_dialog::init())
             .manage(app_state)
             .invoke_handler(tauri::generate_handler![
+                // 测试协调相关命令
                 tauri_commands::submit_test_execution,
                 tauri_commands::start_batch_testing,
                 tauri_commands::pause_batch_testing,
@@ -60,6 +63,7 @@ pub fn run() {
                 tauri_commands::get_batch_progress,
                 tauri_commands::get_batch_results,
                 tauri_commands::cleanup_completed_batch,
+                // 数据管理相关命令
                 tauri_commands::import_excel_file,
                 tauri_commands::create_test_batch_with_definitions,
                 tauri_commands::get_all_channel_definitions,
@@ -68,10 +72,13 @@ pub fn run() {
                 tauri_commands::get_all_batch_info,
                 tauri_commands::save_batch_info,
                 tauri_commands::get_batch_test_instances,
+                // 通道状态管理相关命令
                 tauri_commands::create_test_instance,
                 tauri_commands::get_instance_state,
                 tauri_commands::update_test_result,
+                // 系统信息相关命令
                 tauri_commands::get_system_status,
+                // 报告生成相关命令
                 tauri_commands::generate_pdf_report,
                 tauri_commands::generate_excel_report,
                 tauri_commands::get_reports,
@@ -80,19 +87,24 @@ pub fn run() {
                 tauri_commands::update_report_template,
                 tauri_commands::delete_report_template,
                 tauri_commands::delete_report,
+                // 应用配置相关命令
                 tauri_commands::load_app_settings_cmd,
                 tauri_commands::save_app_settings_cmd,
+                // 数据管理命令
                 parse_excel_file,
                 create_test_batch,
                 get_batch_list,
                 get_batch_channel_definitions,
+                parse_excel_and_create_batch_cmd,
                 import_excel_and_prepare_batch_cmd,
                 start_tests_for_batch_cmd,
                 get_batch_status_cmd,
                 prepare_test_instances_for_batch_cmd,
+                // 手动测试命令
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
                 write_channel_value_cmd,
+                // 测试PLC配置命令
                 get_test_plc_channels_cmd,
                 save_test_plc_channel_cmd,
                 delete_test_plc_channel_cmd,
@@ -102,6 +114,7 @@ pub fn run() {
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
                 initialize_default_test_plc_channels_cmd,
+                // 通道分配命令
                 allocate_channels_cmd,
                 get_batch_instances_cmd,
                 clear_all_allocations_cmd,

@@ -13,6 +13,7 @@ pub use data_management::{
     create_test_batch,
     get_batch_list,
     get_batch_channel_definitions,
+    parse_excel_and_create_batch_cmd,
 };
 
 pub use test_plc_config::{

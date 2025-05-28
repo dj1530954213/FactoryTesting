@@ -36,6 +36,20 @@
             #fileInput
             style="display: none;">
           
+          <!-- 文件选择按钮组 -->
+          <div class="file-selection-buttons">
+            <nz-space nzDirection="vertical" style="width: 100%;">
+              <!-- Tauri文件对话框按钮 -->
+              <button *nzSpaceItem nz-button nzType="primary" nzSize="large" (click)="selectFileWithDialog()">
+                <span nz-icon nzType="folder-open" nzTheme="outline"></span>
+                选择Excel文件
+              </button>
+              
+              <!-- 或者分隔线 -->
+              <nz-divider *nzSpaceItem nzText="或者" nzOrientation="center"></nz-divider>
+            </nz-space>
+          </div>
+          
           <div class="upload-dragger" (click)="fileInput.click()">
             <p class="upload-icon">
               <span nz-icon nzType="inbox" nzTheme="outline"></span>
