@@ -40,3 +40,19 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Tauri 相关
+/src-tauri/target/
+/src-tauri/WixTools
+
+# 数据库文件
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+/src-tauri/data/
+/src-tauri/factory_testing_data.sqlite
+
+# 日志文件
+*.log
+/logs/

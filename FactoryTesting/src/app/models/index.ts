@@ -62,13 +62,20 @@ export interface TestBatchInfo {
   batch_id: string;
   product_model?: string;
   serial_number?: string;
+  customer_name?: string;
   operator_name?: string;
   total_points: number;
+  tested_points?: number;
   passed_points?: number;
   failed_points?: number;
+  skipped_points?: number;
   test_start_time?: string;
   test_end_time?: string;
   overall_status: OverallTestStatus;
+  batch_name?: string;
+  status_summary?: string;
+  creation_time?: string;
+  last_updated_time?: string;
   created_at: string;
   updated_at: string;
 }
@@ -77,8 +84,20 @@ export interface ChannelTestInstance {
   instance_id: string;
   definition_id: string;
   test_batch_id: string;
+  test_batch_name?: string;
   overall_status: OverallTestStatus;
   sub_test_results: { [key: string]: SubTestStatus };
+  test_plc_channel_tag?: string;
+  test_plc_communication_address?: string;
+  error_message?: string;
+  current_step_details?: string;
+  creation_time?: string;
+  start_time?: string;
+  last_updated_time?: string;
+  final_test_time?: string;
+  total_test_duration_ms?: number;
+  current_operator?: string;
+  retries_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -253,4 +272,88 @@ export interface ReportGenerationRequest {
 }
 
 // 新增测试PLC配置模型导出
-export * from './test-plc-config.model'; 
+export * from './test-plc-config.model';
+
+// 准备测试实例相关接口
+export interface PrepareTestInstancesRequest {
+  batch_id: string;
+  definition_ids?: string[]; // 可选的定义ID列表
+}
+
+export interface AllocationSummary {
+  total_definitions: number;
+  allocated_instances: number;
+  skipped_definitions: number;
+  allocation_errors: string[];
+}
+
+export interface PrepareTestInstancesResponse {
+  batch_info: TestBatchInfo;
+  instances: ChannelTestInstance[];
+  definitions: ChannelPointDefinition[];
+  allocation_summary: AllocationSummary;
+}
+
+// 批次详情载荷
+export interface BatchDetailsPayload {
+  batch_info: TestBatchInfo;
+  instances: ChannelTestInstance[];
+  definitions?: ChannelPointDefinition[];
+  allocation_summary?: AllocationSummary;
+  progress: BatchProgressInfo;
+}
+
+// 批次进度信息
+export interface BatchProgressInfo {
+  total_points: number;
+  tested_points: number;
+  passed_points: number;
+  failed_points: number;
+  skipped_points: number;
+}
+
+// 通道分配相关接口
+export interface ComparisonTable {
+  channel_address: string;
+  communication_address: string;
+  channel_type: ModuleType;
+  is_powered: boolean;
+}
+
+export interface TestPlcConfig {
+  brand_type: string;
+  ip_address: string;
+  comparison_tables: ComparisonTable[];
+}
+
+export interface ModuleTypeStats {
+  definition_count: number;
+  allocated_count: number;
+  batch_count: number;
+}
+
+export interface AllocationSummaryDetailed {
+  total_definitions: number;
+  allocated_instances: number;
+  skipped_definitions: number;
+  by_module_type: { [key in ModuleType]?: ModuleTypeStats };
+}
+
+export interface BatchAllocationResult {
+  batches: TestBatchInfo[];
+  allocated_instances: ChannelTestInstance[];
+  allocation_summary: AllocationSummaryDetailed;
+}
+
+export interface ValidationResult {
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+// 导入Excel并分配通道的请求
+export interface ImportExcelAndAllocateRequest {
+  file_path: string;
+  product_model?: string;
+  serial_number?: string;
+} 

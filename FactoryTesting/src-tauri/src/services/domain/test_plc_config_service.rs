@@ -4,7 +4,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use chrono::Utc;
-use log::{info, debug};
+use log::{info, debug, warn};
 
 use crate::models::test_plc_config::*;
 use crate::services::traits::{BaseService, PersistenceService};
@@ -235,18 +235,20 @@ impl BaseService for TestPlcConfigService {
 #[async_trait]
 impl ITestPlcConfigService for TestPlcConfigService {
     async fn get_test_plc_channels(&self, request: GetTestPlcChannelsRequest) -> AppResult<Vec<TestPlcChannelConfig>> {
-        debug!("获取测试PLC通道配置，筛选条件: {:?}", request);
+        debug!("获取测试PLC通道配置，过滤条件: {:?}", request);
         
         // 从数据库加载所有测试PLC通道配置
         let mut channels = self.persistence_service.load_all_test_plc_channels().await?;
         
-        // 应用筛选条件
+        // 应用过滤条件
         if let Some(channel_type) = request.channel_type_filter {
-            channels.retain(|c| c.channel_type == channel_type);
+            channels.retain(|ch| ch.channel_type == channel_type);
         }
         
-        if let Some(true) = request.enabled_only {
-            channels.retain(|c| c.is_enabled);
+        if let Some(enabled_only) = request.enabled_only {
+            if enabled_only {
+                channels.retain(|ch| ch.is_enabled);
+            }
         }
         
         info!("返回 {} 个测试PLC通道配置", channels.len());
@@ -258,7 +260,7 @@ impl ITestPlcConfigService for TestPlcConfigService {
         
         // 验证必填字段
         if channel.channel_address.is_empty() {
-            return Err(AppError::validation_error("通道位号不能为空".to_string()));
+            return Err(AppError::validation_error("通道地址不能为空".to_string()));
         }
         
         if channel.communication_address.is_empty() {
@@ -269,10 +271,9 @@ impl ITestPlcConfigService for TestPlcConfigService {
             return Err(AppError::validation_error("供电类型不能为空".to_string()));
         }
         
-        // 设置时间戳和ID
+        // 设置时间戳
         let now = Utc::now();
         if channel.id.is_none() {
-            channel.id = Some(crate::models::structs::default_id());
             channel.created_at = Some(now);
         }
         channel.updated_at = Some(now);
@@ -363,36 +364,30 @@ impl ITestPlcConfigService for TestPlcConfigService {
             enabled_only: Some(true),
         }).await?;
         
+        // 获取目标通道定义（需要从持久化服务获取）
+        let mut target_definitions = Vec::new();
+        for target_id in &request.target_channel_ids {
+            if let Ok(Some(definition)) = self.persistence_service.load_channel_definition(target_id).await {
+                target_definitions.push(definition);
+            }
+        }
+        
         let mut mappings = Vec::new();
         let mut conflicts = Vec::new();
         
         // 根据策略生成映射
         match request.strategy {
             MappingStrategy::ByChannelType => {
-                // 按通道类型匹配的逻辑
-                for target_id in &request.target_channel_ids {
-                    // 这里需要根据目标通道的类型找到匹配的测试PLC通道
-                    // 临时实现：简单分配
-                    if let Some(test_channel) = test_channels.first() {
-                        mappings.push(ChannelMappingConfig {
-                            id: format!("mapping_{}", mappings.len() + 1),
-                            target_channel_id: target_id.clone(),
-                            test_plc_channel_id: test_channel.id.clone().unwrap_or_default(),
-                            mapping_type: MappingType::Direct,
-                            is_active: true,
-                            notes: Some("自动生成的映射".to_string()),
-                            created_at: Utc::now(),
-                        });
-                    }
-                }
+                // 智能匹配：有源对无源，无源对有源
+                mappings = Self::generate_intelligent_mappings(&target_definitions, &test_channels, &mut conflicts)?;
             }
             MappingStrategy::Sequential => {
                 // 顺序分配逻辑
-                for (index, target_id) in request.target_channel_ids.iter().enumerate() {
+                for (index, definition) in target_definitions.iter().enumerate() {
                     if let Some(test_channel) = test_channels.get(index % test_channels.len()) {
                         mappings.push(ChannelMappingConfig {
                             id: format!("mapping_{}", index + 1),
-                            target_channel_id: target_id.clone(),
+                            target_channel_id: definition.id.clone(),
                             test_plc_channel_id: test_channel.id.clone().unwrap_or_default(),
                             mapping_type: MappingType::Direct,
                             is_active: true,
@@ -404,12 +399,11 @@ impl ITestPlcConfigService for TestPlcConfigService {
             }
             MappingStrategy::LoadBalanced => {
                 // 负载均衡分配逻辑
-                // 这里可以实现更复杂的负载均衡算法
-                for (index, target_id) in request.target_channel_ids.iter().enumerate() {
+                for (index, definition) in target_definitions.iter().enumerate() {
                     if let Some(test_channel) = test_channels.get(index % test_channels.len()) {
                         mappings.push(ChannelMappingConfig {
                             id: format!("mapping_{}", index + 1),
-                            target_channel_id: target_id.clone(),
+                            target_channel_id: definition.id.clone(),
                             test_plc_channel_id: test_channel.id.clone().unwrap_or_default(),
                             mapping_type: MappingType::Direct,
                             is_active: true,
@@ -459,6 +453,105 @@ impl ITestPlcConfigService for TestPlcConfigService {
         
         info!("默认测试PLC配置初始化完成");
         Ok(())
+    }
+}
+
+impl TestPlcConfigService {
+    /// 智能映射生成：实现有源/无源匹配逻辑
+    fn generate_intelligent_mappings(
+        target_definitions: &[crate::models::ChannelPointDefinition],
+        test_channels: &[TestPlcChannelConfig],
+        conflicts: &mut Vec<String>
+    ) -> AppResult<Vec<ChannelMappingConfig>> {
+        let mut mappings = Vec::new();
+        let mut used_test_channels = std::collections::HashSet::new();
+        
+        for definition in target_definitions {
+            // 根据被测通道的模块类型和供电类型，找到匹配的测试PLC通道
+            let target_module_type = &definition.module_type;
+            let target_power_type = &definition.power_supply_type;
+            
+            // 确定需要的测试PLC通道类型
+            let required_test_channel_type = Self::determine_test_channel_type(target_module_type, target_power_type);
+            
+            // 查找可用的匹配通道
+            let available_channel = test_channels.iter()
+                .find(|ch| {
+                    ch.channel_type == required_test_channel_type && 
+                    ch.is_enabled && 
+                    !used_test_channels.contains(&ch.id.as_ref().unwrap_or(&String::new()).clone())
+                });
+            
+            if let Some(test_channel) = available_channel {
+                let test_channel_id = test_channel.id.clone().unwrap_or_default();
+                used_test_channels.insert(test_channel_id.clone());
+                
+                mappings.push(ChannelMappingConfig {
+                    id: format!("mapping_{}", mappings.len() + 1),
+                    target_channel_id: definition.id.clone(),
+                    test_plc_channel_id: test_channel_id,
+                    mapping_type: if target_power_type == "有源" { MappingType::Inverse } else { MappingType::Direct },
+                    is_active: true,
+                    notes: Some(format!("智能匹配: {} {} -> {} {}", 
+                        definition.tag, target_power_type,
+                        test_channel.channel_address, 
+                        if target_power_type == "有源" { "无源" } else { "有源" })),
+                    created_at: Utc::now(),
+                });
+                
+                info!("成功匹配: {} ({}) -> {} ({})", 
+                    definition.tag, target_power_type,
+                    test_channel.channel_address, 
+                    if target_power_type == "有源" { "无源" } else { "有源" });
+            } else {
+                let conflict_msg = format!("无法为通道 {} ({}) 找到匹配的测试PLC通道 (需要: {:?})", 
+                    definition.tag, target_power_type, required_test_channel_type);
+                conflicts.push(conflict_msg);
+                warn!("映射冲突: {}", conflicts.last().unwrap());
+            }
+        }
+        
+        Ok(mappings)
+    }
+    
+    /// 根据被测通道类型和供电类型，确定需要的测试PLC通道类型
+    fn determine_test_channel_type(
+        target_module_type: &crate::models::ModuleType,
+        target_power_type: &str
+    ) -> TestPlcChannelType {
+        use crate::models::ModuleType;
+        
+        match (target_module_type, target_power_type) {
+            // AI通道：有源对无源，无源对有源
+            (ModuleType::AI, "有源") => TestPlcChannelType::AINone,  // 有源AI需要无源测试通道
+            (ModuleType::AI, "无源") => TestPlcChannelType::AI,      // 无源AI需要有源测试通道
+            (ModuleType::AINone, _) => TestPlcChannelType::AI,       // 无源AI需要有源测试通道
+            
+            // AO通道：有源对无源，无源对有源  
+            (ModuleType::AO, "有源") => TestPlcChannelType::AONone,  // 有源AO需要无源测试通道
+            (ModuleType::AO, "无源") => TestPlcChannelType::AO,      // 无源AO需要有源测试通道
+            (ModuleType::AONone, _) => TestPlcChannelType::AO,       // 无源AO需要有源测试通道
+            
+            // DI通道：有源对无源，无源对有源
+            (ModuleType::DI, "有源") => TestPlcChannelType::DINone,  // 有源DI需要无源测试通道
+            (ModuleType::DI, "无源") => TestPlcChannelType::DI,      // 无源DI需要有源测试通道
+            (ModuleType::DINone, _) => TestPlcChannelType::DI,       // 无源DI需要有源测试通道
+            
+            // DO通道：有源对无源，无源对有源
+            (ModuleType::DO, "有源") => TestPlcChannelType::DONone,  // 有源DO需要无源测试通道
+            (ModuleType::DO, "无源") => TestPlcChannelType::DO,      // 无源DO需要有源测试通道
+            (ModuleType::DONone, _) => TestPlcChannelType::DO,       // 无源DO需要有源测试通道
+            
+            // 其他类型的默认处理
+            (ModuleType::Communication, _) => TestPlcChannelType::DI, // 通信类型默认为DI
+            (ModuleType::Other(_), _) => TestPlcChannelType::DI,      // 其他类型默认为DI
+            
+            // 默认情况：直接匹配类型
+            (ModuleType::AI, _) => TestPlcChannelType::AI,
+            (ModuleType::AO, _) => TestPlcChannelType::AO,
+            (ModuleType::DI, _) => TestPlcChannelType::DI,
+            (ModuleType::DO, _) => TestPlcChannelType::DO,
+        }
     }
 }
 

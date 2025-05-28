@@ -28,21 +28,22 @@ path = "src/bin/create_db.rs"
 tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
-serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
-tauri = { version = "2.5.0", features = [] }
-tauri-plugin-log = "2.0.0-rc"
-chrono = { version = "0.4", features = ["serde"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
 thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+log = "0.4"
+env_logger = "0.10"
 async-trait = "0.1"
-tokio = { version = "1.0", features = ["fs", "macros", "rt", "time"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+tauri = { version = "2.2.0", features = [] }
+tauri-plugin-log = "2.0.0"
 tokio-util = "0.7"
 tokio-modbus = "0.16.1"
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 base64 = "0.22.0"
-env_logger = "0.11.8"
 calamine = "0.22"
 
 # 报告生成系统依赖

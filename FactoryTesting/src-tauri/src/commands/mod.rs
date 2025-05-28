@@ -5,6 +5,7 @@
 pub mod data_management;
 pub mod manual_testing;
 pub mod test_plc_config;
+pub mod channel_allocation_commands;
 
 // 重新导出命令
 pub use data_management::{
@@ -24,4 +25,7 @@ pub use test_plc_config::{
     get_channel_mappings_cmd,
     generate_channel_mappings_cmd,
     initialize_default_test_plc_channels_cmd,
-}; 
+};
+
+// 重新导出通道分配命令
+pub use channel_allocation_commands::*; 

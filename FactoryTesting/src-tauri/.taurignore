@@ -1,0 +1,17 @@
+# 忽略数据库文件变化，防止应用程序重启
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+data/
+factory_testing_data.sqlite
+
+# 忽略日志文件
+*.log
+logs/
+
+# 忽略临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db 

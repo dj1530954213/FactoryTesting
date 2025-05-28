@@ -96,6 +96,7 @@ impl ExcelImporter {
         // 验证关键列的存在（不要求完全匹配所有列名）
         let key_columns = vec![
             (2, "模块类型"),
+            (3, "供电类型"),
             (6, "位号"), 
             (8, "变量名称（HMI）"),
             (9, "变量描述"),
@@ -131,6 +132,7 @@ impl ExcelImporter {
         // 第0列：序号
         // 第1列：模块名称  
         // 第2列：模块类型
+        // 第3列：供电类型（有源/无源）
         // 第5列：通道位号
         // 第6列：位号
         // 第7列：场站名
@@ -145,6 +147,7 @@ impl ExcelImporter {
         let station = Self::get_string_value(&row[7], row_number, "场站名")?;  // 第7列：场站名
         let module = Self::get_string_value(&row[1], row_number, "模块名称")?;  // 第1列：模块名称
         let module_type_str = Self::get_string_value(&row[2], row_number, "模块类型")?;  // 第2列：模块类型
+        let power_supply_type = Self::get_optional_string_value(&row[3], "供电类型");  // 第3列：供电类型（有源/无源）
         let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第5列：通道位号
         let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第10列：数据类型
         let plc_address = Self::get_string_value(&row[51], row_number, "PLC绝对地址")?;  // 第51列：PLC绝对地址
@@ -156,7 +159,7 @@ impl ExcelImporter {
         let data_type = Self::parse_data_type(&data_type_str, row_number)?;
         
         // 创建通道定义
-        let definition = ChannelPointDefinition::new(
+        let mut definition = ChannelPointDefinition::new(
             tag,
             variable_name,
             description,
@@ -167,6 +170,11 @@ impl ExcelImporter {
             data_type,
             plc_address,
         );
+        
+        // 设置供电类型（如果Excel中有值则使用，否则使用默认值）
+        if !power_supply_type.is_empty() {
+            definition.power_supply_type = power_supply_type;
+        }
         
         Ok(definition)
     }

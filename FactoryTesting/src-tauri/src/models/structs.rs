@@ -273,6 +273,8 @@ pub struct ChannelTestInstance {
     pub definition_id: String,
     /// 所属测试批次ID
     pub test_batch_id: String,
+    /// 测试批次名称（如"批次1"）
+    pub test_batch_name: String,
     
     /// 运行时状态（由ChannelStateManager管理）
     pub overall_status: OverallTestStatus,
@@ -300,6 +302,11 @@ pub struct ChannelTestInstance {
     /// 手动测试时的临时输出值
     pub manual_test_current_value_output: Option<String>,
 
+    /// 分配的测试PLC通道标签（如"AO1_1"）
+    pub test_plc_channel_tag: Option<String>,
+    /// 分配的测试PLC通信地址（如"AO1.1"）
+    pub test_plc_communication_address: Option<String>,
+
     /// 当前操作员
     pub current_operator: Option<String>,
     /// 重测次数
@@ -318,6 +325,7 @@ impl ChannelTestInstance {
             instance_id: default_id(),
             definition_id,
             test_batch_id,
+            test_batch_name: String::new(),
             overall_status: OverallTestStatus::NotTested,
             current_step_details: None,
             error_message: None,
@@ -330,6 +338,8 @@ impl ChannelTestInstance {
             hardpoint_readings: None,
             manual_test_current_value_input: None,
             manual_test_current_value_output: None,
+            test_plc_channel_tag: None,
+            test_plc_communication_address: None,
             current_operator: None,
             retries_count: 0,
             transient_data: HashMap::new(),
@@ -363,6 +373,10 @@ pub struct TestBatchInfo {
     pub passed_points: u32,
     pub failed_points: u32,
     pub skipped_points: u32,
+    /// 批次整体状态
+    pub overall_status: OverallTestStatus,
+    /// 批次名称（如"批次1"）
+    pub batch_name: String,
     /// 其他批次相关信息
     #[serde(default)]
     pub custom_data: HashMap<String, String>,
@@ -386,6 +400,8 @@ impl TestBatchInfo {
             passed_points: 0,
             failed_points: 0,
             skipped_points: 0,
+            overall_status: OverallTestStatus::NotTested,
+            batch_name: String::new(),
             custom_data: HashMap::new(),
         }
     }

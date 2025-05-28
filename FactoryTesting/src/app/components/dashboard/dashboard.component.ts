@@ -29,6 +29,13 @@ interface FinalResults {
   failed: number;
 }
 
+interface RecentActivity {
+  icon: string;
+  title: string;
+  description: string;
+  timestamp: Date;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -40,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // 系统状态
   systemStatus: SystemStatus | null = null;
   recentBatches: TestBatchInfo[] = [];
+  recentActivities: RecentActivity[] = [];
   totalChannels = 0;
   totalBatches = 0;
   pendingBatches = 0;
@@ -186,6 +194,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToManualTest() {
     this.router.navigate(['/manual-test']);
+  }
+
+  navigateToTestArea() {
+    this.router.navigate(['/test-area']);
+  }
+
+  navigateToReports() {
+    this.router.navigate(['/reports']);
   }
 
   onBatchSelected() {

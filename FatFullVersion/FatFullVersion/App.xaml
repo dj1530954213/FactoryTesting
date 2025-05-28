@@ -1,0 +1,56 @@
+﻿<prism:PrismApplication
+    x:Class="FatFullVersion.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:FatFullVersion"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:prism="http://prismlibrary.com/"
+    DispatcherUnhandledException="Application_DispatcherUnhandledException">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <materialDesign:BundledTheme
+                    BaseTheme="Dark"
+                    PrimaryColor="BlueGrey"
+                    SecondaryColor="Lime" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!--  为左边选择框的ListBoxItem设计一个样式  -->
+            <Style x:Key="MenuListBoxStyle" TargetType="ListBoxItem">
+                <!--  设置最小高度为40  -->
+                <Setter Property="MinHeight" Value="40" />
+                <!--  设置控件模板  -->
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Grid Background="Transparent">
+                                <Border Name="borderHeader" />
+                                <Border Name="border" />
+                                <!--  内容呈现的方式  -->
+                                <ContentPresenter
+                                    HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalAlignment}"
+                                    IsHitTestVisible="True" />
+                            </Grid>
+                            <!--  设置触发器  -->
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <!--  设定左侧边框的宽度为4 并且将边框样式指定为与系统颜色同步  -->
+                                    <Setter TargetName="borderHeader" Property="BorderThickness" Value="4,0,0,0" />
+                                    <Setter TargetName="borderHeader" Property="BorderBrush" Value="#FF673AB7" />
+                                    <Setter TargetName="border" Property="Background" Value="#FF673AB7" />
+                                    <!--  设置第二个border的透明度  -->
+                                    <Setter TargetName="border" Property="Opacity" Value="0.5" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="border" Property="Background" Value="#FF673AB7" />
+                                    <Setter TargetName="border" Property="Opacity" Value="0.2" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</prism:PrismApplication>

@@ -14,6 +14,9 @@ pub mod domain;
 /// 基础设施层服务模块
 pub mod infrastructure;
 
+/// 通道分配服务模块
+pub mod channel_allocation_service;
+
 /// 服务层基础trait定义
 pub mod traits;
 
@@ -32,6 +35,13 @@ pub use domain::{
     ITestExecutionEngine, TestExecutionEngine, TaskStatus, TestTask,
     ISpecificTestStepExecutor, AIHardPointPercentExecutor, 
     AIAlarmTestExecutor, DIStateReadExecutor
+};
+
+// 重新导出通道分配服务
+pub use channel_allocation_service::{
+    IChannelAllocationService, ChannelAllocationService,
+    ComparisonTable, TestPlcConfig, BatchAllocationResult,
+    AllocationSummary, ModuleTypeStats, ValidationResult
 };
 
 // 重新导出基础设施层的主要类型（避免冲突）

@@ -62,7 +62,7 @@ impl Default for SubTestStatus {
 
 /// 模块类型枚举
 /// 表示不同类型的PLC模块
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModuleType {
     /// 模拟量输入
     AI,

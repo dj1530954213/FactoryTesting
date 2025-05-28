@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap; // 确保 HashMap 已导入
 use crate::models::structs::{default_id}; // 确保可以访问 default_id
+use crate::models::enums::OverallTestStatus; // 添加状态枚举
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "test_batch_info")]
@@ -35,6 +36,10 @@ pub struct Model {
     pub passed_points: u32,
     pub failed_points: u32,
     pub skipped_points: u32, // TestBatchInfo 中有此字段
+
+    // 新增字段
+    pub batch_name: String, // 批次名称
+    pub overall_status: String, // 整体状态，存储为字符串
 
     // HashMap<String, String> 需要序列化为 Text/JSONB
     // 为了简化，这里先假设其能被 SeaORM 作为 Text 处理（通过 serde 的 Serialize/Deserialize）
@@ -70,6 +75,8 @@ impl From<&crate::models::structs::TestBatchInfo> for ActiveModel {
             passed_points: Set(original.passed_points),
             failed_points: Set(original.failed_points),
             skipped_points: Set(original.skipped_points),
+            batch_name: Set(original.batch_name.clone()),
+            overall_status: Set(serde_json::to_string(&original.overall_status).unwrap_or_default()),
             custom_data: Set(Some(custom_data_json)), // 存储 JSON 字符串
             ..Default::default()
         }
@@ -81,6 +88,9 @@ impl From<&Model> for crate::models::structs::TestBatchInfo {
         let custom_data_map: HashMap<String, String> = model.custom_data.as_ref()
             .and_then(|json_str| serde_json::from_str(json_str).ok())
             .unwrap_or_default(); // 从 JSON 字符串反序列化回 HashMap
+
+        let overall_status: OverallTestStatus = serde_json::from_str(&model.overall_status)
+            .unwrap_or(OverallTestStatus::NotTested);
 
         crate::models::structs::TestBatchInfo {
             batch_id: model.batch_id.clone(),
@@ -96,6 +106,8 @@ impl From<&Model> for crate::models::structs::TestBatchInfo {
             passed_points: model.passed_points,
             failed_points: model.failed_points,
             skipped_points: model.skipped_points,
+            batch_name: model.batch_name.clone(),
+            overall_status,
             custom_data: custom_data_map,
         }
     }

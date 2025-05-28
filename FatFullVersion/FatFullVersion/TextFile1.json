@@ -1,0 +1,92 @@
+﻿{
+  "log": {
+    "level": "warn",
+    "timestamp": false
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090",
+      "default_mode": "rule"
+    },
+    "cache_file": {
+      "enabled": true,
+      "path": "cache.db",
+      "store_fakeip": true
+    }
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun0",
+      "stack": "system",
+      "address": [
+        "172.19.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route": true,
+      "strict_route": false,
+      "sniff": true
+    }
+  ],
+  "dns": {
+    "servers": [
+      {
+        "tag": "google",
+        "address": "tls://8.8.4.4"
+      },
+      {
+        "tag": "local",
+        "address": "223.5.5.5",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "outbound": "any",
+        "server": "local"
+      }
+    ]
+  },
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "racknerd-1d449a0 hysteria2",
+      "server": "66.103.223.51",
+      "server_port": 8881,
+      "up_mbps": 200,
+      "down_mbps": 1000,
+      "password": "a980c66b-fd59-4f1f-a17a-1f1dfe2fc253",
+      "tls": {
+        "enabled": true,
+        "insecure": true,
+        "server_name": "",
+        "alpn": [
+          "h3"
+        ]
+      }
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    },
+    {
+      "tag": "dns-out",
+      "type": "dns"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "protocol": "dns",
+        "outbound": "dns-out"
+      }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true
+  }
+}

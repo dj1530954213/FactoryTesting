@@ -150,6 +150,11 @@ impl SqliteOrmPersistenceService {
         log::info!("数据库表结构设置完成或已存在。");
         Ok(())
     }
+
+    /// 获取数据库连接（用于迁移等操作）
+    pub fn get_database_connection(&self) -> &DatabaseConnection {
+        self.db_conn.as_ref()
+    }
 }
 
 #[async_trait]
@@ -442,11 +447,33 @@ impl PersistenceService for SqliteOrmPersistenceService {
     
     /// 保存PLC连接配置
     async fn save_plc_connection(&self, connection: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<()> {
-        let active_model: entities::plc_connection_config::ActiveModel = connection.into();
-        entities::plc_connection_config::Entity::insert(active_model)
-            .exec(self.db_conn.as_ref())
+        // 检查是否已存在相同ID的记录
+        let existing = entities::plc_connection_config::Entity::find_by_id(connection.id.clone())
+            .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("保存PLC连接配置失败: {}", e)))?;
+            .map_err(|e| AppError::persistence_error(format!("检查PLC连接配置是否存在失败: {}", e)))?;
+
+        if existing.is_some() {
+            // 更新现有记录
+            let mut active_model: entities::plc_connection_config::ActiveModel = connection.into();
+            // 确保ID不被重新设置
+            active_model.id = sea_orm::ActiveValue::Unchanged(connection.id.clone());
+            // 更新时间
+            active_model.updated_at = sea_orm::ActiveValue::Set(chrono::Utc::now());
+            
+            entities::plc_connection_config::Entity::update(active_model)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("更新PLC连接配置失败: {}", e)))?;
+        } else {
+            // 插入新记录
+            let active_model: entities::plc_connection_config::ActiveModel = connection.into();
+            entities::plc_connection_config::Entity::insert(active_model)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("保存PLC连接配置失败: {}", e)))?;
+        }
+        
         Ok(())
     }
     

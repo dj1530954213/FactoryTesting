@@ -243,4 +243,156 @@
   color: #6b7280;
   font-family: 'Courier New', monospace;
   font-size: 13px;
+}
+
+/* 智能分配结果样式 */
+.allocation-info {
+  margin-top: 20px;
+}
+
+.allocation-info h4 {
+  color: #1890ff;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.allocation-card {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+}
+
+.allocation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.allocation-label {
+  font-weight: 500;
+  color: #262626;
+  min-width: 80px;
+}
+
+.allocation-value {
+  color: #595959;
+  font-size: 13px;
+}
+
+/* 分配详情样式 */
+.allocation-details {
+  margin-top: 16px;
+}
+
+.allocation-details h5 {
+  color: #1890ff;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.allocation-details h6 {
+  color: #262626;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.details-card {
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+.correct-allocation-section,
+.module-distribution-section,
+.plc-config-section,
+.batch-allocation-section,
+.allocation-strategy-section {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.allocation-strategy-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.batch-detail-item,
+.strategy-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.batch-detail-label,
+.strategy-label {
+  font-weight: 500;
+  color: #262626;
+  min-width: 60px;
+  font-size: 13px;
+}
+
+.batch-detail-desc {
+  color: #666;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.strategy-value {
+  color: #595959;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Excel列映射样式 */
+.column-mapping {
+  margin-top: 16px;
+}
+
+.column-mapping h5 {
+  color: #1890ff;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.mapping-card {
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  background-color: #fafafa;
+}
+
+.mapping-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background-color: white;
+  border-radius: 4px;
+  border: 1px solid #e8e8e8;
+}
+
+.mapping-excel {
+  font-weight: 500;
+  color: #1890ff;
+  background-color: #e6f7ff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 120px;
+  text-align: center;
+}
+
+.mapping-system {
+  font-weight: 500;
+  color: #52c41a;
+  background-color: #f6ffed;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 120px;
+  text-align: center;
 } 

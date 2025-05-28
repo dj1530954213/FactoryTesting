@@ -1,0 +1,250 @@
+<div class="test-area-container">
+  <nz-card nzTitle="测试区域管理" [nzExtra]="extraTemplate">
+    <!-- 批次选择区域 -->
+    <div class="batch-selection-section">
+      <h3>选择测试批次</h3>
+      <nz-spin [nzSpinning]="isLoadingBatches">
+        <div class="batch-list">
+          <nz-empty 
+            *ngIf="availableBatches.length === 0 && !isLoadingBatches"
+            nzNotFoundContent="暂无可用的测试批次"
+            [nzNotFoundImage]="'simple'">
+            <div nz-empty-footer>
+              <button nz-button nzType="primary" (click)="refreshBatches()">
+                <i nz-icon nzType="reload"></i>
+                刷新批次列表
+              </button>
+            </div>
+          </nz-empty>
+          
+          <div class="batch-cards" *ngIf="availableBatches.length > 0">
+            <nz-card 
+              *ngFor="let batch of availableBatches"
+              class="batch-card"
+              [class.selected]="selectedBatch?.batch_id === batch.batch_id"
+              (click)="selectBatch(batch)"
+              nzHoverable>
+              <div class="batch-header">
+                <h4>{{ batch.batch_name || batch.batch_id }}</h4>
+                <nz-tag [nzColor]="getStatusColor(batch.overall_status)">
+                  {{ batch.status_summary || '未开始' }}
+                </nz-tag>
+              </div>
+              <div class="batch-info">
+                <p><strong>产品型号:</strong> {{ batch.product_model || 'N/A' }}</p>
+                <p><strong>序列号:</strong> {{ batch.serial_number || 'N/A' }}</p>
+                <p><strong>客户:</strong> {{ batch.customer_name || 'N/A' }}</p>
+                <p><strong>操作员:</strong> {{ batch.operator_name || 'N/A' }}</p>
+                <p><strong>总点数:</strong> {{ batch.total_points }}</p>
+                <p><strong>创建时间:</strong> {{ formatDateTime(batch.creation_time || batch.created_at) }}</p>
+              </div>
+            </nz-card>
+          </div>
+        </div>
+      </nz-spin>
+    </div>
+
+    <!-- 批次详情区域 -->
+    <div class="batch-details-section" *ngIf="selectedBatch">
+      <nz-divider></nz-divider>
+      <h3>批次详情 - {{ selectedBatch.batch_name || selectedBatch.batch_id }}</h3>
+      
+      <nz-spin [nzSpinning]="isLoadingDetails">
+        <div *ngIf="batchDetails" class="details-content">
+          <!-- 统计信息 -->
+          <div class="stats-section">
+            <div class="statistics-row">
+              <nz-statistic 
+                nzTitle="总通道数" 
+                [nzValue]="batchDetails.allocation_summary.total_definitions"
+                nzSuffix="个">
+              </nz-statistic>
+              <nz-statistic 
+                nzTitle="已分配" 
+                [nzValue]="batchDetails.allocation_summary.allocated_instances"
+                nzSuffix="个">
+              </nz-statistic>
+              <nz-statistic 
+                nzTitle="跳过" 
+                [nzValue]="batchDetails.allocation_summary.skipped_definitions"
+                nzSuffix="个">
+              </nz-statistic>
+              <nz-statistic 
+                nzTitle="分配错误" 
+                [nzValue]="getAllocationErrorCount()"
+                nzSuffix="个"
+                [nzValueStyle]="{ color: getAllocationErrorCount() > 0 ? '#cf1322' : '#3f8600' }">
+              </nz-statistic>
+            </div>
+          </div>
+
+          <!-- 筛选工具栏 -->
+          <div class="filter-toolbar">
+            <div class="filter-row">
+              <div class="filter-item">
+                <label>搜索:</label>
+                <nz-input-group nzCompact>
+                  <input 
+                    nz-input 
+                    placeholder="搜索点位名、变量名或描述"
+                    [(ngModel)]="searchText"
+                    style="width: 250px;">
+                  <button nz-button nzType="primary" nzSearch>
+                    <i nz-icon nzType="search"></i>
+                  </button>
+                </nz-input-group>
+              </div>
+              
+              <div class="filter-item">
+                <label>通道类型:</label>
+                <nz-select 
+                  nzMode="multiple"
+                  nzPlaceHolder="选择通道类型"
+                  [(ngModel)]="selectedModuleTypes"
+                  style="width: 200px;">
+                  <nz-option 
+                    *ngFor="let option of moduleTypeOptions"
+                    [nzLabel]="option.label + ' (' + option.count + ')'"
+                    [nzValue]="option.value">
+                  </nz-option>
+                </nz-select>
+              </div>
+              
+              <div class="filter-item">
+                <nz-checkbox [(ngModel)]="showOnlyTested">仅显示已测试</nz-checkbox>
+              </div>
+              
+              <div class="filter-item">
+                <nz-checkbox [(ngModel)]="showOnlyFailed">仅显示失败</nz-checkbox>
+              </div>
+              
+              <div class="filter-item">
+                <button nz-button (click)="clearAllFilters()">
+                  <i nz-icon nzType="clear"></i>
+                  清除筛选
+                </button>
+              </div>
+            </div>
+            
+            <div class="filter-status">
+              <span>{{ getFilterStatusText() }}</span>
+            </div>
+          </div>
+
+          <!-- 通道列表表格 -->
+          <nz-table 
+            #channelTable
+            [nzData]="getFilteredInstances()"
+            [nzPageSize]="15"
+            [nzShowSizeChanger]="true"
+            [nzPageSizeOptions]="[10, 15, 20, 50]"
+            [nzScroll]="{ x: '1200px' }"
+            nzSize="small">
+            
+            <thead>
+              <tr>
+                <th nzWidth="120px">点位名称</th>
+                <th nzWidth="150px">通道位号</th>
+                <th nzWidth="120px">测试PLC通道号</th>
+                <th nzWidth="120px">被测PLC通道号</th>
+                <th nzWidth="100px">通道类型</th>
+                <th nzWidth="100px">数据类型</th>
+                <th nzWidth="200px">错误详情</th>
+                <th nzWidth="100px">测试状态</th>
+                <th nzWidth="150px">操作</th>
+              </tr>
+            </thead>
+            
+            <tbody>
+              <tr *ngFor="let instance of channelTable.data">
+                <td>
+                  <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
+                </td>
+                <td>
+                  {{ getDefinitionByInstanceId(instance.instance_id)?.variable_name || 'N/A' }}
+                </td>
+                <td>
+                  <nz-tag nzColor="blue">
+                    {{ instance.test_plc_channel_tag || 'AO1_1' }}
+                  </nz-tag>
+                </td>
+                <td>
+                  <nz-tag nzColor="green">
+                    {{ getDefinitionByInstanceId(instance.instance_id)?.plc_communication_address || 'N/A' }}
+                  </nz-tag>
+                </td>
+                <td>
+                  <nz-tag [nzColor]="getModuleTypeColor(getDefinitionByInstanceId(instance.instance_id)?.module_type)">
+                    {{ getDefinitionByInstanceId(instance.instance_id)?.module_type || 'N/A' }}
+                  </nz-tag>
+                </td>
+                <td>
+                  <nz-tag [nzColor]="getPointDataTypeColor(getDefinitionByInstanceId(instance.instance_id)?.point_data_type)">
+                    {{ getPointDataTypeLabel(getDefinitionByInstanceId(instance.instance_id)?.point_data_type) }}
+                  </nz-tag>
+                </td>
+                <td>
+                  <span *ngIf="instance.error_message" class="error-message">
+                    {{ instance.error_message }}
+                  </span>
+                  <span *ngIf="!instance.error_message" class="no-error">
+                    无错误
+                  </span>
+                </td>
+                <td>
+                  <nz-tag [nzColor]="getInstanceStatusColor(instance.overall_status)">
+                    {{ getInstanceStatusText(instance.overall_status) }}
+                  </nz-tag>
+                </td>
+                <td>
+                  <nz-button-group>
+                    <button 
+                      nz-button 
+                      nzType="primary" 
+                      nzSize="small"
+                      [disabled]="instance.overall_status === OverallTestStatus.HardPointTesting">
+                      <i nz-icon nzType="play-circle"></i>
+                      开始测试
+                    </button>
+                    <button 
+                      nz-button 
+                      nzSize="small"
+                      nz-dropdown 
+                      [nzDropdownMenu]="actionMenu">
+                      <i nz-icon nzType="more"></i>
+                    </button>
+                  </nz-button-group>
+                  
+                  <nz-dropdown-menu #actionMenu="nzDropdownMenu">
+                    <ul nz-menu>
+                      <li nz-menu-item>
+                        <i nz-icon nzType="eye"></i>
+                        查看详情
+                      </li>
+                      <li nz-menu-item>
+                        <i nz-icon nzType="edit"></i>
+                        手动测试
+                      </li>
+                      <li nz-menu-item>
+                        <i nz-icon nzType="redo"></i>
+                        重新测试
+                      </li>
+                    </ul>
+                  </nz-dropdown-menu>
+                </td>
+              </tr>
+            </tbody>
+          </nz-table>
+        </div>
+      </nz-spin>
+    </div>
+  </nz-card>
+
+  <!-- 额外操作模板 -->
+  <ng-template #extraTemplate>
+    <button nz-button nzType="default" (click)="refreshBatches()">
+      <i nz-icon nzType="reload"></i>
+      刷新
+    </button>
+  </ng-template>
+</div> 

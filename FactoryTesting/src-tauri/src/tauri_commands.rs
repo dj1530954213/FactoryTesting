@@ -82,9 +82,16 @@ impl AppState {
             )?;
         }
         
-        let persistence_service: Arc<dyn IPersistenceService> = Arc::new(
-            SqliteOrmPersistenceService::new(config.clone(), Some(&db_file_path)).await?
-        );
+        let sqlite_persistence_service = SqliteOrmPersistenceService::new(config.clone(), Some(&db_file_path)).await?;
+        
+        // 执行数据库迁移
+        let db_conn = sqlite_persistence_service.get_database_connection();
+        if let Err(e) = crate::database_migration::DatabaseMigration::migrate(db_conn).await {
+            log::error!("数据库迁移失败: {}", e);
+            return Err(e);
+        }
+        
+        let persistence_service: Arc<dyn IPersistenceService> = Arc::new(sqlite_persistence_service);
 
         // 创建应用配置服务
         let app_settings_config = AppSettingsConfig::default();

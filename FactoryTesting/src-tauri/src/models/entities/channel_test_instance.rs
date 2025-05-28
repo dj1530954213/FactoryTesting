@@ -18,6 +18,7 @@ pub struct Model {
 
     pub definition_id: String, // 关联到 ChannelPointDefinition 的 ID
     pub test_batch_id: String, // 关联到 TestBatchInfo 的 ID
+    pub test_batch_name: String, // 测试批次名称
 
     #[sea_orm(column_type = "Text")]
     pub overall_status: String, // 原为 OverallTestStatus 枚举
@@ -48,6 +49,12 @@ pub struct Model {
     pub manual_test_current_value_input: Option<String>,
     #[sea_orm(nullable)]
     pub manual_test_current_value_output: Option<String>,
+
+    // 分配的测试PLC通道信息
+    #[sea_orm(nullable)]
+    pub test_plc_channel_tag: Option<String>,
+    #[sea_orm(nullable)]
+    pub test_plc_communication_address: Option<String>,
 
     #[sea_orm(nullable)]
     pub current_operator: Option<String>,
@@ -87,6 +94,7 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
             instance_id: Set(original.instance_id.clone()),
             definition_id: Set(original.definition_id.clone()),
             test_batch_id: Set(original.test_batch_id.clone()),
+            test_batch_name: Set(original.test_batch_name.clone()),
             overall_status: Set(format!("{:?}", original.overall_status)),
             current_step_details: Set(original.current_step_details.clone()),
             error_message: Set(original.error_message.clone()),
@@ -102,6 +110,8 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
             current_operator: Set(original.current_operator.clone()),
             retries_count: Set(original.retries_count),
             transient_data_json: Set(transient_data_json),
+            test_plc_channel_tag: Set(original.test_plc_channel_tag.clone()),
+            test_plc_communication_address: Set(original.test_plc_communication_address.clone()),
             ..Default::default()
         }
     }
@@ -122,6 +132,7 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             instance_id: model.instance_id.clone(),
             definition_id: model.definition_id.clone(),
             test_batch_id: model.test_batch_id.clone(),
+            test_batch_name: model.test_batch_name.clone(),
             overall_status: match model.overall_status.as_str() {
                 "NotTested" => OverallTestStatus::NotTested,
                 "Skipped" => OverallTestStatus::Skipped,
@@ -148,6 +159,8 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             current_operator: model.current_operator.clone(),
             retries_count: model.retries_count,
             transient_data,
+            test_plc_channel_tag: model.test_plc_channel_tag.clone(),
+            test_plc_communication_address: model.test_plc_communication_address.clone(),
         }
     }
 } 

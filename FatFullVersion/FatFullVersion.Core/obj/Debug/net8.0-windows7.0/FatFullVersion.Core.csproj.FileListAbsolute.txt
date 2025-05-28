@@ -1,0 +1,13 @@
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\bin\Debug\net8.0-windows7.0\FatFullVersion.Core.deps.json
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\bin\Debug\net8.0-windows7.0\FatFullVersion.Core.dll
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\bin\Debug\net8.0-windows7.0\FatFullVersion.Core.pdb
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.csproj.AssemblyReference.cache
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.AssemblyInfoInputs.cache
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.AssemblyInfo.cs
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.csproj.CoreCompileInputs.cache
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.sourcelink.json
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.dll
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\refint\FatFullVersion.Core.dll
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\FatFullVersion.Core.pdb
+C:\Program Files\Git\code\FAT_TEST\FAT_TEST\FatFullVersion\FatFullVersion.Core\obj\Debug\net8.0-windows7.0\ref\FatFullVersion.Core.dll

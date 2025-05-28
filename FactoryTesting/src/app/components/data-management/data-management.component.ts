@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 // NG-ZORRO 组件导入
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -23,6 +24,7 @@ import { NzEmptyModule } from 'ng-zorro-antd/empty';
 // 服务导入
 import { TauriApiService } from '../../services/tauri-api.service';
 import { TestPlcConfigService } from '../../services/test-plc-config.service';
+import { DataStateService, ImportState } from '../../services/data-state.service';
 import { TestPlcChannelConfig, TestPlcChannelType } from '../../models/test-plc-config.model';
 
 @Component({
@@ -50,7 +52,7 @@ import { TestPlcChannelConfig, TestPlcChannelType } from '../../models/test-plc-
   templateUrl: './data-management.component.html',
   styleUrls: ['./data-management.component.css']
 })
-export class DataManagementComponent implements OnInit {
+export class DataManagementComponent implements OnInit, OnDestroy {
 
   // 当前步骤
   currentStep = 0;
@@ -71,32 +73,41 @@ export class DataManagementComponent implements OnInit {
   // 模态框状态
   isHistoryModalVisible = false;
 
-  constructor(private message: NzMessageService, private tauriApiService: TauriApiService, private testPlcConfigService: TestPlcConfigService) {}
+  // 订阅管理
+  private subscriptions: Subscription[] = [];
+
+  constructor(
+    private message: NzMessageService, 
+    private tauriApiService: TauriApiService, 
+    private testPlcConfigService: TestPlcConfigService,
+    private dataStateService: DataStateService
+  ) {}
 
   ngOnInit(): void {
-    this.loadHistoricalData();
+    // 不加载历史数据，确保应用启动时没有预设数据
+    this.subscribeToImportState();
   }
 
-  // 加载历史数据
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+  }
+
+  // 订阅导入状态
+  private subscribeToImportState(): void {
+    const subscription = this.dataStateService.importState$.subscribe(state => {
+      this.currentStep = state.currentStep;
+      this.importProgress = state.importProgress;
+      this.importResult = state.importResult;
+      this.isImporting = state.isImporting;
+      // 不恢复selectedFile，因为File对象无法序列化
+    });
+    this.subscriptions.push(subscription);
+  }
+
+  // 加载历史数据 - 仅在用户明确请求时加载
   loadHistoricalData(): void {
-    this.historicalData = [
-      {
-        id: '1',
-        name: '产品A测试数据_20241201',
-        date: '2024-12-01 14:30:00',
-        status: 'completed',
-        channelCount: 88, // 修正为实际的88个通道
-        testProgress: 100
-      },
-      {
-        id: '2',
-        name: '产品B测试数据_20241130',
-        date: '2024-11-30 16:45:00',
-        status: 'partial',
-        channelCount: 88, // 修正为实际的88个通道
-        testProgress: 65
-      }
-    ];
+    // 清空历史数据，不提供任何预设数据
+    this.historicalData = [];
   }
 
   // 文件选择处理
@@ -104,7 +115,10 @@ export class DataManagementComponent implements OnInit {
     const file = event.target.files[0];
     if (file) {
       this.selectedFile = file;
-      // 保持在步骤0，不要自动跳转到步骤1
+      // 更新状态但不自动跳转步骤
+      this.dataStateService.updateImportState({ 
+        selectedFile: file 
+      });
       console.log('文件已选择:', file.name, '当前步骤:', this.currentStep);
       this.message.success(`已选择文件: ${file.name}`);
     }
@@ -124,198 +138,245 @@ export class DataManagementComponent implements OnInit {
     }
 
     // 开始导入时才切换到步骤1
-    this.isImporting = true;
-    this.currentStep = 1;
-    this.importProgress = 0;
+    this.dataStateService.updateImportState({
+      isImporting: true,
+      currentStep: 1,
+      importProgress: 0
+    });
 
     console.log('导入开始，切换到步骤1');
 
     try {
       // 优化导入进度 - 加快一倍速度
       const progressInterval = setInterval(() => {
-        this.importProgress += 10; // 每次增加10%，恢复原来的速度
-        console.log('导入进度:', this.importProgress + '%');
+        const currentProgress = this.dataStateService.getCurrentImportState().importProgress;
+        const newProgress = currentProgress + 10; // 每次增加10%
+        
+        this.dataStateService.updateImportState({
+          importProgress: newProgress
+        });
+        
+        console.log('导入进度:', newProgress + '%');
         
         // 在某些关键点添加稍长的停顿，模拟真实的处理过程
-        if (this.importProgress === 30) {
-          setTimeout(() => {}, 150); // 模拟文件解析，减少延迟
-        } else if (this.importProgress === 80) {
-          setTimeout(() => {}, 250); // 模拟数据验证，减少延迟
+        if (newProgress === 30) {
+          setTimeout(() => {}, 150); // 模拟文件解析
+        } else if (newProgress === 80) {
+          setTimeout(() => {}, 250); // 模拟数据验证
         }
         
-        if (this.importProgress >= 100) {
+        if (newProgress >= 100) {
           clearInterval(progressInterval);
           console.log('导入进度完成，准备切换到完成步骤');
           // 稍微延迟完成，让用户看到100%
           setTimeout(() => {
             this.completeImport();
-          }, 150); // 减少延迟
+          }, 150);
         }
-      }, 200); // 200ms间隔，加快一倍速度
+      }, 200); // 200ms间隔
       
     } catch (error) {
       this.message.error('导入失败');
       console.error('导入错误:', error);
-      this.isImporting = false;
-      // 导入失败时回到步骤0
-      this.currentStep = 0;
+      this.dataStateService.updateImportState({
+        isImporting: false,
+        currentStep: 0
+      });
     }
   }
 
   // 完成导入
   completeImport(): void {
-    console.log('完成导入，切换到步骤2');
-    this.isImporting = false;
-    this.currentStep = 2;
+    if (!this.selectedFile) {
+      this.message.error('没有选择文件');
+      return;
+    }
+
+    // 调用真实的后端Excel解析服务
+    console.log('调用后端Excel解析服务:', this.selectedFile.name);
     
-    // 模拟真实的点位数量（88个点位）
-    const actualChannelCount = 88;
-    
-    this.importResult = {
-      success: true,
-      totalChannels: actualChannelCount,
-      successChannels: actualChannelCount,
-      failedChannels: 0,
-      batchInfo: this.generateBatchInfo(actualChannelCount) // 自动生成批次信息
-    };
-    
-    this.message.success('数据导入完成，已自动创建测试批次');
-    
-    // 调用后端自动分配逻辑
-    this.performAutoAllocation();
+    this.tauriApiService.parseExcelAndCreateBatch(this.selectedFile.name, this.selectedFile.name)
+      .subscribe({
+        next: (result) => {
+          console.log('后端Excel解析结果:', result);
+          
+          // 使用后端返回的真实结果
+          const importResult = {
+            success: true,
+            totalChannels: result.total_channels || result.channel_count || 0,
+            message: result.message || '数据导入成功',
+            timestamp: new Date().toISOString(),
+            batchInfo: result.batch_info || {
+              batch_id: result.batch_id,
+              product_model: result.product_model || this.extractProductModel(),
+              serial_number: result.serial_number || this.generateSerialNumber(),
+              creation_time: new Date().toISOString(),
+              total_points: result.total_channels || result.channel_count || 0,
+              tested_points: 0,
+              passed_points: 0,
+              failed_points: 0,
+              status_summary: '已创建，等待测试'
+            },
+            // 如果后端返回了分配结果，使用真实结果
+            allocationResult: result.allocation_result || null
+          };
+          
+          this.dataStateService.updateImportState({
+            isImporting: false,
+            currentStep: 2,
+            importResult: importResult
+          });
+          
+          this.message.success(`数据导入完成：${result.message || '成功解析Excel文件'}`);
+        },
+        error: (error) => {
+          console.error('后端Excel解析失败:', error);
+          
+          // 只有在后端服务不可用时才显示错误
+          if (this.tauriApiService.isTauriEnvironment()) {
+            this.message.error(`Excel解析失败: ${error.message || error}`);
+            this.dataStateService.updateImportState({
+              isImporting: false,
+              currentStep: 0
+            });
+          } else {
+            // 开发环境：提示用户需要启动后端服务
+            this.message.warning('开发环境：需要启动Tauri后端服务才能解析Excel文件');
+            this.dataStateService.updateImportState({
+              isImporting: false,
+              currentStep: 0
+            });
+          }
+        }
+      });
   }
 
   // 自动分配逻辑
   private async performAutoAllocation(): Promise<void> {
+    // 只有在Tauri环境中才执行分配逻辑
+    if (!this.tauriApiService.isTauriEnvironment()) {
+      console.log('开发环境：跳过自动分配');
+      return;
+    }
+
     try {
       console.log('开始执行自动分配逻辑...');
       
-      // 检查是否在Tauri环境中
-      if (this.tauriApiService.isTauriEnvironment()) {
-        // 调用真实的后端自动分配服务
-        const allocationResult = await this.tauriApiService.autoAllocateBatch({
-          batchId: this.importResult.batchInfo.batch_id,
-          batchInfo: this.importResult.batchInfo,
-          fileName: this.selectedFile?.name,
-          channelCount: this.importResult.totalChannels
-        }).toPromise();
-        
-        console.log('后端自动分配结果:', allocationResult);
-        this.message.success('批次自动分配完成，可在测试区域查看');
-      } else {
-        // 开发环境下使用基于测试PLC配置的智能分配
-        await this.performIntelligentAllocation();
-        console.log('智能自动分配完成（基于测试PLC配置）');
-        this.message.success('批次智能分配完成（基于测试PLC配置），可在测试区域查看');
-      }
+      // 调用真实的后端自动分配服务
+      console.log('使用Tauri后端服务进行自动分配...');
       
+      // 使用现有的导入Excel并分配通道命令
+      const filePath = this.selectedFile?.name || 'imported_data.xlsx';
+      const productModel = this.importResult.batchInfo.product_model;
+      const serialNumber = this.importResult.batchInfo.serial_number;
+      
+      const allocationResult = await this.tauriApiService.importExcelAndAllocateChannels(
+        filePath,
+        productModel,
+        serialNumber
+      ).toPromise();
+      
+      console.log('后端自动分配结果:', allocationResult);
+      
+      if (allocationResult && allocationResult.success) {
+        this.message.success(`自动分配完成：成功分配 ${allocationResult.allocated_count || 0} 个通道`);
+        
+        // 更新导入结果
+        const updatedResult = {
+          ...this.importResult,
+          allocationResult: allocationResult
+        };
+        updatedResult.batchInfo.allocated_count = allocationResult.allocated_count || 0;
+        updatedResult.batchInfo.batch_id = allocationResult.batch_id || updatedResult.batchInfo.batch_id;
+        
+        this.dataStateService.updateImportState({
+          importResult: updatedResult
+        });
+      } else {
+        throw new Error(allocationResult?.message || '分配失败');
+      }
     } catch (error) {
       console.error('自动分配失败:', error);
-      // 如果后端调用失败，回退到智能分配模式
-      await this.performIntelligentAllocation();
-      this.message.warning('后端服务不可用，使用智能分配模式');
+      this.message.warning('自动分配失败，请在测试区域手动查看批次信息');
     }
   }
 
-  // 基于测试PLC配置的智能分配
+  // 智能分配逻辑 - 调用后端服务进行真正的Excel解析和通道分配
   private async performIntelligentAllocation(): Promise<void> {
-    return new Promise((resolve) => {
-      // 获取测试PLC通道配置
-      this.testPlcConfigService.getTestPlcChannels().subscribe({
-        next: (testPlcChannels) => {
-          console.log('获取到测试PLC通道配置:', testPlcChannels.length, '个通道');
-          
-          // 按通道类型分组
-          const channelsByType = this.groupChannelsByType(testPlcChannels);
-          
-          // 模拟智能分配过程
-          setTimeout(() => {
-            console.log('智能分配过程:');
-            console.log('- 分析导入的点表数据');
-            console.log('- 按模块类型匹配测试PLC通道');
-            console.log('- AI通道可用:', channelsByType['AI']?.length || 0);
-            console.log('- AO通道可用:', channelsByType['AO']?.length || 0);
-            console.log('- DI通道可用:', channelsByType['DI']?.length || 0);
-            console.log('- DO通道可用:', channelsByType['DO']?.length || 0);
-            console.log('- 创建通道映射关系');
-            console.log('- 生成测试实例');
-            
-            // 更新批次信息，包含分配详情
-            this.importResult.batchInfo.allocation_details = {
-              total_test_channels: testPlcChannels.length,
-              available_ai_channels: channelsByType['AI']?.length || 0,
-              available_ao_channels: channelsByType['AO']?.length || 0,
-              available_di_channels: channelsByType['DI']?.length || 0,
-              available_do_channels: channelsByType['DO']?.length || 0,
-              allocation_strategy: 'intelligent_mapping',
-              allocation_time: new Date().toISOString()
-            };
-            
-            resolve();
-          }, 1500);
-        },
-        error: (error) => {
-          console.error('获取测试PLC通道配置失败:', error);
-          // 回退到简单分配模式
-          this.performSimpleAllocation();
-          resolve();
-        }
-      });
-    });
-  }
-
-  // 按通道类型分组
-  private groupChannelsByType(channels: TestPlcChannelConfig[]): Record<string, TestPlcChannelConfig[]> {
-    const grouped: Record<string, TestPlcChannelConfig[]> = {};
+    console.log('执行基于后端服务的智能分配逻辑...');
     
-    channels.forEach(channel => {
-      if (!channel.isEnabled) return; // 跳过禁用的通道
-      
-      let typeKey = '';
-      switch (channel.channelType) {
-        case TestPlcChannelType.AI:
-        case TestPlcChannelType.AINone:
-          typeKey = 'AI';
-          break;
-        case TestPlcChannelType.AO:
-        case TestPlcChannelType.AONone:
-          typeKey = 'AO';
-          break;
-        case TestPlcChannelType.DI:
-        case TestPlcChannelType.DINone:
-          typeKey = 'DI';
-          break;
-        case TestPlcChannelType.DO:
-        case TestPlcChannelType.DONone:
-          typeKey = 'DO';
-          break;
+    try {
+      if (!this.selectedFile) {
+        throw new Error('没有选择Excel文件');
       }
       
-      if (typeKey) {
-        if (!grouped[typeKey]) {
-          grouped[typeKey] = [];
-        }
-        grouped[typeKey].push(channel);
+      console.log(`开始调用后端服务解析Excel文件: ${this.selectedFile.name}`);
+      
+      // 只有在Tauri环境中才调用后端服务
+      if (!this.tauriApiService.isTauriEnvironment()) {
+        console.log('开发环境：跳过后端Excel解析服务调用');
+        return;
       }
-    });
-    
-    return grouped;
+      
+      // 调用真实的后端Excel解析和分配服务
+      const filePath = this.selectedFile.name;
+      const productModel = this.importResult.batchInfo.product_model;
+      const serialNumber = this.importResult.batchInfo.serial_number;
+      
+      console.log('调用后端importExcelAndAllocateChannels服务...');
+      const allocationResult = await this.tauriApiService.importExcelAndAllocateChannels(
+        filePath,
+        productModel,
+        serialNumber
+      ).toPromise();
+      
+      console.log('后端分配结果:', allocationResult);
+      
+      if (allocationResult && allocationResult.success) {
+        // 使用后端返回的真实分配结果
+        const updatedResult = {
+          ...this.importResult,
+          allocationResult: {
+            success: true,
+            allocated_count: allocationResult.allocated_count,
+            conflict_count: allocationResult.conflict_count || 0,
+            total_count: allocationResult.total_count || this.importResult.totalChannels,
+            total_batches: allocationResult.total_batches || 1,
+            message: allocationResult.message || '智能分配完成',
+            allocation_details: {
+              source: 'backend_service',
+              excel_file_name: this.selectedFile.name,
+              allocation_algorithm: '后端Excel解析和通道分配服务',
+              backend_result: allocationResult
+            }
+          }
+        };
+        
+        updatedResult.batchInfo.allocated_count = allocationResult.allocated_count;
+        updatedResult.batchInfo.conflict_count = allocationResult.conflict_count || 0;
+        updatedResult.batchInfo.total_batches = allocationResult.total_batches || 1;
+        updatedResult.batchInfo.batch_id = allocationResult.batch_id || updatedResult.batchInfo.batch_id;
+        
+        this.dataStateService.updateImportState({
+          importResult: updatedResult
+        });
+        
+        this.message.success(`智能分配完成：${allocationResult.message || '成功分配通道'}`);
+      } else {
+        throw new Error(allocationResult?.message || '后端分配服务返回失败');
+      }
+      
+    } catch (error) {
+      console.error('智能分配过程中发生错误:', error);
+      // 在Tauri环境中才显示错误，开发环境中静默处理
+      if (this.tauriApiService.isTauriEnvironment()) {
+        this.message.warning('智能分配失败，请在测试区域手动查看批次信息');
+      }
+      throw error;
+    }
   }
 
-  // 简单分配模式（回退方案）
-  private async performSimpleAllocation(): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log('简单分配模式：');
-        console.log('- 使用默认通道分配策略');
-        console.log('- 按顺序分配测试通道');
-        console.log('- 创建基础测试实例');
-        resolve();
-      }, 1000);
-    });
-  }
-
-  // 生成批次信息
+  // 生成批次信息 - 修正Excel列映射关系
   private generateBatchInfo(channelCount: number): any {
     const now = new Date();
     const batchId = `BATCH_${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
@@ -329,7 +390,14 @@ export class DataManagementComponent implements OnInit {
       tested_points: 0,
       passed_points: 0,
       failed_points: 0,
-      status_summary: '已创建，等待测试'
+      status_summary: '已创建，等待测试',
+      // 添加Excel列映射说明
+      excel_column_mapping: {
+        '变量名称(HMI)': '点位名称',
+        '变量描述': '通道位号', 
+        '通道位号': '被测PLC通道号',
+        'channel_address': '测试PLC通道号'
+      }
     };
   }
 
@@ -351,11 +419,8 @@ export class DataManagementComponent implements OnInit {
 
   // 重置导入流程
   resetImport(): void {
-    this.currentStep = 0;
     this.selectedFile = null;
-    this.importProgress = 0;
-    this.importResult = null;
-    this.isImporting = false;
+    this.dataStateService.resetImportState();
   }
 
   // 显示历史数据模态框
@@ -377,7 +442,22 @@ export class DataManagementComponent implements OnInit {
   // 导出当前数据
   exportCurrentData(): void {
     this.message.info('正在导出当前数据...');
-    // TODO: 实现导出功能
+  }
+
+  // 获取分配率
+  getAllocationRate(): number {
+    if (!this.importResult?.allocationResult) {
+      return 0;
+    }
+    
+    const total = this.importResult.allocationResult.total_count || this.importResult.totalChannels;
+    const allocated = this.importResult.allocationResult.allocated_count || 0;
+    
+    if (total === 0) {
+      return 0;
+    }
+    
+    return Math.round((allocated / total) * 100);
   }
 
   // 获取状态标签颜色

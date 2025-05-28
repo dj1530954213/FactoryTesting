@@ -6,8 +6,10 @@ use tauri::State;
 use serde::{Deserialize, Serialize};
 use crate::models::{ChannelPointDefinition, TestBatchInfo};
 use crate::services::infrastructure::ExcelImporter;
+use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::tauri_commands::AppState;
-use log::{info, error};
+use log::{info, error, warn};
+use uuid;
 
 /// Excel文件解析请求
 #[derive(Debug, Deserialize)]
@@ -401,5 +403,261 @@ pub async fn get_batch_status_cmd(
         batch_info,
         instances,
         progress,
+    })
+}
+
+/// 准备批次测试实例的参数
+#[derive(Debug, Deserialize)]
+pub struct PrepareTestInstancesForBatchCmdArgs {
+    pub batch_id: String,
+    pub definition_ids: Option<Vec<String>>, // 可选的定义ID列表，如果为空则使用所有可用定义
+}
+
+/// 准备批次测试实例的响应
+#[derive(Debug, Serialize)]
+pub struct PrepareTestInstancesResponse {
+    pub batch_info: TestBatchInfo,
+    pub instances: Vec<crate::models::ChannelTestInstance>,
+    pub definitions: Vec<ChannelPointDefinition>,
+    pub allocation_summary: AllocationSummary,
+}
+
+/// 分配摘要信息
+#[derive(Debug, Serialize)]
+pub struct AllocationSummary {
+    pub total_definitions: u32,
+    pub allocated_instances: u32,
+    pub skipped_definitions: u32,
+    pub allocation_errors: Vec<String>,
+}
+
+/// 准备批次测试实例 - 实现自动分配逻辑
+#[tauri::command]
+pub async fn prepare_test_instances_for_batch_cmd(
+    args: PrepareTestInstancesForBatchCmdArgs,
+    state: State<'_, AppState>
+) -> Result<PrepareTestInstancesResponse, String> {
+    info!("准备批次测试实例: 批次ID = {}", args.batch_id);
+    
+    // 1. 验证批次是否存在
+    let mut batch_info = match state.persistence_service.load_batch_info(&args.batch_id).await {
+        Ok(Some(info)) => info,
+        Ok(None) => return Err(format!("批次不存在: {}", args.batch_id)),
+        Err(e) => {
+            error!("获取批次信息失败: {}", e);
+            return Err(format!("获取批次信息失败: {}", e));
+        }
+    };
+    
+    // 2. 获取要分配的通道定义
+    let all_definitions = match state.persistence_service.load_all_channel_definitions().await {
+        Ok(definitions) => definitions,
+        Err(e) => {
+            error!("获取通道定义失败: {}", e);
+            return Err(format!("获取通道定义失败: {}", e));
+        }
+    };
+    
+    // 3. 根据definition_ids过滤定义（如果提供了）
+    let target_definitions = if let Some(ref definition_ids) = args.definition_ids {
+        all_definitions.into_iter()
+            .filter(|def| definition_ids.contains(&def.id))
+            .collect::<Vec<_>>()
+    } else {
+        all_definitions
+    };
+    
+    if target_definitions.is_empty() {
+        return Err("没有找到可用的通道定义进行分配".to_string());
+    }
+    
+    info!("找到 {} 个通道定义需要分配测试实例", target_definitions.len());
+    
+    // 4. 检查是否已存在测试实例
+    let existing_instances = match state.persistence_service.load_test_instances_by_batch(&args.batch_id).await {
+        Ok(instances) => instances,
+        Err(e) => {
+            warn!("获取现有测试实例失败，将创建新实例: {}", e);
+            Vec::new()
+        }
+    };
+    
+    let existing_definition_ids: std::collections::HashSet<String> = existing_instances
+        .iter()
+        .map(|instance| instance.definition_id.clone())
+        .collect();
+    
+    // 5. 为每个定义创建测试实例（跳过已存在的）
+    let mut instances = existing_instances;
+    let mut allocation_errors = Vec::new();
+    let mut allocated_count = 0;
+    let mut skipped_count = 0;
+    
+    for definition in &target_definitions {
+        if existing_definition_ids.contains(&definition.id) {
+            info!("跳过已存在的测试实例: 定义ID = {}", definition.id);
+            skipped_count += 1;
+            continue;
+        }
+        
+        // 使用通道状态管理器创建测试实例
+        match state.channel_state_manager.create_test_instance(
+            &definition.id,
+            &args.batch_id
+        ).await {
+            Ok(instance) => {
+                // 保存测试实例到数据库
+                if let Err(e) = state.persistence_service.save_test_instance(&instance).await {
+                    let error_msg = format!("保存测试实例失败: {} - {}", instance.instance_id, e);
+                    error!("{}", error_msg);
+                    allocation_errors.push(error_msg);
+                } else {
+                    info!("成功创建并保存测试实例: {} (定义: {})", instance.instance_id, definition.tag);
+                    instances.push(instance);
+                    allocated_count += 1;
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("创建测试实例失败: {} - {}", definition.tag, e);
+                error!("{}", error_msg);
+                allocation_errors.push(error_msg);
+            }
+        }
+    }
+    
+    // 6. 更新批次信息
+    batch_info.total_points = instances.len() as u32;
+    batch_info.last_updated_time = chrono::Utc::now();
+    
+    // 保存更新后的批次信息
+    if let Err(e) = state.persistence_service.save_batch_info(&batch_info).await {
+        warn!("更新批次信息失败: {}", e);
+    }
+    
+    // 7. 构建分配摘要
+    let allocation_summary = AllocationSummary {
+        total_definitions: target_definitions.len() as u32,
+        allocated_instances: allocated_count,
+        skipped_definitions: skipped_count,
+        allocation_errors,
+    };
+    
+    info!("批次测试实例准备完成: 总定义数={}, 新分配={}, 跳过={}, 错误数={}", 
+          allocation_summary.total_definitions,
+          allocation_summary.allocated_instances,
+          allocation_summary.skipped_definitions,
+          allocation_summary.allocation_errors.len());
+    
+    Ok(PrepareTestInstancesResponse {
+        batch_info,
+        instances,
+        definitions: target_definitions,
+        allocation_summary,
+    })
+}
+
+/// 导入Excel并自动分配通道命令
+/// 这个命令会导入Excel数据，创建通道定义，然后自动分配测试批次
+#[tauri::command]
+pub async fn import_excel_and_allocate_channels_cmd(
+    file_path: String,
+    product_model: Option<String>,
+    serial_number: Option<String>,
+) -> Result<crate::services::BatchAllocationResult, String> {
+    log::info!("开始导入Excel文件并分配通道: {}", file_path);
+    
+    // 1. 解析Excel文件
+    let excel_response = match ExcelImporter::parse_excel_file(&file_path).await {
+        Ok(definitions) => definitions,
+        Err(e) => {
+            log::error!("Excel文件解析失败: {}", e);
+            return Err(format!("Excel文件解析失败: {}", e));
+        }
+    };
+    
+    // 2. 转换为通道定义
+    let definitions = excel_response;
+    
+    log::info!("成功转换 {} 个通道定义", definitions.len());
+    
+    // 3. 创建默认测试PLC配置
+    let test_plc_config = create_default_test_plc_config().await?;
+    
+    // 4. 执行通道分配
+    let allocation_service = crate::services::ChannelAllocationService::new();
+    let result = allocation_service
+        .allocate_channels(definitions, test_plc_config, product_model, serial_number)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    log::info!(
+        "通道分配完成，生成 {} 个批次，{} 个实例",
+        result.batches.len(),
+        result.allocated_instances.len()
+    );
+    
+    Ok(result)
+}
+
+/// 创建默认测试PLC配置的辅助函数
+async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConfig, String> {
+    // 根据正确的分配数据创建测试PLC通道映射
+    let mut comparison_tables = Vec::new();
+    
+    // 添加AO通道 (用于测试AI) - 根据分配数据：AO1_1-AO1_6, AO2_1-AO2_8
+    // AO1模块：6个通道
+    for channel in 1..=6 {
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("AO1_{}", channel),
+            communication_address: format!("AO1.{}", channel),
+            channel_type: crate::models::ModuleType::AO,
+            is_powered: true, // AO有源
+        });
+    }
+    
+    // AO2模块：8个通道
+    for channel in 1..=8 {
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("AO2_{}", channel),
+            communication_address: format!("AO2.{}", channel),
+            channel_type: crate::models::ModuleType::AO,
+            is_powered: true, // AO有源
+        });
+    }
+    
+    // 添加AI通道 (用于测试AO) - 根据分配数据：AI1_1-AI1_5
+    for channel in 1..=5 {
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("AI1_{}", channel),
+            communication_address: format!("AI1.{}", channel),
+            channel_type: crate::models::ModuleType::AI,
+            is_powered: true, // AI有源
+        });
+    }
+    
+    // 添加DO通道 (用于测试DI) - 根据分配数据：DO2_1-DO2_16
+    for channel in 1..=16 {
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("DO2_{}", channel),
+            communication_address: format!("DO2.{}", channel),
+            channel_type: crate::models::ModuleType::DO,
+            is_powered: true, // DO有源
+        });
+    }
+    
+    // 添加DI通道 (用于测试DO) - 根据分配数据：DI2_1-DI2_12
+    for channel in 1..=12 {
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("DI2_{}", channel),
+            communication_address: format!("DI2.{}", channel),
+            channel_type: crate::models::ModuleType::DI,
+            is_powered: true, // DI有源
+        });
+    }
+    
+    Ok(crate::services::TestPlcConfig {
+        brand_type: "Micro850".to_string(),
+        ip_address: "127.0.0.1".to_string(),
+        comparison_tables,
     })
 } 

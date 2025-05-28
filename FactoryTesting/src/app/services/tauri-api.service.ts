@@ -14,7 +14,10 @@ import {
   AppSettings,
   ParseExcelResponse,
   CreateBatchRequest,
-  CreateBatchResponse
+  CreateBatchResponse,
+  PrepareTestInstancesRequest,
+  PrepareTestInstancesResponse,
+  BatchDetailsPayload
 } from '../models';
 
 @Injectable({
@@ -97,7 +100,7 @@ export class TauriApiService {
    * 导入Excel文件并解析通道定义
    */
   importExcelFile(filePath: string): Observable<ChannelPointDefinition[]> {
-    return from(invoke<ChannelPointDefinition[]>('import_excel_file', { filePath }));
+    return from(invoke<ChannelPointDefinition[]>('import_excel_file', { file_path: filePath }));
   }
 
   /**
@@ -323,6 +326,70 @@ export class TauriApiService {
   }
 
   // ============================================================================
+  // 通道分配相关命令
+  // ============================================================================
+
+  /**
+   * 导入Excel文件并自动分配通道
+   */
+  importExcelAndAllocateChannels(
+    filePath: string, 
+    productModel?: string, 
+    serialNumber?: string
+  ): Observable<any> {
+    return from(invoke('import_excel_and_allocate_channels_cmd', { 
+      filePath, 
+      productModel, 
+      serialNumber 
+    }));
+  }
+
+  /**
+   * 分配通道
+   */
+  allocateChannels(
+    definitions: ChannelPointDefinition[],
+    testPlcConfig: any,
+    productModel?: string,
+    serialNumber?: string
+  ): Observable<any> {
+    return from(invoke('allocate_channels_cmd', {
+      definitions,
+      testPlcConfig,
+      productModel,
+      serialNumber
+    }));
+  }
+
+  /**
+   * 获取批次实例
+   */
+  getBatchInstances(batchId: string): Observable<ChannelTestInstance[]> {
+    return from(invoke<ChannelTestInstance[]>('get_batch_instances_cmd', { batchId }));
+  }
+
+  /**
+   * 清除所有分配
+   */
+  clearAllAllocations(instances: ChannelTestInstance[]): Observable<ChannelTestInstance[]> {
+    return from(invoke<ChannelTestInstance[]>('clear_all_allocations_cmd', { instances }));
+  }
+
+  /**
+   * 验证分配
+   */
+  validateAllocations(instances: ChannelTestInstance[]): Observable<any> {
+    return from(invoke('validate_allocations_cmd', { instances }));
+  }
+
+  /**
+   * 创建默认测试PLC配置
+   */
+  createDefaultTestPlcConfig(): Observable<any> {
+    return from(invoke('create_default_test_plc_config_cmd'));
+  }
+
+  // ============================================================================
   // 私有方法
   // ============================================================================
 
@@ -355,5 +422,38 @@ export class TauriApiService {
    */
   parseExcelAndCreateBatch(filePath: string, fileName: string): Observable<any> {
     return from(invoke('parse_excel_and_create_batch_cmd', { filePath, fileName }));
+  }
+
+  /**
+   * 准备批次测试实例 - 自动分配逻辑
+   */
+  prepareTestInstancesForBatch(request: PrepareTestInstancesRequest): Observable<PrepareTestInstancesResponse> {
+    return from(invoke<PrepareTestInstancesResponse>('prepare_test_instances_for_batch_cmd', {
+      batch_id: request.batch_id,
+      definition_ids: request.definition_ids
+    }));
+  }
+
+  /**
+   * 自动分配测试实例 - 为选中的批次分配测试实例
+   */
+  allocateTestInstances(batchId: string): Observable<PrepareTestInstancesResponse> {
+    return this.prepareTestInstancesForBatch({ batch_id: batchId });
+  }
+
+  /**
+   * 获取批次详细状态和实例信息
+   */
+  getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
+    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { 
+      batch_id: batchId 
+    }));
+  }
+
+  /**
+   * 获取通道映射配置
+   */
+  getChannelMappings(): Observable<any[]> {
+    return from(invoke<any[]>('get_channel_mappings_cmd'));
   }
 } 

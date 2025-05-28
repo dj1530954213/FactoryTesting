@@ -4,17 +4,21 @@ pub mod utils;
 pub mod services;
 pub mod tauri_commands;
 pub mod commands;
+pub mod error;
+pub mod database_migration;
 
 // 重新导出常用类型，方便使用
 pub use models::*;
-pub use utils::{AppError, AppResult, AppConfig};
+pub use utils::{AppConfig};
 pub use services::*;
 pub use tauri_commands::{AppState, SystemStatus, init_app_state};
+pub use database_migration::DatabaseMigration;
 
 // 导入新的命令函数
 use commands::data_management::{
     parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
-    import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd
+    import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
+    prepare_test_instances_for_batch_cmd, import_excel_and_allocate_channels_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
@@ -23,6 +27,10 @@ use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
     get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd
+};
+use commands::channel_allocation_commands::{
+    allocate_channels_cmd, get_batch_instances_cmd, clear_all_allocations_cmd,
+    validate_allocations_cmd, create_default_test_plc_config_cmd
 };
 
 /// 应用程序主要运行函数
@@ -81,6 +89,7 @@ pub fn run() {
                 import_excel_and_prepare_batch_cmd,
                 start_tests_for_batch_cmd,
                 get_batch_status_cmd,
+                prepare_test_instances_for_batch_cmd,
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
                 write_channel_value_cmd,
@@ -92,7 +101,13 @@ pub fn run() {
                 test_plc_connection_cmd,
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
-                initialize_default_test_plc_channels_cmd
+                initialize_default_test_plc_channels_cmd,
+                allocate_channels_cmd,
+                get_batch_instances_cmd,
+                clear_all_allocations_cmd,
+                validate_allocations_cmd,
+                create_default_test_plc_config_cmd,
+                import_excel_and_allocate_channels_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");
@@ -149,8 +164,7 @@ fn run_example() {
     
     // 4. 演示错误处理
     println!("\n4. 错误处理示例:");
-    let error = AppError::plc_communication_error("连接超时");
-    println!("   错误代码: {}", error.error_code());
+    let error = error::AppError::PlcCommunicationError { message: "连接超时".to_string() };
     println!("   错误信息: {}", error);
     
     // 5. 序列化示例
