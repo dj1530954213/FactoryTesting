@@ -437,55 +437,287 @@ impl IConfigurationRepository for MemoryConfigurationRepository {
     }
     
     async fn import_from_excel(&self, file_path: &str, config_name: &str) -> Result<Vec<ChannelPointDefinition>, RepositoryError> {
-        // TODO: 实现Excel导入逻辑
-        // 这里先返回一个模拟结果
-        let definition = ChannelPointDefinition {
-            id: Uuid::new_v4().to_string(),
-            tag: format!("TEST_TAG_{}", config_name),
-            variable_name: "Test Variable".to_string(),
-            variable_description: "Test Description".to_string(),
-            station_name: "Test Station".to_string(),
-            module_name: "Test Module".to_string(),
-            module_type: ModuleType::AI,
-            channel_tag_in_module: "CH01".to_string(),
-            data_type: PointDataType::Float,
-            power_supply_type: "有源".to_string(),
-            wire_system: "4线制".to_string(),
-            plc_absolute_address: Some("DB1.DBD0".to_string()),
-            plc_communication_address: "DB1.DBD0".to_string(),
-            range_lower_limit: Some(0.0),
-            range_upper_limit: Some(100.0),
-            engineering_unit: Some("mA".to_string()),
-            sll_set_value: Some(10.0),
-            sll_set_point_address: Some("DB1.DBD4".to_string()),
-            sll_feedback_address: Some("DB1.DBX8.0".to_string()),
-            sl_set_value: Some(20.0),
-            sl_set_point_address: Some("DB1.DBD8".to_string()),
-            sl_feedback_address: Some("DB1.DBX8.1".to_string()),
-            sh_set_value: Some(80.0),
-            sh_set_point_address: Some("DB1.DBD12".to_string()),
-            sh_feedback_address: Some("DB1.DBX8.2".to_string()),
-            shh_set_value: Some(90.0),
-            shh_set_point_address: Some("DB1.DBD16".to_string()),
-            shh_feedback_address: Some("DB1.DBX8.3".to_string()),
-            maintenance_value_set_point_address: Some("DB1.DBD20".to_string()),
-            maintenance_enable_switch_point_address: Some("DB1.DBX8.4".to_string()),
-            access_property: Some("RW".to_string()),
-            save_history: Some(true),
-            power_failure_protection: Some(true),
-            test_rig_plc_address: Some("DB2.DBD0".to_string()),
-        };
+        use calamine::{Reader, Xlsx, open_workbook};
         
-        let definitions = vec![definition];
-        self.save_configuration_set(config_name, &definitions).await?;
+        // 打开Excel工作簿
+        let mut workbook: Xlsx<_> = open_workbook(file_path)
+            .map_err(|e| RepositoryError::DeserializationError(format!("无法打开Excel文件: {}", e)))?;
+        
+        // 获取第一个工作表
+        let worksheet_name = workbook.sheet_names().get(0)
+            .ok_or_else(|| RepositoryError::DeserializationError("Excel文件没有工作表".to_string()))?
+            .clone();
+        
+        let range = workbook.worksheet_range(&worksheet_name)
+            .map_err(|e| RepositoryError::DeserializationError(format!("无法读取工作表: {}", e)))?;
+        
+        let mut definitions = Vec::new();
+        
+        // 跳过表头，从第二行开始解析
+        for (row_index, row) in range.rows().enumerate().skip(1) {
+            if row.is_empty() || row.len() < 52 {
+                continue;
+            }
+            
+            // 解析每一行的数据，构建ChannelPointDefinition
+            let definition = self.parse_excel_row(row, row_index + 2)?; // +2是因为Excel行号从1开始，我们跳过了表头
+            definitions.push(definition);
+        }
+        
+        // 验证导入的数据
+        let validation_issues = self.validate_definitions(&definitions).await?;
+        if validation_issues.iter().any(|issue| matches!(issue.severity, ValidationSeverity::Error)) {
+            return Err(RepositoryError::ValidationError(
+                format!("导入的数据存在错误，请检查Excel文件格式")
+            ));
+        }
+        
+        // 保存为配置集
+        if !definitions.is_empty() {
+            self.save_configuration_set(config_name, &definitions).await?;
+        }
+        
+        log::info!("从Excel导入配置完成: 文件={}, 配置集={}, 导入数量={}", file_path, config_name, definitions.len());
         Ok(definitions)
     }
     
-    async fn export_to_excel(&self, definitions: &[ChannelPointDefinition], file_path: &str) -> Result<(), RepositoryError> {
-        // TODO: 实现Excel导出逻辑
-        println!("导出 {} 个点位定义到文件: {}", definitions.len(), file_path);
-        Ok(())
+    /// 解析Excel行数据为ChannelPointDefinition
+    fn parse_excel_row(&self, row: &[calamine::DataType], row_number: usize) -> Result<ChannelPointDefinition, RepositoryError> {
+        use calamine::DataType;
+        
+        // 定义Excel列的顺序映射（基于实际表头）
+        let get_cell_string = |index: usize| -> String {
+            if index < row.len() {
+                match &row[index] {
+                    DataType::String(s) => s.trim().to_string(),
+                    DataType::Float(f) => f.to_string(),
+                    DataType::Int(i) => i.to_string(),
+                    DataType::Bool(b) => b.to_string(),
+                    _ => String::new(),
+                }
+            } else {
+                String::new()
+            }
+        };
+        
+        let get_cell_float = |index: usize| -> Option<f64> {
+            if index < row.len() {
+                match &row[index] {
+                    DataType::Float(f) => Some(*f),
+                    DataType::Int(i) => Some(*i as f64),
+                    DataType::String(s) => {
+                        let s = s.trim();
+                        if s.is_empty() || s == "/" {
+                            None
+                        } else {
+                            s.parse().ok()
+                        }
+                    },
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        };
+        
+        let get_cell_bool = |index: usize| -> Option<bool> {
+            if index < row.len() {
+                match &row[index] {
+                    DataType::Bool(b) => Some(*b),
+                    DataType::String(s) => {
+                        let s = s.trim();
+                        match s {
+                            "是" | "true" | "True" | "TRUE" | "1" => Some(true),
+                            "否" | "false" | "False" | "FALSE" | "0" => Some(false),
+                            _ => None,
+                        }
+                    },
+                    DataType::Int(i) => Some(*i != 0),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        };
+        
+        let get_optional_string = |index: usize| -> Option<String> {
+            let s = get_cell_string(index);
+            if s.is_empty() || s == "/" {
+                None
+            } else {
+                Some(s)
+            }
+        };
+        
+        // 解析模块类型
+        let module_type_str = get_cell_string(2); // 第2列：模块类型
+        let module_type = module_type_str.parse::<ModuleType>()
+            .map_err(|_| RepositoryError::ValidationError(
+                format!("第{}行: 无效的模块类型 '{}'", row_number, module_type_str)
+            ))?;
+        
+        // 解析数据类型
+        let data_type_str = get_cell_string(10); // 第10列：数据类型
+        let data_type = data_type_str.parse::<PointDataType>()
+            .map_err(|_| RepositoryError::ValidationError(
+                format!("第{}行: 无效的数据类型 '{}'", row_number, data_type_str)
+            ))?;
+        
+        // 构建定义对象（根据实际Excel列索引）
+        let definition = ChannelPointDefinition {
+            id: Uuid::new_v4().to_string(),
+            tag: get_cell_string(6),                    // 第6列：位号
+            variable_name: get_cell_string(8),          // 第8列：变量名称（HMI）
+            variable_description: get_cell_string(9),   // 第9列：变量描述
+            station_name: get_cell_string(7),           // 第7列：场站名
+            module_name: get_cell_string(1),            // 第1列：模块名称
+            module_type,                                 // 第2列：模块类型
+            channel_tag_in_module: get_cell_string(5),  // 第5列：通道位号
+            data_type,                                   // 第10列：数据类型
+            power_supply_type: get_cell_string(3),      // 第3列：供电类型（有源/无源）
+            wire_system: get_cell_string(4),            // 第4列：线制
+            plc_absolute_address: get_optional_string(51), // 第51列：PLC绝对地址
+            plc_communication_address: get_cell_string(52), // 第52列：上位机通讯地址
+            range_lower_limit: get_cell_float(14),      // 第14列：量程低限
+            range_upper_limit: get_cell_float(15),      // 第15列：量程高限
+            engineering_unit: None, // Excel中没有对应列
+            sll_set_value: get_cell_float(16),          // 第16列：SLL设定值
+            sll_set_point_address: get_optional_string(17), // 第17列：SLL设定点位
+            sll_feedback_address: get_optional_string(18), // 第18列：SLL设定点位_PLC地址
+            sl_set_value: get_cell_float(20),           // 第20列：SL设定值
+            sl_set_point_address: get_optional_string(21), // 第21列：SL设定点位
+            sl_feedback_address: get_optional_string(22),  // 第22列：SL设定点位_PLC地址
+            sh_set_value: get_cell_float(24),           // 第24列：SH设定值
+            sh_set_point_address: get_optional_string(25), // 第25列：SH设定点位
+            sh_feedback_address: get_optional_string(26),  // 第26列：SH设定点位_PLC地址
+            shh_set_value: get_cell_float(28),          // 第28列：SHH设定值
+            shh_set_point_address: get_optional_string(29), // 第29列：SHH设定点位
+            shh_feedback_address: get_optional_string(30),  // 第30列：SHH设定点位_PLC地址
+            maintenance_value_set_point_address: get_optional_string(46), // 第46列：维护值设定点位_PLC地址
+            maintenance_enable_switch_point_address: get_optional_string(49), // 第49列：维护使能开关点位_PLC地址
+            access_property: get_optional_string(11),   // 第11列：读写属性
+            save_history: get_cell_bool(12),            // 第12列：保存历史
+            power_failure_protection: get_cell_bool(13), // 第13列：掉电保护
+            test_rig_plc_address: None, // Excel中没有对应列，可以后续添加
+        };
+        
+        Ok(definition)
     }
+    
+    async fn export_to_excel(&self, definitions: &[ChannelPointDefinition], file_path: &str) -> Result<(), RepositoryError> {
+        use rust_xlsxwriter::{Workbook, Worksheet, Format};
+        
+        // 创建工作簿
+        let mut workbook = Workbook::new();
+        let mut worksheet = workbook.add_worksheet();
+        
+        // 设置表头格式
+        let header_format = Format::new()
+            .set_bold()
+            .set_background_color("#E0E0E0")
+            .set_border(rust_xlsxwriter::FormatBorder::Thin);
+        
+        // 定义表头（基于实际Excel格式）
+        let headers = vec![
+            "序号", "模块名称", "模块类型", "供电类型（有源/无源）", "线制", 
+            "通道位号", "位号", "场站名", "变量名称（HMI）", "变量描述", 
+            "数据类型", "读写属性", "保存历史", "掉电保护", "量程低限", "量程高限",
+            "SLL设定值", "SLL设定点位", "SLL设定点位_PLC地址", "SLL设定点位_通讯地址",
+            "SL设定值", "SL设定点位", "SL设定点位_PLC地址", "SL设定点位_通讯地址",
+            "SH设定值", "SH设定点位", "SH设定点位_PLC地址", "SH设定点位_通讯地址",
+            "SHH设定值", "SHH设定点位", "SHH设定点位_PLC地址", "SHH设定点位_通讯地址",
+            "LL报警", "LL报警_PLC地址", "LL报警_通讯地址", "L报警", "L报警_PLC地址", "L报警_通讯地址",
+            "H报警", "H报警_PLC地址", "H报警_通讯地址", "HH报警", "HH报警_PLC地址", "HH报警_通讯地址",
+            "维护值设定", "维护值设定点位", "维护值设定点位_PLC地址", "维护值设定点位_通讯地址",
+            "维护使能开关点位", "维护使能开关点位_PLC地址", "维护使能开关点位_通讯地址",
+            "PLC绝对地址", "上位机通讯地址"
+        ];
+        
+        // 写入表头
+        for (col_index, header) in headers.iter().enumerate() {
+            worksheet.write_string_with_format(0, col_index as u16, header, &header_format)
+                .map_err(|e| RepositoryError::SerializationError(format!("写入表头失败: {}", e)))?;
+        }
+        
+        // 写入数据行
+        for (row_index, definition) in definitions.iter().enumerate() {
+            let row = (row_index + 1) as u32; // +1 跳过表头
+            
+            // 写入每列数据（按照实际Excel格式）
+            let row_data = vec![
+                (row_index + 1).to_string(),                                    // 0: 序号
+                definition.module_name.clone(),                                 // 1: 模块名称
+                format!("{:?}", definition.module_type),                        // 2: 模块类型
+                definition.power_supply_type.clone(),                           // 3: 供电类型（有源/无源）
+                definition.wire_system.clone(),                                 // 4: 线制
+                definition.channel_tag_in_module.clone(),                       // 5: 通道位号
+                definition.tag.clone(),                                         // 6: 位号
+                definition.station_name.clone(),                                // 7: 场站名
+                definition.variable_name.clone(),                               // 8: 变量名称（HMI）
+                definition.variable_description.clone(),                        // 9: 变量描述
+                format!("{:?}", definition.data_type),                          // 10: 数据类型
+                definition.access_property.clone().unwrap_or_default(),         // 11: 读写属性
+                definition.save_history.map_or(String::new(), |v| if v { "是".to_string() } else { "否".to_string() }), // 12: 保存历史
+                definition.power_failure_protection.map_or(String::new(), |v| if v { "是".to_string() } else { "否".to_string() }), // 13: 掉电保护
+                definition.range_lower_limit.map_or(String::new(), |v| v.to_string()), // 14: 量程低限
+                definition.range_upper_limit.map_or(String::new(), |v| v.to_string()), // 15: 量程高限
+                definition.sll_set_value.map_or(String::new(), |v| v.to_string()),     // 16: SLL设定值
+                definition.sll_set_point_address.clone().unwrap_or_default(),   // 17: SLL设定点位
+                definition.sll_feedback_address.clone().unwrap_or_default(),    // 18: SLL设定点位_PLC地址
+                "".to_string(), // 19: SLL设定点位_通讯地址（预留）
+                definition.sl_set_value.map_or(String::new(), |v| v.to_string()),      // 20: SL设定值
+                definition.sl_set_point_address.clone().unwrap_or_default(),    // 21: SL设定点位
+                definition.sl_feedback_address.clone().unwrap_or_default(),     // 22: SL设定点位_PLC地址
+                "".to_string(), // 23: SL设定点位_通讯地址（预留）
+                definition.sh_set_value.map_or(String::new(), |v| v.to_string()),      // 24: SH设定值
+                definition.sh_set_point_address.clone().unwrap_or_default(),    // 25: SH设定点位
+                definition.sh_feedback_address.clone().unwrap_or_default(),     // 26: SH设定点位_PLC地址
+                "".to_string(), // 27: SH设定点位_通讯地址（预留）
+                definition.shh_set_value.map_or(String::new(), |v| v.to_string()),     // 28: SHH设定值
+                definition.shh_set_point_address.clone().unwrap_or_default(),   // 29: SHH设定点位
+                definition.shh_feedback_address.clone().unwrap_or_default(),    // 30: SHH设定点位_PLC地址
+                "".to_string(), // 31: SHH设定点位_通讯地址（预留）
+                "".to_string(), // 32: LL报警（预留）
+                "".to_string(), // 33: LL报警_PLC地址（预留）
+                "".to_string(), // 34: LL报警_通讯地址（预留）
+                "".to_string(), // 35: L报警（预留）
+                "".to_string(), // 36: L报警_PLC地址（预留）
+                "".to_string(), // 37: L报警_通讯地址（预留）
+                "".to_string(), // 38: H报警（预留）
+                "".to_string(), // 39: H报警_PLC地址（预留）
+                "".to_string(), // 40: H报警_通讯地址（预留）
+                "".to_string(), // 41: HH报警（预留）
+                "".to_string(), // 42: HH报警_PLC地址（预留）
+                "".to_string(), // 43: HH报警_通讯地址（预留）
+                "".to_string(), // 44: 维护值设定（预留）
+                "".to_string(), // 45: 维护值设定点位（预留）
+                definition.maintenance_value_set_point_address.clone().unwrap_or_default(), // 46: 维护值设定点位_PLC地址
+                "".to_string(), // 47: 维护值设定点位_通讯地址（预留）
+                "".to_string(), // 48: 维护使能开关点位（预留）
+                definition.maintenance_enable_switch_point_address.clone().unwrap_or_default(), // 49: 维护使能开关点位_PLC地址
+                "".to_string(), // 50: 维护使能开关点位_通讯地址（预留）
+                definition.plc_absolute_address.clone().unwrap_or_default(),    // 51: PLC绝对地址
+                definition.plc_communication_address.clone(),                   // 52: 上位机通讯地址
+            ];
+            
+            for (col_index, cell_value) in row_data.iter().enumerate() {
+                worksheet.write_string(row, col_index as u16, cell_value)
+                    .map_err(|e| RepositoryError::SerializationError(format!("写入数据失败: {}", e)))?;
+            }
+        }
+        
+        // 自动调整列宽
+        for col_index in 0..headers.len() {
+            worksheet.autofit();
+        }
+        
+        // 保存文件
+        workbook.save(file_path)
+            .map_err(|e| RepositoryError::SerializationError(format!("保存Excel文件失败: {}", e)))?;
+        
+        log::info!("Excel导出完成: 文件={}, 导出数量={}", file_path, definitions.len());
+        Ok(())
+     }
     
     async fn save_configuration_set(&self, name: &str, definitions: &[ChannelPointDefinition]) -> Result<(), RepositoryError> {
         // 先保存所有定义

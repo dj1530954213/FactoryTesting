@@ -281,3 +281,324 @@ pub trait ITestExecutor: Send + Sync {
 ## 📝 详细重构步骤
 
 接下来的部分将在另一个文档中详细说明每个步骤的具体实现... 
+
+## 💾 数据持久化架构优化方案
+
+### 🎯 优化目标
+
+基于用户需求，优化数据持久化策略：
+1. 点表数据在分配完批次后直接由状态管理器管理
+2. 测试过程中多个关键节点进行状态备份
+3. 支持从任意备份点恢复测试继续执行
+
+### 🏗️ 优化后的数据流向
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     优化后数据流                             │
+├─────────────────────────────────────────────────────────────┤
+│ Excel导入 → ConfigRepository (只读配置)                      │
+│     ↓                                                       │
+│ 批次分配 → StateManager (接管状态管理)                       │
+│     ↓           ↓                                           │
+│ 运行时缓存 → 备份节点 → PersistentRepository                │
+│ (快速访问)   (状态快照)    (永久存储)                        │
+│     ↑                           ↓                          │
+│ 复测恢复 ←─────────────────── 恢复管理器                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 🔧 核心组件增强
+
+#### 1. 简化的状态管理器
+
+```rust
+/// 简化的状态管理器，支持最新状态备份和恢复
+#[async_trait]
+pub trait IEnhancedStateManager: Send + Sync {
+    // 状态管理 (原有功能)
+    async fn apply_test_outcome(&self, instance_id: &str, outcome: TestOutcome) -> Result<StateTransition, StateError>;
+    
+    // 简化的备份功能
+    async fn create_latest_backup(&self, batch_id: &str) -> Result<BackupId, StateError>;
+    async fn auto_backup_on_milestone(&self, instance_id: &str, milestone: TestMilestone) -> Result<(), StateError>;
+    
+    // 简化的恢复功能
+    async fn get_latest_backup(&self, batch_id: &str) -> Result<Option<LatestBackup>, StateError>;
+    async fn restore_from_latest(&self, batch_id: &str) -> Result<RestoreResult, StateError>;
+    async fn prepare_retest(&self, batch_id: &str, scope: RestoreScope) -> Result<(), StateError>;
+    
+    // 状态同步
+    async fn sync_state_to_persistent(&self, instance_ids: Vec<String>) -> Result<(), StateError>;
+    async fn validate_state_consistency(&self) -> Result<ConsistencyReport, StateError>;
+}
+
+/// 测试里程碑 - 自动备份触发点 (简化)
+#[derive(Debug, Clone, PartialEq)]
+pub enum TestMilestone {
+    BatchCreated,           // 批次创建完成
+    WiringConfirmed,        // 接线确认完成
+    HardPointTestComplete,  // 硬点测试完成
+    AlarmTestComplete,      // 报警测试完成
+    BatchCompleted,         // 批次测试完成
+}
+
+/// 最新备份信息
+#[derive(Debug, Clone)]
+pub struct LatestBackup {
+    pub backup_id: BackupId,
+    pub batch_id: String,
+    pub created_at: DateTime<Utc>,
+    pub last_milestone: TestMilestone,
+    pub instance_count: usize,
+    pub completion_percentage: f64,
+    pub backup_size_mb: f64,
+}
+
+/// 恢复结果
+#[derive(Debug, Clone)]
+pub struct RestoreResult {
+    pub restored_instances: Vec<String>,
+    pub failed_instances: Vec<String>,
+    pub warnings: Vec<String>,
+    pub restored_to_milestone: TestMilestone,
+    pub restore_time: DateTime<Utc>,
+}
+```
+
+#### 2. 简化的备份策略配置
+
+```rust
+/// 简化的备份策略配置
+#[derive(Debug, Clone)]
+pub struct BackupStrategy {
+    // 自动备份触发条件
+    pub auto_backup_milestones: Vec<TestMilestone>,
+    pub backup_interval_minutes: Option<u32>,
+    pub backup_on_error: bool,
+    
+    // 简化的保留策略
+    pub keep_only_latest: bool,           // 只保留最新备份
+    pub retention_hours: u32,             // 备份保留时间(小时)
+    pub auto_cleanup: bool,               // 自动清理旧备份
+    
+    // 性能优化
+    pub async_backup: bool,
+    pub compress_backup: bool,
+    pub backup_priority: BackupPriority,
+}
+
+#[derive(Debug, Clone)]
+pub enum BackupPriority {
+    Low,     // 后台异步备份
+    Normal,  // 平衡性能和及时性
+    High,    // 立即同步备份
+}
+```
+
+#### 3. 简化恢复管理器
+
+```rust
+/// 简化的恢复管理器接口
+#[async_trait]
+pub trait IRecoveryManager: Send + Sync {
+    // 获取最新备份状态
+    async fn get_latest_backup(&self, batch_id: &str) -> Result<Option<StateSnapshot>, RecoveryError>;
+    async fn get_backup_info(&self, batch_id: &str) -> Result<BackupInfo, RecoveryError>;
+    
+    // 简单的恢复最新状态
+    async fn restore_latest_state(&self, batch_id: &str) -> Result<RestoreResult, RecoveryError>;
+    async fn validate_restore_feasibility(&self, batch_id: &str) -> Result<bool, RecoveryError>;
+    
+    // 准备重测 (从最新备份状态开始)
+    async fn prepare_retest(&self, batch_id: &str, scope: RestoreScope) -> Result<RetestInfo, RecoveryError>;
+}
+
+/// 备份信息
+#[derive(Debug, Clone)]
+pub struct BackupInfo {
+    pub latest_backup_time: DateTime<Utc>,
+    pub backup_size_mb: f64,
+    pub instance_count: usize,
+    pub completion_percentage: f64,
+    pub is_valid: bool,
+}
+
+/// 重测信息
+#[derive(Debug, Clone)]
+pub struct RetestInfo {
+    pub resettable_instances: Vec<String>,
+    pub completed_instances: Vec<String>,
+    pub failed_instances: Vec<String>,
+    pub estimated_retest_time: Duration,
+}
+
+/// 简化的恢复计划
+#[derive(Debug, Clone)]
+pub struct SimpleRecoveryPlan {
+    pub batch_id: String,
+    pub restore_scope: RestoreScope,
+    pub reset_failed_only: bool,
+    pub notify_users: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum RestoreScope {
+    AllInstances,        // 恢复所有实例到最后备份状态
+    FailedOnly,          // 只恢复失败的实例
+    IncompleteOnly,      // 只恢复未完成的实例
+}
+```
+
+### 🚀 实施优化的关键步骤
+
+#### 步骤 1: 状态管理器接管数据流
+
+```rust
+impl EnhancedStateManager {
+    /// 批次分配完成后，接管所有实例的状态管理
+    pub async fn take_control_of_batch(&self, batch_id: &str) -> Result<ControlTransferResult, StateError> {
+        // 1. 从RuntimeRepository获取所有实例
+        let instances = self.runtime_repo.list_batch_instances(batch_id).await?;
+        
+        // 2. 创建初始备份
+        let backup_id = self.create_latest_backup(batch_id).await?;
+        
+        // 3. 注册自动备份规则
+        self.register_auto_backup_for_batch(batch_id, &self.backup_strategy).await?;
+        
+        // 4. 设置状态变更监听
+        self.setup_state_change_listeners(batch_id).await?;
+        
+        Ok(ControlTransferResult {
+            controlled_instances: instances.len(),
+            initial_backup: backup_id,
+            auto_backup_enabled: true,
+        })
+    }
+    
+    /// 在关键测试节点自动创建备份 (简化版)
+    async fn auto_backup_on_milestone(&self, instance_id: &str, milestone: TestMilestone) -> Result<(), StateError> {
+        let instance = self.runtime_repo.get_channel_instance(instance_id).await?
+            .ok_or_else(|| StateError::InstanceNotFound(instance_id.to_string()))?;
+        
+        // 检查是否需要在此里程碑备份
+        if self.backup_strategy.auto_backup_milestones.contains(&milestone) {
+            if self.backup_strategy.async_backup {
+                // 异步备份，不阻塞测试进程
+                let state_manager = self.clone();
+                let batch_id = instance.test_batch_id.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = state_manager.create_latest_backup(&batch_id).await {
+                        log::error!("自动备份失败: {}", e);
+                    } else {
+                        log::info!("自动备份完成: 批次={}, 里程碑={:?}", batch_id, milestone);
+                    }
+                });
+            } else {
+                // 同步备份
+                self.create_latest_backup(&instance.test_batch_id).await?;
+            }
+            
+            // 清理旧备份
+            if self.backup_strategy.auto_cleanup {
+                self.cleanup_old_backups(&instance.test_batch_id).await?;
+            }
+        }
+        
+        Ok(())
+    }
+}
+```
+
+#### 步骤 2: 简化恢复机制
+
+```rust
+impl RecoveryManager {
+    /// 简单的恢复最新状态
+    pub async fn restore_latest_state(&self, batch_id: &str) -> Result<RestoreResult, RecoveryError> {
+        // 1. 获取最新备份
+        let latest_backup = self.state_manager.get_latest_backup(batch_id).await?
+            .ok_or_else(|| RecoveryError::NoBackupFound(batch_id.to_string()))?;
+        
+        // 2. 验证备份有效性
+        if !self.validate_restore_feasibility(batch_id).await? {
+            return Err(RecoveryError::RestoreNotFeasible("备份数据不完整或损坏".to_string()));
+        }
+        
+        // 3. 执行恢复
+        log::info!("开始恢复批次: {}, 备份时间: {}", batch_id, latest_backup.created_at);
+        
+        let restore_result = self.state_manager.restore_from_latest(batch_id).await?;
+        
+        log::info!("恢复完成: 成功={}, 失败={}", 
+                  restore_result.restored_instances.len(),
+                  restore_result.failed_instances.len());
+        
+        Ok(restore_result)
+    }
+    
+    /// 准备重测 (从最新备份状态开始)
+    pub async fn prepare_retest(&self, batch_id: &str, scope: RestoreScope) -> Result<RetestInfo, RecoveryError> {
+        // 1. 先恢复到最新状态
+        let restore_result = self.restore_latest_state(batch_id).await?;
+        
+        // 2. 根据范围准备重测实例
+        let instances = match scope {
+            RestoreScope::AllInstances => {
+                self.runtime_repo.list_batch_instances(batch_id).await?
+            },
+            RestoreScope::FailedOnly => {
+                self.runtime_repo.list_instances_by_status(batch_id, OverallTestStatus::Failed).await?
+            },
+            RestoreScope::IncompleteOnly => {
+                self.get_incomplete_instances(batch_id).await?
+            },
+        };
+        
+        // 3. 重置实例状态为可重测
+        for instance_id in &instances {
+            self.state_manager.reset_for_retest(instance_id).await?;
+        }
+        
+        Ok(RetestInfo {
+            resettable_instances: instances.iter().map(|i| i.instance_id.clone()).collect(),
+            completed_instances: restore_result.restored_instances,
+            failed_instances: restore_result.failed_instances,
+            estimated_retest_time: self.estimate_retest_duration(&instances),
+        })
+    }
+}
+```
+
+### 🎉 简化方案总结
+
+这个**简化的**数据持久化优化方案完全符合你的需求：
+
+#### ✅ 核心功能保障
+1. **✅ 点表数据分配后直接由状态管理器统一管理**
+2. **✅ 测试过程中关键节点自动备份最新状态**  
+3. **✅ 简单高效的最新状态恢复功能**
+4. **✅ 灵活的重测范围选择**
+5. **✅ 用户友好的一键操作界面**
+
+#### 🚀 简化优势
+- **降低复杂度**: 去掉多快照管理，只保留最新状态备份
+- **提高性能**: 减少存储空间占用，备份恢复更快速
+- **简化操作**: 用户界面更直观，操作更简单
+- **维护成本低**: 代码逻辑清晰，易于维护和扩展
+
+#### 📱 实际应用场景
+
+```bash
+# 场景1: 系统意外重启，一键恢复最新状态
+用户点击 "恢复到最新状态" → 自动恢复到最近备份点 → 继续测试
+
+# 场景2: 部分测试失败，选择性重测
+用户点击 "重测失败项目" → 只重测失败的实例 → 节省时间
+
+# 场景3: 全部重新开始测试
+用户点击 "全部重新测试" → 重置所有实例状态 → 从头开始
+```
+
+这个简化方案**既满足了业务需求，又保证了系统的简洁性和高效性**！完美契合你"只恢复最后状态"的需求。 
