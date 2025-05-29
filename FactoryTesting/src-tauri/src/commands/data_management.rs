@@ -4,12 +4,11 @@
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
-use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance};
+use crate::models::{ChannelPointDefinition, TestBatchInfo};
+use crate::services::IChannelAllocationService;
 use crate::services::infrastructure::ExcelImporter;
-use crate::services::{IChannelAllocationService, ChannelAllocationService};
-use crate::tauri_commands::AppState;
+use crate::AppState;
 use log::{info, error, warn};
-use uuid;
 
 /// Excel文件解析请求
 #[derive(Debug, Deserialize)]

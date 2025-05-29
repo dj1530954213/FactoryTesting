@@ -18,8 +18,8 @@ pub use database_migration::DatabaseMigration;
 use commands::data_management::{
     parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
     import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
-    prepare_test_instances_for_batch_cmd, import_excel_and_allocate_channels_cmd,
-    parse_excel_and_create_batch_cmd, clear_session_data,
+    parse_excel_and_create_batch_cmd, prepare_test_instances_for_batch_cmd, 
+    import_excel_and_allocate_channels_cmd, clear_session_data,
     parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd
 };
 use commands::manual_testing::{
@@ -29,10 +29,6 @@ use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
     get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd
-};
-use commands::channel_allocation_commands::{
-    allocate_channels_cmd, get_batch_instances_cmd, clear_all_allocations_cmd,
-    validate_allocations_cmd, create_default_test_plc_config_cmd
 };
 
 /// 应用程序主要运行函数
@@ -141,13 +137,7 @@ pub fn run() {
                 test_plc_connection_cmd,
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
-                initialize_default_test_plc_channels_cmd,
-                // 通道分配命令
-                allocate_channels_cmd,
-                get_batch_instances_cmd,
-                clear_all_allocations_cmd,
-                validate_allocations_cmd,
-                create_default_test_plc_config_cmd
+                initialize_default_test_plc_channels_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

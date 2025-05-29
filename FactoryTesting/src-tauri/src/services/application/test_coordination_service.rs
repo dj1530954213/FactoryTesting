@@ -670,7 +670,7 @@ mod tests {
             product_model: Option<String>,
             serial_number: Option<String>,
         ) -> Result<BatchAllocationResult, AppError> {
-            // 模拟分配：为每8个通道创建一个批次
+            // 模拟分配：使用新的正确分配逻辑
             let channels_per_batch = 8;
             let total_batches = (definitions.len() + channels_per_batch - 1) / channels_per_batch;
             
@@ -752,6 +752,7 @@ mod tests {
             Ok(BatchAllocationResult {
                 batches,
                 allocated_instances,
+                errors: Vec::new(), // 添加缺少的errors字段
                 allocation_summary,
             })
         }

@@ -432,70 +432,6 @@ export class TauriApiService {
   }
 
   // ============================================================================
-  // 通道分配相关命令
-  // ============================================================================
-
-  /**
-   * 导入Excel文件并自动分配通道
-   */
-  importExcelAndAllocateChannels(
-    filePath: string, 
-    productModel?: string, 
-    serialNumber?: string
-  ): Observable<any> {
-    return from(invoke('import_excel_and_allocate_channels_cmd', { 
-      file_path: filePath, 
-      product_model: productModel, 
-      serial_number: serialNumber 
-    }));
-  }
-
-  /**
-   * 分配通道
-   */
-  allocateChannels(
-    definitions: ChannelPointDefinition[],
-    testPlcConfig: any,
-    productModel?: string,
-    serialNumber?: string
-  ): Observable<any> {
-    return from(invoke('allocate_channels_cmd', {
-      definitions,
-      testPlcConfig,
-      productModel,
-      serialNumber
-    }));
-  }
-
-  /**
-   * 获取批次实例
-   */
-  getBatchInstances(batchId: string): Observable<ChannelTestInstance[]> {
-    return from(invoke<ChannelTestInstance[]>('get_batch_instances_cmd', { batch_id: batchId }));
-  }
-
-  /**
-   * 清除所有分配
-   */
-  clearAllAllocations(instances: ChannelTestInstance[]): Observable<ChannelTestInstance[]> {
-    return from(invoke<ChannelTestInstance[]>('clear_all_allocations_cmd', { instances }));
-  }
-
-  /**
-   * 验证分配
-   */
-  validateAllocations(instances: ChannelTestInstance[]): Observable<any> {
-    return from(invoke('validate_allocations_cmd', { instances }));
-  }
-
-  /**
-   * 创建默认测试PLC配置
-   */
-  createDefaultTestPlcConfig(): Observable<any> {
-    return from(invoke('create_default_test_plc_config_cmd'));
-  }
-
-  // ============================================================================
   // 私有方法
   // ============================================================================
 
@@ -607,6 +543,21 @@ export class TauriApiService {
     this._environmentChecked = false;
     this._isTauriEnvironment = null;
     return this.isTauriEnvironment();
+  }
+
+  /**
+   * 导入Excel文件并自动分配通道
+   */
+  importExcelAndAllocateChannels(
+    filePath: string, 
+    productModel?: string, 
+    serialNumber?: string
+  ): Observable<any> {
+    return from(invoke('import_excel_and_allocate_channels_cmd', { 
+      file_path: filePath, 
+      product_model: productModel, 
+      serial_number: serialNumber 
+    }));
   }
 
   /**
