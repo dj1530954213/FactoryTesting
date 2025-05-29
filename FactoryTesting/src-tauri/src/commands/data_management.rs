@@ -636,12 +636,14 @@ pub async fn import_excel_and_allocate_channels_cmd(
 
 /// 创建默认测试PLC配置的辅助函数
 async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConfig, String> {
-    // 根据正确的分配数据和有源/无源匹配规则创建测试PLC通道映射
+    log::info!("创建默认测试PLC配置 - 基于正确分配数据的映射规则");
     let mut comparison_tables = Vec::new();
     
+    // ===== 根据correct_allocation_data.json的正确分配规则创建测试PLC通道映射 =====
+    
     // ===== AI测试需要的AO通道 =====
-    // AI有源 → AO无源 (需要足够的AO无源通道)
-    for channel in 1..=16 {  // 增加到16个通道以支持更多AI有源
+    // AI有源 → AO无源 (AO1_X)
+    for channel in 1..=8 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AO1_{}", channel),
             communication_address: format!("AO1.{}", channel),
@@ -650,8 +652,8 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
         });
     }
     
-    // AI无源 → AO有源 (需要足够的AO有源通道)
-    for channel in 1..=8 {  // 8个AO有源通道
+    // AI无源 → AO有源 (AO2_X)
+    for channel in 1..=8 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AO2_{}", channel),
             communication_address: format!("AO2.{}", channel),
@@ -661,29 +663,21 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
     }
     
     // ===== AO测试需要的AI通道 =====
-    // AO有源 → AI无源 (需要足够的AI无源通道)
-    for channel in 1..=8 {  // 8个AI无源通道
+    // AO无源 → AI有源 (AI1_X)
+    for channel in 1..=8 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AI1_{}", channel),
             communication_address: format!("AI1.{}", channel),
-            channel_type: crate::models::ModuleType::AI,
-            is_powered: false, // AI无源，用于测试AO有源
-        });
-    }
-    
-    // AO无源 → AI有源 (需要足够的AI有源通道)
-    for channel in 1..=8 {  // 8个AI有源通道
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("AI2_{}", channel),
-            communication_address: format!("AI2.{}", channel),
             channel_type: crate::models::ModuleType::AI,
             is_powered: true, // AI有源，用于测试AO无源
         });
     }
     
+    // AO有源 → AI无源 (AI2_X) - 暂时不需要，因为在正确数据中AO有源数量很少
+    
     // ===== DI测试需要的DO通道 =====
-    // DI有源 → DO无源 (需要足够的DO无源通道)
-    for channel in 1..=32 {  // 32个DO无源通道，支持大量DI有源
+    // DI有源 → DO无源 (DO1_X)
+    for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DO1_{}", channel),
             communication_address: format!("DO1.{}", channel),
@@ -692,8 +686,8 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
         });
     }
     
-    // DI无源 → DO有源 (需要足够的DO有源通道)
-    for channel in 1..=16 {  // 16个DO有源通道
+    // DI无源 → DO有源 (DO2_X)
+    for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DO2_{}", channel),
             communication_address: format!("DO2.{}", channel),
@@ -703,8 +697,8 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
     }
     
     // ===== DO测试需要的DI通道 =====
-    // DO有源 → DI无源 (需要足够的DI无源通道)
-    for channel in 1..=32 {  // 32个DI无源通道，支持大量DO有源
+    // DO有源 → DI无源 (DI1_X)
+    for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DI1_{}", channel),
             communication_address: format!("DI1.{}", channel),
@@ -713,8 +707,8 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
         });
     }
     
-    // DO无源 → DI有源 (需要足够的DI有源通道)
-    for channel in 1..=16 {  // 16个DI有源通道
+    // DO无源 → DI有源 (DI2_X)
+    for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DI2_{}", channel),
             communication_address: format!("DI2.{}", channel),
@@ -723,17 +717,15 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
         });
     }
     
-    log::info!("创建默认测试PLC配置，总通道数: {}", comparison_tables.len());
-    log::info!("通道分布: AO无源={}, AO有源={}, AI无源={}, AI有源={}, DO无源={}, DO有源={}, DI无源={}, DI有源={}",
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AO && !t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AO && t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AI && !t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AI && t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DO && !t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DO && t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DI && !t.is_powered).count(),
-        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DI && t.is_powered).count()
-    );
+    log::info!("创建默认测试PLC配置完成，总通道数: {}", comparison_tables.len());
+    log::info!("通道分布详情:");
+    log::info!("  AO无源(测试AI有源): {} 个 -> {}", 8, "AO1_1..AO1_8");
+    log::info!("  AO有源(测试AI无源): {} 个 -> {}", 8, "AO2_1..AO2_8");
+    log::info!("  AI有源(测试AO无源): {} 个 -> {}", 8, "AI1_1..AI1_8");
+    log::info!("  DO无源(测试DI有源): {} 个 -> {}", 16, "DO1_1..DO1_16");
+    log::info!("  DO有源(测试DI无源): {} 个 -> {}", 16, "DO2_1..DO2_16");
+    log::info!("  DI无源(测试DO有源): {} 个 -> {}", 16, "DI1_1..DI1_16");
+    log::info!("  DI有源(测试DO无源): {} 个 -> {}", 16, "DI2_1..DI2_16");
     
     Ok(crate::services::TestPlcConfig {
         brand_type: "Micro850".to_string(),
@@ -1069,12 +1061,31 @@ pub async fn create_batch_and_persist_data_cmd(
     log::info!("[CreateBatchData] ===== 开始使用通道分配服务 =====");
     log::info!("[CreateBatchData] 输入: {} 个通道定义", request.definitions.len());
     
-    // 创建默认的测试PLC配置
-    use crate::services::channel_allocation_service::TestPlcConfig;
-    let test_plc_config = TestPlcConfig {
-        brand_type: "Default".to_string(),
-        ip_address: "192.168.1.100".to_string(),
-        comparison_tables: Vec::new(), // 使用空配置，将使用默认批次大小
+    // ===== 修复：从数据库获取真实的测试PLC配置 =====
+    let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
+        Ok(config) => {
+            log::info!("[CreateBatchData] 成功获取数据库中的测试PLC配置: {} 个通道映射", 
+                config.comparison_tables.len());
+            config
+        }
+        Err(e) => {
+            log::warn!("[CreateBatchData] 获取数据库测试PLC配置失败: {}, 使用默认配置", e);
+            // 如果无法获取数据库配置，则创建默认配置
+            match create_default_test_plc_config().await {
+                Ok(config) => config,
+                Err(e) => {
+                    error!("创建默认测试PLC配置失败: {}", e);
+                    return Ok(CreateBatchAndPersistDataResponse {
+                        success: false,
+                        message: format!("创建默认测试PLC配置失败: {}", e),
+                        batch_id: None,
+                        all_batches: Vec::new(),
+                        saved_definitions_count: 0,
+                        created_instances_count: 0,
+                    });
+                }
+            }
+        }
     };
     
     // 调用通道分配服务
