@@ -13,6 +13,8 @@ import { NzBadgeModule } from 'ng-zorro-antd/badge';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
+import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzMessageModule } from 'ng-zorro-antd/message';
 
 @Component({
   selector: 'app-root',
@@ -29,7 +31,8 @@ import { NzDividerModule } from 'ng-zorro-antd/divider';
     NzBadgeModule,
     NzTagModule,
     NzSpaceModule,
-    NzDividerModule
+    NzDividerModule,
+    NzMessageModule
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
@@ -44,7 +47,7 @@ export class AppComponent implements OnInit, OnDestroy {
   
   private statusSubscription?: Subscription;
 
-  constructor(private tauriApiService: TauriApiService) {}
+  constructor(private tauriApiService: TauriApiService, private messageService: NzMessageService) {}
 
   ngOnInit() {
     // 设置全局拖拽事件处理

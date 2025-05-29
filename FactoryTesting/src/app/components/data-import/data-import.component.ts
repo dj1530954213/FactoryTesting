@@ -4,13 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TauriApiService } from '../../services/tauri-api.service';
 
-// 导入Tauri API
-declare global {
-  interface Window {
-    __TAURI__: any;
-  }
-}
-
 interface RecentFile {
   name: string;
   path: string;
@@ -56,6 +49,9 @@ export class DataImportComponent implements OnInit, OnDestroy {
   isCreatingBatch = false;
   loadingMessage = '';
   error: string | null = null;
+
+  // 添加属性来存储分配结果
+  allocationResult: any = null;
 
   constructor(
     private router: Router,
@@ -229,9 +225,15 @@ export class DataImportComponent implements OnInit, OnDestroy {
         // 尝试调用后端API解析文件
         try {
           console.log('尝试调用Tauri API解析Excel文件:', filePath);
-          const definitions = await this.tauriApi.importExcelFile(filePath).toPromise();
+          const parseResponse = await this.tauriApi.parseExcelFile(filePath).toPromise();
           
-          console.log('Tauri API返回结果:', definitions);
+          console.log('Tauri API返回结果:', parseResponse);
+          
+          if (!parseResponse?.success || !parseResponse.data || parseResponse.data.length === 0) {
+            throw new Error(`Excel文件解析失败: ${parseResponse?.message || '未知错误'}`);
+          }
+          
+          const definitions = parseResponse.data;
           
           if (definitions && definitions.length > 0) {
             // 转换数据格式为前端预览格式
@@ -251,7 +253,7 @@ export class DataImportComponent implements OnInit, OnDestroy {
             
             console.log(`成功解析Excel文件，共${definitions.length}个通道定义`);
             console.log('转换后的预览数据:', this.previewData.slice(0, 3)); // 只显示前3个
-            this.loadingMessage = `成功解析${definitions.length}个通道定义`;
+            this.loadingMessage = `成功解析${definitions.length}个通道定义，正在自动分配批次...`;
             
             // 显示统计信息
             const aiCount = this.getModuleTypeCount('AI');
@@ -259,6 +261,50 @@ export class DataImportComponent implements OnInit, OnDestroy {
             const diCount = this.getModuleTypeCount('DI');
             const doCount = this.getModuleTypeCount('DO');
             console.log(`模块类型统计: AI:${aiCount}, AO:${aoCount}, DI:${diCount}, DO:${doCount}`);
+
+            // ===== 新增：自动调用批次分配服务 =====
+            try {
+              console.log('开始自动分配通道批次...');
+              
+              // 调用后端的导入Excel并自动分配通道命令
+              // 这个命令会解析Excel、创建通道定义、然后自动分配测试批次
+              const allocationResult = await this.tauriApi.importExcelAndAllocateChannels(
+                filePath,
+                '自动导入产品', // 默认产品型号
+                undefined // 序列号留空，后端会自动生成
+              ).toPromise();
+              
+              console.log('通道分配结果:', allocationResult);
+              
+              if (allocationResult && allocationResult.batches && allocationResult.allocated_instances) {
+                console.log(`自动分配完成: 生成${allocationResult.batches.length}个批次，${allocationResult.allocated_instances.length}个测试实例`);
+                
+                // 更新加载消息显示分配结果
+                this.loadingMessage = `成功解析${definitions.length}个通道定义并自动分配${allocationResult.batches.length}个测试批次`;
+                
+                // 可以在这里保存分配结果到组件状态，供后续使用
+                this.allocationResult = allocationResult;
+                
+                // 显示分配统计信息
+                if (allocationResult.allocation_summary) {
+                  const summary = allocationResult.allocation_summary;
+                  console.log(`分配统计: 总定义数=${summary.total_definitions}, 已分配实例数=${summary.allocated_instances}, 跳过数=${summary.skipped_definitions}`);
+                  
+                  if (summary.allocation_errors && summary.allocation_errors.length > 0) {
+                    console.warn('分配过程中的错误:', summary.allocation_errors);
+                  }
+                }
+              } else {
+                console.warn('通道分配返回了空结果');
+                this.loadingMessage = `成功解析${definitions.length}个通道定义，但自动分配失败`;
+              }
+              
+            } catch (allocationError) {
+              console.error('自动分配通道批次失败:', allocationError);
+              // 分配失败不影响预览数据的显示，只是没有自动分配而已
+              this.loadingMessage = `成功解析${definitions.length}个通道定义，但自动分配失败: ${allocationError}`;
+            }
+            
           } else {
             throw new Error('Excel文件中没有找到有效的通道定义');
           }
@@ -468,14 +514,30 @@ export class DataImportComponent implements OnInit, OnDestroy {
 
   async startTesting() {
     this.isCreatingBatch = true;
-    this.loadingMessage = '正在创建测试批次...';
+    this.loadingMessage = '正在准备测试...';
     this.error = null;
     
     try {
       if (this.tauriApi.isTauriEnvironment()) {
-        // 在Tauri环境中，调用后端API自动创建批次
-        try {
-          console.log('调用后端API自动创建测试批次');
+        // 检查是否已经有分配结果
+        if (this.allocationResult && this.allocationResult.batches && this.allocationResult.batches.length > 0) {
+          console.log('使用已有的分配结果，直接跳转到测试执行页面');
+          
+          // 使用第一个批次的ID
+          const firstBatch = this.allocationResult.batches[0];
+          const batchId = firstBatch.batch_id;
+          
+          console.log('跳转到测试执行页面，批次ID:', batchId);
+          this.loadingMessage = '批次已准备就绪，正在跳转...';
+          
+          // 导航到测试执行页面，传递批次ID
+          setTimeout(() => {
+            this.router.navigate(['/test-execution'], { queryParams: { batchId: batchId } });
+          }, 1000);
+          
+        } else {
+          // 如果没有分配结果，则使用原有的创建批次逻辑
+          console.log('没有找到分配结果，使用传统方式创建批次');
           
           // 转换PreviewDataItem为ChannelPointDefinition格式
           const channelDefinitions = this.previewData.map(item => ({
@@ -521,9 +583,6 @@ export class DataImportComponent implements OnInit, OnDestroy {
           } else {
             throw new Error(response?.message || '创建批次失败：未返回有效响应');
           }
-        } catch (error) {
-          console.error('调用Tauri API创建批次失败:', error);
-          throw error;
         }
       } else {
         // 开发环境：提示使用正确的启动方式
@@ -531,8 +590,8 @@ export class DataImportComponent implements OnInit, OnDestroy {
       }
       
     } catch (error) {
-      console.error('创建批次失败:', error);
-      this.error = '创建批次失败: ' + (error as Error).message;
+      console.error('准备测试失败:', error);
+      this.error = '准备测试失败: ' + (error as Error).message;
     } finally {
       this.isCreatingBatch = false;
       this.loadingMessage = '';

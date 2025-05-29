@@ -1,12 +1,21 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 
+// 导入状态接口
 export interface ImportState {
   currentStep: number;
   isImporting: boolean;
   importProgress: number;
-  importResult: any | null;
-  selectedFile: File | null;
+  importResult: any;
+  selectedFile?: any;
+}
+
+// 添加内存中的测试数据状态
+export interface TestDataState {
+  parsedDefinitions: any[];
+  suggestedBatchInfo: any;
+  isDataAvailable: boolean;
+  lastParseTime?: Date;
 }
 
 @Injectable({
@@ -24,8 +33,19 @@ export class DataStateService {
     selectedFile: null
   };
 
+  // 导入状态管理
   private importStateSubject = new BehaviorSubject<ImportState>(this.initialState);
   public importState$ = this.importStateSubject.asObservable();
+
+  // 内存中的测试数据状态管理
+  private testDataStateSubject = new BehaviorSubject<TestDataState>({
+    parsedDefinitions: [],
+    suggestedBatchInfo: null,
+    isDataAvailable: false,
+    lastParseTime: undefined
+  });
+
+  public testDataState$ = this.testDataStateSubject.asObservable();
 
   constructor() {
     // 应用启动时清除所有存储的状态，确保干净的初始状态
@@ -95,5 +115,39 @@ export class DataStateService {
       const restoredState = { ...this.initialState, ...storedState };
       this.importStateSubject.next(restoredState);
     }
+  }
+
+  // 清理所有数据（公共方法）
+  clearAllData(): void {
+    this.clearStoredState();
+    this.importStateSubject.next(this.initialState);
+  }
+
+  // 内存中的测试数据管理方法
+  setTestData(definitions: any[], batchInfo: any): void {
+    this.testDataStateSubject.next({
+      parsedDefinitions: definitions,
+      suggestedBatchInfo: batchInfo,
+      isDataAvailable: true,
+      lastParseTime: new Date()
+    });
+  }
+
+  getTestData(): TestDataState {
+    return this.testDataStateSubject.value;
+  }
+
+  clearTestData(): void {
+    this.testDataStateSubject.next({
+      parsedDefinitions: [],
+      suggestedBatchInfo: null,
+      isDataAvailable: false,
+      lastParseTime: undefined
+    });
+  }
+
+  hasTestData(): boolean {
+    return this.testDataStateSubject.value.isDataAvailable && 
+           this.testDataStateSubject.value.parsedDefinitions.length > 0;
   }
 } 

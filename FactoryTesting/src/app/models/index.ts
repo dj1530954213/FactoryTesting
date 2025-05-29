@@ -132,6 +132,7 @@ export interface TestExecutionRequest {
 
 export interface TestExecutionResponse {
   batch_id: string;
+  all_batches: TestBatchInfo[];
   instance_count: number;
   status: string;
   message: string;

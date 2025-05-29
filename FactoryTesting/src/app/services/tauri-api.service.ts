@@ -94,10 +94,24 @@ export class TauriApiService {
   }
 
   /**
+   * 获取当前会话的所有批次信息
+   */
+  getSessionBatches(): Observable<TestBatchInfo[]> {
+    return from(invoke<TestBatchInfo[]>('get_session_batches'));
+  }
+
+  /**
    * 清理完成的批次
    */
   cleanupCompletedBatch(batchId: string): Observable<void> {
     return from(invoke<void>('cleanup_completed_batch', { batchId }));
+  }
+
+  /**
+   * 创建测试数据 - 用于调试批次分配功能
+   */
+  createTestData(): Observable<ChannelPointDefinition[]> {
+    return from(invoke<ChannelPointDefinition[]>('create_test_data'));
   }
 
   // ============================================================================
@@ -516,6 +530,30 @@ export class TauriApiService {
   }
 
   /**
+   * 解析Excel文件但不持久化数据
+   */
+  parseExcelWithoutPersistence(filePath: string, fileName: string): Observable<any> {
+    return from(invoke('parse_excel_without_persistence_cmd', { 
+      args: {
+        file_path: filePath, 
+        file_name: fileName 
+      }
+    }));
+  }
+
+  /**
+   * 创建批次并持久化数据（在开始测试时调用）
+   */
+  createBatchAndPersistData(batchInfo: any, definitions: any[]): Observable<any> {
+    return from(invoke('create_batch_and_persist_data_cmd', { 
+      request: {
+        batch_info: batchInfo,
+        definitions: definitions
+      }
+    }));
+  }
+
+  /**
    * 解析Excel文件并自动创建批次
    */
   parseExcelAndCreateBatch(filePath: string, fileName: string): Observable<any> {
@@ -547,13 +585,11 @@ export class TauriApiService {
   }
 
   /**
-   * 获取批次详细状态和实例信息
+   * 获取批次详情
    */
   getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
     return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { 
-      args: {
-        batch_id: batchId 
-      }
+      batch_id: batchId 
     }));
   }
 
@@ -571,5 +607,12 @@ export class TauriApiService {
     this._environmentChecked = false;
     this._isTauriEnvironment = null;
     return this.isTauriEnvironment();
+  }
+
+  /**
+   * 清理当前会话数据
+   */
+  clearSessionData(): Observable<string> {
+    return from(invoke<string>('clear_session_data'));
   }
 } 

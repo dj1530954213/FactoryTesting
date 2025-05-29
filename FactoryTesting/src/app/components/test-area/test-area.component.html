@@ -1,5 +1,19 @@
 <div class="test-area-container">
   <nz-card nzTitle="测试区域管理" [nzExtra]="extraTemplate">
+    <!-- 页面操作按钮 -->
+    <ng-template #extraTemplate>
+      <nz-space>
+        <button *nzSpaceItem nz-button nzType="default" (click)="refreshBatches()">
+          <span nz-icon nzType="reload" nzTheme="outline"></span>
+          刷新批次
+        </button>
+        <button *nzSpaceItem nz-button nzType="primary" nzDanger (click)="clearSessionData()">
+          <span nz-icon nzType="clear" nzTheme="outline"></span>
+          清理会话数据
+        </button>
+      </nz-space>
+    </ng-template>
+
     <!-- 批次选择区域 -->
     <div class="batch-selection-section">
       <h3>选择测试批次</h3>
@@ -239,12 +253,4 @@
       </nz-spin>
     </div>
   </nz-card>
-
-  <!-- 额外操作模板 -->
-  <ng-template #extraTemplate>
-    <button nz-button nzType="default" (click)="refreshBatches()">
-      <i nz-icon nzType="reload"></i>
-      刷新
-    </button>
-  </ng-template>
 </div> 

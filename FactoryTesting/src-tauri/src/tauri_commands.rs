@@ -23,12 +23,15 @@ use crate::services::infrastructure::{
     excel::ExcelImporter,
     persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig}
 };
+use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
+use std::collections::HashSet;
+use chrono::{DateTime, Utc};
 
 // ============================================================================
 // 应用状态管理
@@ -43,6 +46,11 @@ pub struct AppState {
     pub report_generation_service: Arc<dyn IReportGenerationService>,
     pub app_settings_service: Arc<dyn AppSettingsService>,
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
+    pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
+    
+    // 会话管理：跟踪当前会话中创建的批次
+    pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
+    pub session_start_time: DateTime<Utc>,
 }
 
 /// 系统状态信息
@@ -128,6 +136,7 @@ impl AppState {
                 channel_state_manager.clone(),
                 test_execution_engine.clone(),
                 persistence_service.clone(),
+                Arc::new(ChannelAllocationService::new()),
             )
         );
 
@@ -153,6 +162,11 @@ impl AppState {
             report_generation_service,
             app_settings_service,
             test_plc_config_service,
+            channel_allocation_service: Arc::new(ChannelAllocationService::new()),
+            
+            // 会话管理：跟踪当前会话中创建的批次
+            session_batch_ids: Arc::new(Mutex::new(HashSet::new())),
+            session_start_time: Utc::now(),
         })
     }
 }
@@ -167,10 +181,20 @@ pub async fn submit_test_execution(
     state: State<'_, AppState>,
     request: TestExecutionRequest,
 ) -> Result<TestExecutionResponse, String> {
-    state.test_coordination_service
+    let response = state.test_coordination_service
         .submit_test_execution(request)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    
+    // 将生成的所有批次ID添加到会话跟踪中
+    {
+        let mut session_batch_ids = state.session_batch_ids.lock().await;
+        for batch in &response.all_batches {
+            session_batch_ids.insert(batch.batch_id.clone());
+        }
+    }
+    
+    Ok(response)
 }
 
 /// 开始批次测试
@@ -245,6 +269,39 @@ pub async fn get_batch_results(
         .map_err(|e| e.to_string())
 }
 
+/// 获取当前会话的所有批次信息
+#[tauri::command]
+pub async fn get_session_batches(
+    state: State<'_, AppState>,
+) -> Result<Vec<TestBatchInfo>, String> {
+    // 获取会话中跟踪的批次ID
+    let session_batch_ids = {
+        let batch_ids = state.session_batch_ids.lock().await;
+        batch_ids.clone()
+    };
+    
+    // 如果没有跟踪的批次，返回最近的所有批次
+    if session_batch_ids.is_empty() {
+        state.persistence_service
+            .load_all_batch_info()
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        // 获取所有批次，然后筛选出会话中的批次
+        let all_batches = state.persistence_service
+            .load_all_batch_info()
+            .await
+            .map_err(|e| e.to_string())?;
+        
+        let session_batches = all_batches
+            .into_iter()
+            .filter(|batch| session_batch_ids.contains(&batch.batch_id))
+            .collect();
+        
+        Ok(session_batches)
+    }
+}
+
 /// 清理完成的批次
 #[tauri::command]
 pub async fn cleanup_completed_batch(
@@ -255,6 +312,125 @@ pub async fn cleanup_completed_batch(
         .cleanup_completed_batch(&batch_id)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// 创建测试数据 - 用于调试批次分配功能
+#[tauri::command]
+pub async fn create_test_data(
+    state: State<'_, AppState>,
+) -> Result<Vec<ChannelPointDefinition>, String> {
+    use crate::models::{ModuleType, PointDataType};
+    
+    log::info!("[CreateTestData] 开始创建测试数据");
+    
+    let mut definitions = Vec::new();
+    
+    // 创建AI有源通道（4个）
+    for i in 1..=4 {
+        let mut def = ChannelPointDefinition::new(
+            format!("AI{:03}_有源", i),
+            format!("Temperature_{}", i),
+            format!("温度传感器{} (有源)", i),
+            "Station1".to_string(),
+            "Module1".to_string(),
+            ModuleType::AI,
+            format!("CH{:02}", i),
+            PointDataType::Float,
+            format!("DB1.DBD{}", i * 4),
+        );
+        def.power_supply_type = "有源".to_string();
+        def.range_lower_limit = Some(0.0);
+        def.range_upper_limit = Some(100.0);
+        def.test_rig_plc_address = Some(format!("DB2.DBD{}", i * 4));
+        definitions.push(def);
+    }
+    
+    // 创建AO无源通道（4个）
+    for i in 1..=4 {
+        let mut def = ChannelPointDefinition::new(
+            format!("AO{:03}_无源", i),
+            format!("Output_Signal_{}", i),
+            format!("输出信号{} (无源)", i),
+            "Station1".to_string(),
+            "Module2".to_string(),
+            ModuleType::AO,
+            format!("CH{:02}", i),
+            PointDataType::Float,
+            format!("DB1.DBD{}", 100 + i * 4),
+        );
+        def.power_supply_type = "无源".to_string();
+        def.range_lower_limit = Some(4.0);
+        def.range_upper_limit = Some(20.0);
+        definitions.push(def);
+    }
+    
+    // 创建DI有源通道（4个）
+    for i in 1..=4 {
+        let mut def = ChannelPointDefinition::new(
+            format!("DI{:03}_有源", i),
+            format!("Digital_Input_{}", i),
+            format!("数字输入{} (有源)", i),
+            "Station2".to_string(),
+            "Module3".to_string(),
+            ModuleType::DI,
+            format!("CH{:02}", i),
+            PointDataType::Bool,
+            format!("DB3.DBX{}.{}", i / 8, i % 8),
+        );
+        def.power_supply_type = "有源".to_string();
+        def.test_rig_plc_address = Some(format!("DB4.DBX{}.{}", i / 8, i % 8));
+        definitions.push(def);
+    }
+    
+    // 创建DO无源通道（4个）
+    for i in 1..=4 {
+        let mut def = ChannelPointDefinition::new(
+            format!("DO{:03}_无源", i),
+            format!("Digital_Output_{}", i),
+            format!("数字输出{} (无源)", i),
+            "Station2".to_string(),
+            "Module4".to_string(),
+            ModuleType::DO,
+            format!("CH{:02}", i),
+            PointDataType::Bool,
+            format!("DB5.DBX{}.{}", i / 8, i % 8),
+        );
+        def.power_supply_type = "无源".to_string();
+        definitions.push(def);
+    }
+    
+    // 创建AI无源通道（4个）
+    for i in 1..=4 {
+        let mut def = ChannelPointDefinition::new(
+            format!("AI{:03}_无源", i + 4),
+            format!("Pressure_{}", i),
+            format!("压力传感器{} (无源)", i),
+            "Station3".to_string(),
+            "Module5".to_string(),
+            ModuleType::AINone,
+            format!("CH{:02}", i),
+            PointDataType::Float,
+            format!("DB6.DBD{}", i * 4),
+        );
+        def.power_supply_type = "无源".to_string();
+        def.range_lower_limit = Some(0.0);
+        def.range_upper_limit = Some(10.0);
+        definitions.push(def);
+    }
+    
+    log::info!("[CreateTestData] 创建了 {} 个测试通道定义", definitions.len());
+    
+    // 保存到数据库
+    for def in &definitions {
+        if let Err(e) = state.persistence_service.save_channel_definition(def).await {
+            log::error!("[CreateTestData] 保存通道定义失败: {} - {}", def.id, e);
+        } else {
+            log::debug!("[CreateTestData] 保存通道定义成功: {} - {}", def.id, def.tag);
+        }
+    }
+    
+    log::info!("[CreateTestData] 所有测试数据创建完成");
+    Ok(definitions)
 }
 
 // ============================================================================

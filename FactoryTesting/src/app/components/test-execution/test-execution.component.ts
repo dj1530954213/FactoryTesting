@@ -62,24 +62,66 @@ interface TestStatistics {
           <label>自动开始:</label>
           <input type="checkbox" [(ngModel)]="autoStart">
         </div>
-        <button (click)="createAndSubmitBatch()" [disabled]="isLoading">
-          {{ isLoading ? '创建中...' : '创建并提交测试' }}
-        </button>
+        <div class="button-group">
+          <button (click)="createTestData()" [disabled]="isLoading">
+            {{ isLoading ? '创建中...' : '创建测试数据' }}
+          </button>
+          <button (click)="createAndSubmitBatch()" [disabled]="isLoading">
+            {{ isLoading ? '创建中...' : '创建并提交测试' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 所有批次显示区域 -->
+      <div class="section" *ngIf="sessionBatches.length > 0">
+        <h3>当前会话批次列表 ({{ sessionBatches.length }} 个批次)</h3>
+        <div class="batch-list">
+          <div *ngFor="let batch of sessionBatches; trackBy: trackByBatchId" 
+               class="batch-item" 
+               [class.selected]="batch.batch_id === currentBatchId"
+               (click)="selectBatch(batch.batch_id)">
+            <div class="batch-header">
+              <h4>{{ batch.batch_name || ('批次 ' + extractBatchNumber(batch.batch_id)) }}</h4>
+              <span class="batch-status" [class]="getBatchStatusClass(batch.overall_status)">
+                {{ getStatusLabel(batch.overall_status) }}
+              </span>
+            </div>
+            <div class="batch-details">
+              <p><strong>批次ID:</strong> {{ batch.batch_id }}</p>
+              <p><strong>产品型号:</strong> {{ batch.product_model || '未指定' }}</p>
+              <p><strong>序列号:</strong> {{ batch.serial_number || '未指定' }}</p>
+              <p><strong>总点位:</strong> {{ batch.total_points }}</p>
+              <p><strong>通过/失败:</strong> {{ batch.passed_points }}/{{ batch.failed_points }}</p>
+              <p><strong>创建时间:</strong> {{ formatTimestamp(batch.creation_time?.toString() || '') }}</p>
+            </div>
+            <div class="batch-controls" *ngIf="batch.batch_id === currentBatchId">
+              <button (click)="startBatch($event)" [disabled]="!canStart()">开始</button>
+              <button (click)="pauseBatch($event)" [disabled]="!canPause()">暂停</button>
+              <button (click)="resumeBatch($event)" [disabled]="!canResume()">恢复</button>
+              <button (click)="stopBatch($event)" [disabled]="!canStop()">停止</button>
+              <button (click)="cleanupBatch($event)" [disabled]="!canCleanup()">清理</button>
+            </div>
+          </div>
+        </div>
+        <div class="batch-summary" *ngIf="sessionBatches.length > 1">
+          <h4>批次汇总统计</h4>
+          <p><strong>总批次数:</strong> {{ sessionBatches.length }}</p>
+          <p><strong>总点位数:</strong> {{ getTotalPoints() }}</p>
+          <p><strong>已完成批次:</strong> {{ getCompletedBatches() }}</p>
+          <p><strong>整体通过率:</strong> {{ getOverallPassRate() }}%</p>
+        </div>
       </div>
 
       <!-- 当前批次控制区域 -->
       <div class="section" *ngIf="currentBatchId">
-        <h3>批次控制 - {{ currentBatchId }}</h3>
-        <div class="control-buttons">
-          <button (click)="startBatch()" [disabled]="!canStart()">开始测试</button>
-          <button (click)="pauseBatch()" [disabled]="!canPause()">暂停测试</button>
-          <button (click)="resumeBatch()" [disabled]="!canResume()">恢复测试</button>
-          <button (click)="stopBatch()" [disabled]="!canStop()">停止测试</button>
-          <button (click)="cleanupBatch()" [disabled]="!canCleanup()">清理批次</button>
-        </div>
-        <div class="status-info">
-          <p>状态: {{ currentBatchStatus }}</p>
-          <p>实例数量: {{ currentInstanceCount }}</p>
+        <h3>当前选中批次详情 - {{ getCurrentBatchName() }}</h3>
+        <div class="selected-batch-info">
+          <p><strong>批次ID:</strong> {{ currentBatchId }}</p>
+          <p><strong>状态:</strong> {{ currentBatchStatus }}</p>
+          <p><strong>实例数量:</strong> {{ currentInstanceCount }}</p>
+          <button (click)="refreshCurrentBatchData()" [disabled]="isLoading">
+            {{ isLoading ? '刷新中...' : '刷新数据' }}
+          </button>
         </div>
       </div>
 
@@ -287,6 +329,166 @@ interface TestStatistics {
     .log-item.success { color: #4caf50; }
     .log-item.error { color: #f44336; }
     .log-item.warning { color: #ff9800; }
+
+    /* 批次列表样式 */
+    .batch-list {
+      display: grid;
+      gap: 15px;
+    }
+
+    .batch-item {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .batch-item:hover {
+      border-color: #2196f3;
+      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+    }
+
+    .batch-item.selected {
+      border-color: #4caf50;
+      background: #f8fff8;
+      box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    }
+
+    .batch-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+
+    .batch-header h4 {
+      margin: 0;
+      color: #333;
+      font-size: 16px;
+    }
+
+    .batch-status {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .batch-status.not-tested { 
+      background: #f5f5f5; 
+      color: #666; 
+    }
+
+    .batch-status.hard-point-testing { 
+      background: #fff3e0; 
+      color: #f57c00; 
+    }
+
+    .batch-status.test-completed-passed { 
+      background: #e8f5e8; 
+      color: #2e7d32; 
+    }
+
+    .batch-status.test-completed-failed { 
+      background: #ffebee; 
+      color: #c62828; 
+    }
+
+    .batch-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .batch-details p {
+      margin: 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .batch-controls {
+      display: flex;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+    }
+
+    .batch-controls button {
+      padding: 6px 12px;
+      font-size: 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .batch-summary {
+      background: #f0f8ff;
+      border: 1px solid #b3d9ff;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
+    }
+
+    .batch-summary h4 {
+      margin: 0 0 10px 0;
+      color: #1565c0;
+    }
+
+    .selected-batch-info {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      padding: 15px;
+    }
+
+    .selected-batch-info p {
+      margin: 5px 0;
+    }
+
+    .selected-batch-info button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .selected-batch-info button:hover {
+      background: #0056b3;
+    }
+
+    .selected-batch-info button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .button-group button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .button-group button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   `]
 })
 export class TestExecutionComponent implements OnInit, OnDestroy {
@@ -308,6 +510,7 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   testResults: RawTestOutcome[] = [];
   systemStatus: any = null;
   logs: Array<{timestamp: string, level: string, message: string}> = [];
+  sessionBatches: TestBatchInfo[] = [];
 
   // 订阅
   private subscriptions: Subscription[] = [];
@@ -324,6 +527,9 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
         this.systemStatus = status;
       })
     );
+
+    // 加载当前会话的所有批次
+    this.loadSessionBatches();
   }
 
   ngOnDestroy() {
@@ -331,6 +537,47 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
     if (this.progressPolling) {
       this.progressPolling.unsubscribe();
     }
+  }
+
+  // 加载当前会话的所有批次
+  loadSessionBatches() {
+    this.tauriApi.getSessionBatches().subscribe({
+      next: (batches) => {
+        this.sessionBatches = batches;
+        this.addLog('info', `加载了 ${batches.length} 个会话批次`);
+      },
+      error: (error) => {
+        this.addLog('error', `加载会话批次失败: ${error}`);
+      }
+    });
+  }
+
+  // 创建测试数据
+  createTestData() {
+    this.isLoading = true;
+    this.addLog('info', '开始创建测试数据...');
+
+    this.tauriApi.createTestData().subscribe({
+      next: (definitions) => {
+        this.isLoading = false;
+        this.addLog('success', `成功创建了 ${definitions.length} 个测试通道定义`);
+        
+        // 显示创建的通道详情
+        const counts = definitions.reduce((acc, def) => {
+          const key = def.module_type;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        
+        Object.entries(counts).forEach(([type, count]) => {
+          this.addLog('info', `  ${type}: ${count} 个通道`);
+        });
+      },
+      error: (error) => {
+        this.isLoading = false;
+        this.addLog('error', `创建测试数据失败: ${error}`);
+      }
+    });
   }
 
   // 创建并提交测试批次
@@ -359,6 +606,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
           passed_points: 0,
           failed_points: 0,
           overall_status: OverallTestStatus.NotTested,
+          creation_time: new Date().toISOString(),
+          last_updated_time: new Date().toISOString(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -377,12 +626,23 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
         this.tauriApi.submitTestExecution(request).subscribe({
           next: (response: TestExecutionResponse) => {
             this.isLoading = false;
+            
+            // 记录所有生成的批次信息
+            this.addLog('success', `批次创建成功: ${response.message}`);
+            this.addLog('info', `生成了 ${response.all_batches.length} 个批次`);
+            
+            // 显示所有批次的详细信息
+            response.all_batches.forEach((batch, index) => {
+              this.addLog('info', `批次${index + 1}: ${batch.batch_name} (${batch.total_points}个点位)`);
+            });
+            
+            // 选择第一个批次作为当前批次
             this.currentBatchId = response.batch_id;
             this.currentBatchStatus = response.status;
             this.currentInstanceCount = response.instance_count;
             
-            this.addLog('success', `批次创建成功: ${response.message}`);
-            this.addLog('info', `批次ID: ${response.batch_id}, 实例数量: ${response.instance_count}`);
+            // 重新加载会话批次列表
+            this.loadSessionBatches();
             
             if (this.autoStart) {
               this.startProgressPolling();
@@ -402,7 +662,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 开始批次测试
-  startBatch() {
+  startBatch(event?: Event) {
+    if (event) event.stopPropagation();
     if (!this.currentBatchId) return;
 
     this.addLog('info', '开始批次测试...');
@@ -419,7 +680,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 暂停批次测试
-  pauseBatch() {
+  pauseBatch(event?: Event) {
+    if (event) event.stopPropagation();
     if (!this.currentBatchId) return;
 
     this.addLog('info', '暂停批次测试...');
@@ -436,7 +698,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 恢复批次测试
-  resumeBatch() {
+  resumeBatch(event?: Event) {
+    if (event) event.stopPropagation();
     if (!this.currentBatchId) return;
 
     this.addLog('info', '恢复批次测试...');
@@ -453,7 +716,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 停止批次测试
-  stopBatch() {
+  stopBatch(event?: Event) {
+    if (event) event.stopPropagation();
     if (!this.currentBatchId) return;
 
     this.addLog('info', '停止批次测试...');
@@ -470,7 +734,8 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 清理批次
-  cleanupBatch() {
+  cleanupBatch(event?: Event) {
+    if (event) event.stopPropagation();
     if (!this.currentBatchId) return;
 
     this.addLog('info', '清理批次...');
@@ -478,6 +743,7 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
       next: () => {
         this.addLog('success', '批次已清理');
         this.resetState();
+        this.loadSessionBatches(); // 重新加载批次列表
       },
       error: (error) => {
         this.addLog('error', `清理批次失败: ${error}`);
@@ -640,5 +906,74 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
 
   formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString('zh-CN');
+  }
+
+  // 新添加的方法
+  getCurrentBatchName(): string {
+    return this.currentBatchId ? ('批次 ' + this.extractBatchNumber(this.currentBatchId)) : '未命名批次';
+  }
+
+  extractBatchNumber(batchId: string): string {
+    const parts = batchId.split('_');
+    return parts.length > 1 ? parts[parts.length - 1] : '1';
+  }
+
+  getBatchStatusClass(status: OverallTestStatus): string {
+    return status.toString().toLowerCase().replace(/_/g, '-');
+  }
+
+  getTotalPoints(): number {
+    return this.sessionBatches.reduce((total, batch) => total + batch.total_points, 0);
+  }
+
+  getCompletedBatches(): number {
+    return this.sessionBatches.filter(batch => batch.overall_status === OverallTestStatus.TestCompletedPassed).length;
+  }
+
+  getOverallPassRate(): number {
+    const totalCompleted = this.getCompletedBatches();
+    const totalBatches = this.sessionBatches.length;
+    if (totalBatches === 0) return 0;
+    return Math.round((totalCompleted / totalBatches) * 100);
+  }
+
+  selectBatch(batchId: string) {
+    this.currentBatchId = batchId;
+    this.refreshCurrentBatchData();
+  }
+
+  refreshCurrentBatchData() {
+    if (!this.currentBatchId) return;
+    
+    this.isLoading = true;
+    this.addLog('info', '刷新当前批次数据...');
+
+    // 先获取进度更新
+    this.tauriApi.getBatchProgress(this.currentBatchId).subscribe({
+      next: (progress) => {
+        this.progressUpdates = progress;
+        this.addLog('success', '批次进度数据刷新成功');
+      },
+      error: (error) => {
+        this.addLog('error', `获取批次进度失败: ${error}`);
+      }
+    });
+
+    // 再获取测试结果
+    this.tauriApi.getBatchResults(this.currentBatchId).subscribe({
+      next: (results) => {
+        this.testResults = results;
+        this.isLoading = false;
+        this.addLog('success', '批次结果数据刷新成功');
+      },
+      error: (error) => {
+        this.isLoading = false;
+        this.addLog('error', `获取批次结果失败: ${error}`);
+      }
+    });
+  }
+
+  trackByBatchId(index: number, batch: TestBatchInfo) {
+    return batch.batch_id;
   }
 }

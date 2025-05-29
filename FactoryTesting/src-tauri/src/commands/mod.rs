@@ -13,7 +13,15 @@ pub use data_management::{
     create_test_batch,
     get_batch_list,
     get_batch_channel_definitions,
+    import_excel_and_prepare_batch_cmd,
+    start_tests_for_batch_cmd,
+    get_batch_status_cmd,
+    prepare_test_instances_for_batch_cmd,
+    import_excel_and_allocate_channels_cmd,
     parse_excel_and_create_batch_cmd,
+    clear_session_data,
+    parse_excel_without_persistence_cmd,
+    create_batch_and_persist_data_cmd
 };
 
 pub use test_plc_config::{

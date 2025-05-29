@@ -11,11 +11,9 @@ import { invoke } from '@tauri-apps/api/core';
 // NG-ZORRO 组件导入
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzButtonModule } from 'ng-zorro-antd/button';
-import { NzUploadModule, NzUploadFile } from 'ng-zorro-antd/upload';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
-import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
@@ -50,10 +48,8 @@ import { TestPlcChannelConfig, TestPlcChannelType } from '../../models/test-plc-
     RouterModule,
     NzCardModule,
     NzButtonModule,
-    NzUploadModule,
     NzIconModule,
     NzSpaceModule,
-    NzDividerModule,
     NzTableModule,
     NzTagModule,
     NzAlertModule,
@@ -88,8 +84,6 @@ export class DataManagementComponent implements OnInit, OnDestroy {
   // 文件信息
   selectedFile: any = null;  // 支持File和模拟对象
   selectedFilePath: string = '';  // 存储完整文件路径
-  uploadProgress: number = 0;
-  isUploading: boolean = false;
   
   // 历史数据列表
   historicalData: any[] = [];
@@ -240,22 +234,6 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     }
   }
 
-  // 文件选择处理（通过上传组件）
-  onFileSelected(event: any): void {
-    const file = event.target.files[0];
-    if (file) {
-      this.selectedFile = file;
-      this.selectedFilePath = ''; // 清空文件路径，因为浏览器无法获取完整路径
-      
-      // 更新状态但不自动跳转步骤
-      this.dataStateService.updateImportState({ 
-        selectedFile: file 
-      });
-      console.log('文件已选择:', file.name, '当前步骤:', this.currentStep);
-      this.message.success(`已选择文件: ${file.name}`);
-    }
-  }
-
   // 开始导入
   async startImport(): Promise<void> {
     console.log('开始导入，当前状态:', {
@@ -324,47 +302,47 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // 调用真实的后端Excel解析服务
-    console.log('调用后端Excel解析服务:', this.selectedFile.name);
+    // 调用新的不持久化Excel解析服务
+    console.log('调用后端Excel解析服务（不持久化）:', this.selectedFile.name);
     
     // 使用完整的文件路径（如果有的话）或文件名
     const filePath = this.selectedFilePath || this.selectedFile.name;
     
     console.log('使用文件路径:', filePath);
     
-    this.tauriApiService.parseExcelAndCreateBatch(filePath, this.selectedFile.name)
+    this.tauriApiService.parseExcelWithoutPersistence(filePath, this.selectedFile.name)
       .subscribe({
         next: (result) => {
-          console.log('后端Excel解析结果:', result);
+          console.log('后端Excel解析结果（不持久化）:', result);
           
-          // 使用后端返回的真实结果
-          const importResult = {
-            success: true,
-            totalChannels: result.definitions_count || result.total_count || 0,
-            message: result.message || '数据导入成功',
-            timestamp: new Date().toISOString(),
-            batchInfo: result.batch_info || {
-              batch_id: result.batch_id,
-              product_model: this.extractProductModel(),
-              serial_number: this.generateSerialNumber(),
-              creation_time: new Date().toISOString(),
-              total_points: result.definitions_count || result.total_count || 0,
-              tested_points: 0,
-              passed_points: 0,
-              failed_points: 0,
-              status_summary: '已创建，等待测试'
-            },
-            // 如果后端返回了分配结果，使用真实结果
-            allocationResult: result.allocation_result || null
-          };
-          
-          this.dataStateService.updateImportState({
-            isImporting: false,
-            currentStep: 2,
-            importResult: importResult
-          });
-          
-          this.message.success(`数据导入完成：${result.message || '成功解析Excel文件'}`);
+          if (result.success) {
+            // 将解析的数据保存到内存中
+            this.dataStateService.setTestData(result.definitions, result.suggested_batch_info);
+            
+            // 创建导入结果对象（用于显示）
+            const importResult = {
+              success: true,
+              totalChannels: result.definitions_count,
+              successChannels: result.definitions_count,
+              failedChannels: 0,
+              message: result.message,
+              timestamp: new Date().toISOString(),
+              batchInfo: result.suggested_batch_info,
+              // 标记这是不持久化的结果
+              isPersisted: false,
+              definitions: result.definitions
+            };
+            
+            this.dataStateService.updateImportState({
+              isImporting: false,
+              currentStep: 2,
+              importResult: importResult
+            });
+            
+            this.message.success(`数据解析完成：${result.message}。数据将在开始测试时保存。`);
+          } else {
+            throw new Error(result.message);
+          }
         },
         error: (error) => {
           console.error('后端Excel解析失败:', error);
@@ -386,6 +364,51 @@ export class DataManagementComponent implements OnInit, OnDestroy {
           }
         }
       });
+  }
+
+  // 立即持久化数据
+  persistDataNow(): void {
+    const testData = this.dataStateService.getTestData();
+    
+    if (!testData.isDataAvailable || !testData.parsedDefinitions.length) {
+      this.message.error('没有可持久化的数据');
+      return;
+    }
+
+    console.log('开始立即持久化数据...');
+    
+    this.tauriApiService.createBatchAndPersistData(
+      testData.suggestedBatchInfo,
+      testData.parsedDefinitions
+    ).subscribe({
+      next: (result) => {
+        console.log('数据持久化结果:', result);
+        
+        if (result.success) {
+          // 更新导入结果，标记为已持久化
+          const updatedResult = {
+            ...this.importResult,
+            isPersisted: true,
+            batchInfo: {
+              ...this.importResult.batchInfo,
+              batch_id: result.batch_id
+            }
+          };
+          
+          this.dataStateService.updateImportState({
+            importResult: updatedResult
+          });
+          
+          this.message.success(`数据已成功保存：${result.message}`);
+        } else {
+          throw new Error(result.message);
+        }
+      },
+      error: (error) => {
+        console.error('数据持久化失败:', error);
+        this.message.error(`数据保存失败: ${error.message || error}`);
+      }
+    });
   }
 
   // 自动分配逻辑
@@ -625,9 +648,13 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     if (!this.importResult) return '';
     
     if (this.importResult.success) {
-      return `成功导入 ${this.importResult.successChannels} 个通道点，共 ${this.importResult.totalChannels} 个通道。已自动创建测试批次并完成分配。`;
+      if (this.importResult.isPersisted) {
+        return `成功解析并保存 ${this.importResult.successChannels} 个通道点，共 ${this.importResult.totalChannels} 个通道。已自动创建测试批次。`;
+      } else {
+        return `成功解析 ${this.importResult.successChannels} 个通道点，共 ${this.importResult.totalChannels} 个通道。数据已准备就绪，将在开始测试时保存。`;
+      }
     } else {
-      return `导入失败，请检查文件格式和内容。`;
+      return `解析失败，请检查文件格式和内容。`;
     }
   }
 

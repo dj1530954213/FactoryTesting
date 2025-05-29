@@ -92,6 +92,7 @@ export class TestAreaComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadAvailableBatches();
+    this.checkForUnpersistedData();
   }
 
   async loadAvailableBatches(): Promise<void> {
@@ -127,6 +128,29 @@ export class TestAreaComponent implements OnInit {
   refreshBatches(): void {
     this.loadAvailableBatches();
     this.message.info('正在刷新批次列表...');
+  }
+
+  /**
+   * 清理当前会话数据
+   */
+  async clearSessionData(): Promise<void> {
+    try {
+      const result = await this.tauriApiService.clearSessionData().toPromise();
+      this.message.success(result || '会话数据清理完成');
+      
+      // 清理本地状态
+      this.availableBatches = [];
+      this.selectedBatch = null;
+      this.batchDetails = null;
+      
+      // 清理数据状态服务
+      this.dataStateService.clearAllData();
+      
+      console.log('会话数据已清理，界面已重置');
+    } catch (error) {
+      console.error('清理会话数据失败:', error);
+      this.message.error('清理会话数据失败: ' + error);
+    }
   }
 
   async loadBatchDetails(): Promise<void> {
@@ -343,4 +367,38 @@ export class TestAreaComponent implements OnInit {
 
   readonly OverallTestStatus = OverallTestStatus;
   readonly ModuleType = ModuleType;
+
+  /**
+   * 检查是否有未持久化的数据
+   */
+  private checkForUnpersistedData(): void {
+    const testData = this.dataStateService.getTestData();
+    
+    if (testData.isDataAvailable && testData.parsedDefinitions.length > 0) {
+      console.log('检测到未持久化的测试数据，准备自动持久化...');
+      this.message.info('检测到未保存的Excel数据，正在自动保存...');
+      
+      // 自动持久化数据
+      this.tauriApiService.createBatchAndPersistData(
+        testData.suggestedBatchInfo,
+        testData.parsedDefinitions
+      ).subscribe({
+        next: (result) => {
+          if (result.success) {
+            this.message.success(`数据已自动保存：${result.message}`);
+            // 清理内存中的数据，因为已经持久化了
+            this.dataStateService.clearTestData();
+            // 重新加载批次列表
+            this.loadAvailableBatches();
+          } else {
+            this.message.warning(`数据保存失败：${result.message}`);
+          }
+        },
+        error: (error) => {
+          console.error('自动持久化数据失败:', error);
+          this.message.warning('自动保存数据失败，请手动保存或重新导入');
+        }
+      });
+    }
+  }
 } 

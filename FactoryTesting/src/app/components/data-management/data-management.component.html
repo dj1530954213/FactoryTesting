@@ -29,13 +29,6 @@
         </nz-alert>
         
         <div class="upload-area">
-          <input 
-            type="file" 
-            accept=".xlsx,.xls" 
-            (change)="onFileSelected($event)"
-            #fileInput
-            style="display: none;">
-          
           <!-- 文件选择按钮组 -->
           <div class="file-selection-buttons">
             <nz-space nzDirection="vertical" style="width: 100%;">
@@ -44,18 +37,7 @@
                 <span nz-icon nzType="folder-open" nzTheme="outline"></span>
                 选择Excel文件
               </button>
-              
-              <!-- 或者分隔线 -->
-              <nz-divider *nzSpaceItem nzText="或者" nzOrientation="center"></nz-divider>
             </nz-space>
-          </div>
-          
-          <div class="upload-dragger" (click)="fileInput.click()">
-            <p class="upload-icon">
-              <span nz-icon nzType="inbox" nzTheme="outline"></span>
-            </p>
-            <p class="upload-text">点击或拖拽文件到此区域上传</p>
-            <p class="upload-hint">支持单个Excel文件上传，文件大小不超过10MB</p>
           </div>
         </div>
 
@@ -99,11 +81,28 @@
       <div *ngIf="currentStep === 2 && importResult" class="import-result">
         <nz-alert 
           [nzType]="importResult.success ? 'success' : 'error'" 
-          [nzMessage]="importResult.success ? '导入成功' : '导入失败'" 
+          [nzMessage]="importResult.success ? '数据解析成功' : '解析失败'" 
           [nzDescription]="getImportResultDescription()"
           nzShowIcon
           class="import-alert">
         </nz-alert>
+
+        <!-- 数据状态提示 -->
+        <div *ngIf="importResult.success && !importResult.isPersisted" class="data-status-warning">
+          <nz-alert
+            nzType="warning"
+            nzMessage="数据未持久化"
+            nzDescription="Excel数据已解析完成，但尚未保存到数据库。数据将在您开始测试时自动保存。"
+            nzShowIcon
+            [nzAction]="persistDataTemplate">
+          </nz-alert>
+          <ng-template #persistDataTemplate>
+            <button nz-button nzSize="small" nzType="primary" (click)="persistDataNow()">
+              <span nz-icon nzType="save" nzTheme="outline"></span>
+              立即保存
+            </button>
+          </ng-template>
+        </div>
         
         <div class="result-stats">
           <nz-space nzDirection="vertical" style="width: 100%;">

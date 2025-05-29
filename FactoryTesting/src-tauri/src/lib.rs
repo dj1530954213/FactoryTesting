@@ -19,7 +19,8 @@ use commands::data_management::{
     parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
     import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
     prepare_test_instances_for_batch_cmd, import_excel_and_allocate_channels_cmd,
-    parse_excel_and_create_batch_cmd
+    parse_excel_and_create_batch_cmd, clear_session_data,
+    parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
@@ -38,12 +39,33 @@ use commands::channel_allocation_commands::{
 /// 
 /// 这个函数现在会启动 Tauri 应用程序
 pub fn run() {
+    // 初始化日志系统 - 过滤掉数据库查询日志
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Debug) // 应用默认级别
+        .filter_module("sqlx", log::LevelFilter::Warn) // 过滤sqlx查询日志
+        .filter_module("sea_orm", log::LevelFilter::Warn) // 过滤sea_orm查询日志
+        .filter_module("sea_orm_migration", log::LevelFilter::Warn) // 过滤迁移日志
+        .filter_module("sqlx::query", log::LevelFilter::Off) // 完全关闭sqlx查询日志
+        .filter_module("app::services", log::LevelFilter::Debug) // 确保业务服务日志显示
+        .filter_module("app::tauri_commands", log::LevelFilter::Debug) // 确保命令日志显示
+        .format_timestamp_secs() // 添加时间戳
+        .format_module_path(false) // 简化模块路径显示
+        .init();
+    
+    log::info!("=== FAT_TEST 工厂测试系统启动 ===");
+    log::info!("日志系统已初始化，级别: DEBUG (数据库查询日志已过滤)");
+
     // 使用 tokio 运行时启动 Tauri 应用
     tauri::async_runtime::block_on(async {
         // 初始化应用状态
+        log::info!("开始初始化应用状态...");
         let app_state = match init_app_state().await {
-            Ok(state) => state,
+            Ok(state) => {
+                log::info!("应用状态初始化成功");
+                state
+            },
             Err(e) => {
+                log::error!("初始化应用状态失败: {}", e);
                 eprintln!("初始化应用状态失败: {}", e);
                 std::process::exit(1);
             }
@@ -62,7 +84,9 @@ pub fn run() {
                 tauri_commands::stop_batch_testing,
                 tauri_commands::get_batch_progress,
                 tauri_commands::get_batch_results,
+                tauri_commands::get_session_batches,
                 tauri_commands::cleanup_completed_batch,
+                tauri_commands::create_test_data,
                 // 数据管理相关命令
                 tauri_commands::import_excel_file,
                 tauri_commands::create_test_batch_with_definitions,
@@ -100,6 +124,10 @@ pub fn run() {
                 start_tests_for_batch_cmd,
                 get_batch_status_cmd,
                 prepare_test_instances_for_batch_cmd,
+                import_excel_and_allocate_channels_cmd,
+                clear_session_data,
+                parse_excel_without_persistence_cmd,
+                create_batch_and_persist_data_cmd,
                 // 手动测试命令
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
@@ -119,8 +147,7 @@ pub fn run() {
                 get_batch_instances_cmd,
                 clear_all_allocations_cmd,
                 validate_allocations_cmd,
-                create_default_test_plc_config_cmd,
-                import_excel_and_allocate_channels_cmd
+                create_default_test_plc_config_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

@@ -4,7 +4,7 @@
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
-use crate::models::{ChannelPointDefinition, TestBatchInfo};
+use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance};
 use crate::services::infrastructure::ExcelImporter;
 use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::tauri_commands::AppState;
@@ -130,6 +130,13 @@ pub async fn create_test_batch(
         Ok(_) => {
             info!("测试批次创建成功: {}", test_batch.batch_id);
             
+            // 将批次ID添加到当前会话跟踪中
+            {
+                let mut session_batch_ids = state.session_batch_ids.lock().await;
+                session_batch_ids.insert(test_batch.batch_id.clone());
+                info!("批次 {} 已添加到当前会话跟踪", test_batch.batch_id);
+            }
+            
             // 保存通道定义
             let mut saved_count = 0;
             for definition in &batch_data.preview_data {
@@ -169,10 +176,29 @@ pub async fn get_batch_list(
     
     let persistence_service = &state.persistence_service;
     
+    // 获取当前会话中的批次ID列表
+    let session_batch_ids = {
+        let session_batch_ids_guard = state.session_batch_ids.lock().await;
+        session_batch_ids_guard.clone()
+    };
+    
+    info!("当前会话中有{}个批次", session_batch_ids.len());
+    
+    // 如果当前会话中没有批次，直接返回空列表
+    if session_batch_ids.is_empty() {
+        info!("当前会话中没有可用的测试批次，用户需要先导入Excel文件");
+        return Ok(vec![]);
+    }
+    
     match persistence_service.load_all_batch_info().await {
         Ok(batches) => {
-            info!("成功获取{}个批次", batches.len());
-            Ok(batches)
+            // 只返回当前会话中创建的批次
+            let current_session_batches: Vec<TestBatchInfo> = batches.into_iter()
+                .filter(|batch| session_batch_ids.contains(&batch.batch_id))
+                .collect();
+            
+            info!("成功获取{}个当前会话批次", current_session_batches.len());
+            Ok(current_session_batches)
         }
         Err(e) => {
             error!("获取批次列表失败: {}", e);
@@ -280,7 +306,16 @@ pub async fn import_excel_and_prepare_batch_cmd(
     
     // 3. 保存批次信息
     match state.persistence_service.save_batch_info(&test_batch_info).await {
-        Ok(_) => info!("批次信息保存成功: {}", test_batch_info.batch_id),
+        Ok(_) => {
+            info!("批次信息保存成功: {}", test_batch_info.batch_id);
+            
+            // 将批次ID添加到当前会话跟踪中
+            {
+                let mut session_batch_ids = state.session_batch_ids.lock().await;
+                session_batch_ids.insert(test_batch_info.batch_id.clone());
+                info!("批次 {} 已添加到当前会话跟踪", test_batch_info.batch_id);
+            }
+        }
         Err(e) => {
             error!("保存批次信息失败: {}", e);
             return Err(format!("保存批次信息失败: {}", e));
@@ -341,15 +376,15 @@ pub async fn start_tests_for_batch_cmd(
 /// 获取批次状态
 #[tauri::command]
 pub async fn get_batch_status_cmd(
-    args: GetBatchStatusCmdArgs,
+    batch_id: String,
     state: State<'_, AppState>
 ) -> Result<BatchDetailsPayload, String> {
-    info!("获取批次状态: {}", args.batch_id);
+    info!("获取批次状态: {}", batch_id);
     
     // 获取批次信息
-    let batch_info = match state.persistence_service.load_batch_info(&args.batch_id).await {
+    let batch_info = match state.persistence_service.load_batch_info(&batch_id).await {
         Ok(Some(info)) => info,
-        Ok(None) => return Err(format!("批次不存在: {}", args.batch_id)),
+        Ok(None) => return Err(format!("批次不存在: {}", batch_id)),
         Err(e) => {
             error!("获取批次信息失败: {}", e);
             return Err(format!("获取批次信息失败: {}", e));
@@ -357,7 +392,7 @@ pub async fn get_batch_status_cmd(
     };
     
     // 获取测试实例
-    let instances = match state.persistence_service.load_test_instances_by_batch(&args.batch_id).await {
+    let instances = match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
         Ok(instances) => instances,
         Err(e) => {
             error!("获取测试实例失败: {}", e);
@@ -601,59 +636,104 @@ pub async fn import_excel_and_allocate_channels_cmd(
 
 /// 创建默认测试PLC配置的辅助函数
 async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConfig, String> {
-    // 根据正确的分配数据创建测试PLC通道映射
+    // 根据正确的分配数据和有源/无源匹配规则创建测试PLC通道映射
     let mut comparison_tables = Vec::new();
     
-    // 添加AO通道 (用于测试AI) - 根据分配数据：AO1_1-AO1_6, AO2_1-AO2_8
-    // AO1模块：6个通道
-    for channel in 1..=6 {
+    // ===== AI测试需要的AO通道 =====
+    // AI有源 → AO无源 (需要足够的AO无源通道)
+    for channel in 1..=16 {  // 增加到16个通道以支持更多AI有源
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AO1_{}", channel),
             communication_address: format!("AO1.{}", channel),
             channel_type: crate::models::ModuleType::AO,
-            is_powered: true, // AO有源
+            is_powered: false, // AO无源，用于测试AI有源
         });
     }
     
-    // AO2模块：8个通道
-    for channel in 1..=8 {
+    // AI无源 → AO有源 (需要足够的AO有源通道)
+    for channel in 1..=8 {  // 8个AO有源通道
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AO2_{}", channel),
             communication_address: format!("AO2.{}", channel),
             channel_type: crate::models::ModuleType::AO,
-            is_powered: true, // AO有源
+            is_powered: true, // AO有源，用于测试AI无源
         });
     }
     
-    // 添加AI通道 (用于测试AO) - 根据分配数据：AI1_1-AI1_5
-    for channel in 1..=5 {
+    // ===== AO测试需要的AI通道 =====
+    // AO有源 → AI无源 (需要足够的AI无源通道)
+    for channel in 1..=8 {  // 8个AI无源通道
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("AI1_{}", channel),
             communication_address: format!("AI1.{}", channel),
             channel_type: crate::models::ModuleType::AI,
-            is_powered: true, // AI有源
+            is_powered: false, // AI无源，用于测试AO有源
         });
     }
     
-    // 添加DO通道 (用于测试DI) - 根据分配数据：DO2_1-DO2_16
-    for channel in 1..=16 {
+    // AO无源 → AI有源 (需要足够的AI有源通道)
+    for channel in 1..=8 {  // 8个AI有源通道
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("AI2_{}", channel),
+            communication_address: format!("AI2.{}", channel),
+            channel_type: crate::models::ModuleType::AI,
+            is_powered: true, // AI有源，用于测试AO无源
+        });
+    }
+    
+    // ===== DI测试需要的DO通道 =====
+    // DI有源 → DO无源 (需要足够的DO无源通道)
+    for channel in 1..=32 {  // 32个DO无源通道，支持大量DI有源
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("DO1_{}", channel),
+            communication_address: format!("DO1.{}", channel),
+            channel_type: crate::models::ModuleType::DO,
+            is_powered: false, // DO无源，用于测试DI有源
+        });
+    }
+    
+    // DI无源 → DO有源 (需要足够的DO有源通道)
+    for channel in 1..=16 {  // 16个DO有源通道
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DO2_{}", channel),
             communication_address: format!("DO2.{}", channel),
             channel_type: crate::models::ModuleType::DO,
-            is_powered: true, // DO有源
+            is_powered: true, // DO有源，用于测试DI无源
         });
     }
     
-    // 添加DI通道 (用于测试DO) - 根据分配数据：DI2_1-DI2_12
-    for channel in 1..=12 {
+    // ===== DO测试需要的DI通道 =====
+    // DO有源 → DI无源 (需要足够的DI无源通道)
+    for channel in 1..=32 {  // 32个DI无源通道，支持大量DO有源
+        comparison_tables.push(crate::services::ComparisonTable {
+            channel_address: format!("DI1_{}", channel),
+            communication_address: format!("DI1.{}", channel),
+            channel_type: crate::models::ModuleType::DI,
+            is_powered: false, // DI无源，用于测试DO有源
+        });
+    }
+    
+    // DO无源 → DI有源 (需要足够的DI有源通道)
+    for channel in 1..=16 {  // 16个DI有源通道
         comparison_tables.push(crate::services::ComparisonTable {
             channel_address: format!("DI2_{}", channel),
             communication_address: format!("DI2.{}", channel),
             channel_type: crate::models::ModuleType::DI,
-            is_powered: true, // DI有源
+            is_powered: true, // DI有源，用于测试DO无源
         });
     }
+    
+    log::info!("创建默认测试PLC配置，总通道数: {}", comparison_tables.len());
+    log::info!("通道分布: AO无源={}, AO有源={}, AI无源={}, AI有源={}, DO无源={}, DO有源={}, DI无源={}, DI有源={}",
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AO && !t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AO && t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AI && !t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::AI && t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DO && !t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DO && t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DI && !t.is_powered).count(),
+        comparison_tables.iter().filter(|t| t.channel_type == crate::models::ModuleType::DI && t.is_powered).count()
+    );
     
     Ok(crate::services::TestPlcConfig {
         brand_type: "Micro850".to_string(),
@@ -667,6 +747,83 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
 pub struct ParseExcelAndCreateBatchCmdArgs {
     pub file_path: String,
     pub file_name: String,
+}
+
+/// 解析Excel文件但不持久化数据的响应
+#[derive(Debug, Serialize)]
+pub struct ParseExcelWithoutPersistenceResponse {
+    pub success: bool,
+    pub message: String,
+    pub definitions: Vec<ChannelPointDefinition>,
+    pub definitions_count: usize,
+    pub suggested_batch_info: TestBatchInfo,
+}
+
+/// 解析Excel文件但不持久化数据
+/// 
+/// 这个命令只解析Excel文件，将结果返回给前端，
+/// 不会将数据保存到数据库中。数据只有在用户明确开始测试时才会持久化。
+/// 
+/// # 参数
+/// * `args` - 包含文件路径和文件名的参数
+/// 
+/// # 返回
+/// * `Result<ParseExcelWithoutPersistenceResponse, String>` - 解析结果（不持久化）
+#[tauri::command]
+pub async fn parse_excel_without_persistence_cmd(
+    args: ParseExcelAndCreateBatchCmdArgs,
+) -> Result<ParseExcelWithoutPersistenceResponse, String> {
+    info!("收到解析Excel文件请求（不持久化）: 文件={}, 路径={}", args.file_name, args.file_path);
+    
+    // 解析Excel文件
+    let definitions = match ExcelImporter::parse_excel_file(&args.file_path).await {
+        Ok(defs) => {
+            info!("Excel文件解析成功，共解析{}个通道定义", defs.len());
+            defs
+        }
+        Err(e) => {
+            error!("Excel文件解析失败: {}", e);
+            return Ok(ParseExcelWithoutPersistenceResponse {
+                success: false,
+                message: format!("Excel解析失败: {}", e),
+                definitions: vec![],
+                definitions_count: 0,
+                suggested_batch_info: TestBatchInfo::new(None, None),
+            });
+        }
+    };
+    
+    if definitions.is_empty() {
+        warn!("Excel文件中没有找到有效的通道定义");
+        return Ok(ParseExcelWithoutPersistenceResponse {
+            success: false,
+            message: "Excel文件中没有找到有效的通道定义".to_string(),
+            definitions: vec![],
+            definitions_count: 0,
+            suggested_batch_info: TestBatchInfo::new(None, None),
+        });
+    }
+    
+    // 创建建议的批次信息（不保存）
+    let mut suggested_batch = TestBatchInfo::new(
+        Some("自动导入".to_string()), // 默认产品型号
+        None, // 序列号留空，用户可以后续修改
+    );
+    
+    // 设置批次信息
+    suggested_batch.total_points = definitions.len() as u32;
+    suggested_batch.batch_name = format!("从{}导入", args.file_name);
+    
+    let definitions_count = definitions.len();
+    info!("Excel解析完成，返回{}个通道定义（未持久化）", definitions_count);
+    
+    Ok(ParseExcelWithoutPersistenceResponse {
+        success: true,
+        message: format!("成功解析{}个通道定义，数据未持久化", definitions_count),
+        definitions,
+        definitions_count,
+        suggested_batch_info: suggested_batch,
+    })
 }
 
 /// 解析Excel文件并创建批次的响应
@@ -743,6 +900,13 @@ pub async fn parse_excel_and_create_batch_cmd(
     match persistence_service.save_batch_info(&test_batch).await {
         Ok(_) => {
             info!("测试批次创建成功: {}", test_batch.batch_id);
+            
+            // 将批次ID添加到当前会话跟踪中
+            {
+                let mut session_batch_ids = state.session_batch_ids.lock().await;
+                session_batch_ids.insert(test_batch.batch_id.clone());
+                info!("批次 {} 已添加到当前会话跟踪", test_batch.batch_id);
+            }
         }
         Err(e) => {
             error!("创建测试批次失败: {}", e);
@@ -791,5 +955,243 @@ pub async fn parse_excel_and_create_batch_cmd(
         batch_id: if success { Some(test_batch.batch_id.clone()) } else { None },
         definitions_count: definitions.len(),
         batch_info: if success { Some(test_batch) } else { None },
+    })
+}
+
+/// 清理当前会话数据
+/// 
+/// 这个命令会清除当前会话中创建的所有批次数据，
+/// 确保测试区域回到初始状态
+#[tauri::command]
+pub async fn clear_session_data(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("收到清理会话数据请求");
+    
+    // 获取当前会话中的批次ID列表
+    let session_batch_ids = {
+        let mut session_batch_ids_guard = state.session_batch_ids.lock().await;
+        let ids = session_batch_ids_guard.clone();
+        session_batch_ids_guard.clear(); // 清空会话跟踪
+        ids
+    };
+    
+    if session_batch_ids.is_empty() {
+        info!("当前会话中没有需要清理的数据");
+        return Ok("当前会话中没有需要清理的数据".to_string());
+    }
+    
+    info!("开始清理{}个批次的数据", session_batch_ids.len());
+    
+    let persistence_service = &state.persistence_service;
+    let mut cleaned_count = 0;
+    let mut errors = Vec::new();
+    
+    // 删除每个批次及其相关数据
+    for batch_id in &session_batch_ids {
+        // 删除批次的测试实例
+        match persistence_service.load_test_instances_by_batch(batch_id).await {
+            Ok(instances) => {
+                for instance in instances {
+                    if let Err(e) = persistence_service.delete_test_instance(&instance.instance_id).await {
+                        errors.push(format!("删除测试实例失败: {} - {}", instance.instance_id, e));
+                    }
+                }
+            }
+            Err(e) => {
+                errors.push(format!("加载批次{}的测试实例失败: {}", batch_id, e));
+            }
+        }
+        
+        // 删除批次信息
+        match persistence_service.delete_batch_info(batch_id).await {
+            Ok(_) => {
+                cleaned_count += 1;
+                info!("成功删除批次: {}", batch_id);
+            }
+            Err(e) => {
+                errors.push(format!("删除批次{}失败: {}", batch_id, e));
+            }
+        }
+    }
+    
+    let message = if errors.is_empty() {
+        format!("成功清理{}个批次的会话数据", cleaned_count)
+    } else {
+        format!("清理完成，成功删除{}个批次，{}个操作失败", cleaned_count, errors.len())
+    };
+    
+    info!("{}", message);
+    Ok(message)
+}
+
+/// 创建批次并持久化数据的请求
+#[derive(Debug, Deserialize)]
+pub struct CreateBatchAndPersistDataRequest {
+    pub batch_info: TestBatchInfo,
+    pub definitions: Vec<ChannelPointDefinition>,
+}
+
+/// 创建批次并持久化数据的响应
+#[derive(Debug, Serialize)]
+pub struct CreateBatchAndPersistDataResponse {
+    pub success: bool,
+    pub message: String,
+    pub batch_id: Option<String>,
+    /// 所有生成的批次信息
+    pub all_batches: Vec<TestBatchInfo>,
+    pub saved_definitions_count: usize,
+    pub created_instances_count: usize,
+}
+
+/// 创建批次并持久化数据
+/// 
+/// 这个命令在用户明确开始测试时被调用，
+/// 将之前解析的Excel数据持久化到数据库中
+/// 
+/// ⚠️ 修复：现在使用通道分配服务来正确生成多个批次
+/// 
+/// # 参数
+/// * `request` - 包含批次信息和通道定义的请求
+/// * `state` - 应用状态
+/// 
+/// # 返回
+/// * `Result<CreateBatchAndPersistDataResponse, String>` - 持久化结果
+#[tauri::command]
+pub async fn create_batch_and_persist_data_cmd(
+    request: CreateBatchAndPersistDataRequest,
+    state: State<'_, AppState>
+) -> Result<CreateBatchAndPersistDataResponse, String> {
+    info!("收到创建批次并持久化数据请求: 批次ID={}, 定义数量={}", 
+          request.batch_info.batch_id, request.definitions.len());
+    
+    // ===== 使用通道分配服务进行正确的批次分配 =====
+    log::info!("[CreateBatchData] ===== 开始使用通道分配服务 =====");
+    log::info!("[CreateBatchData] 输入: {} 个通道定义", request.definitions.len());
+    
+    // 创建默认的测试PLC配置
+    use crate::services::channel_allocation_service::TestPlcConfig;
+    let test_plc_config = TestPlcConfig {
+        brand_type: "Default".to_string(),
+        ip_address: "192.168.1.100".to_string(),
+        comparison_tables: Vec::new(), // 使用空配置，将使用默认批次大小
+    };
+    
+    // 调用通道分配服务
+    let allocation_result = match state.channel_allocation_service
+        .allocate_channels(
+            request.definitions.clone(),
+            test_plc_config,
+            request.batch_info.product_model.clone(),
+            request.batch_info.serial_number.clone(),
+        )
+        .await
+    {
+        Ok(result) => {
+            log::info!("[CreateBatchData] 通道分配成功: {} 个批次, {} 个实例", 
+                result.batches.len(), result.allocated_instances.len());
+            result
+        }
+        Err(e) => {
+            error!("通道分配失败: {}", e);
+            return Ok(CreateBatchAndPersistDataResponse {
+                success: false,
+                message: format!("通道分配失败: {}", e),
+                batch_id: None,
+                all_batches: Vec::new(),
+                saved_definitions_count: 0,
+                created_instances_count: 0,
+            });
+        }
+    };
+    
+    let persistence_service = &state.persistence_service;
+    
+    // 第一步：保存所有生成的批次信息
+    let mut saved_batches_count = 0;
+    for batch in &allocation_result.batches {
+        match persistence_service.save_batch_info(batch).await {
+            Ok(_) => {
+                log::info!("[CreateBatchData] 成功保存批次: {} ({})", batch.batch_name, batch.batch_id);
+                saved_batches_count += 1;
+                
+                // 将批次ID添加到当前会话跟踪中
+                {
+                    let mut session_batch_ids = state.session_batch_ids.lock().await;
+                    session_batch_ids.insert(batch.batch_id.clone());
+                }
+            }
+            Err(e) => {
+                error!("保存批次失败: {} - {}", batch.batch_id, e);
+            }
+        }
+    }
+    
+    // 第二步：保存通道定义
+    let mut saved_definitions_count = 0;
+    let mut definition_errors = Vec::new();
+    
+    for definition in &request.definitions {
+        match persistence_service.save_channel_definition(definition).await {
+            Ok(_) => saved_definitions_count += 1,
+            Err(e) => {
+                let error_msg = format!("保存通道定义失败: {} - {}", definition.tag, e);
+                error!("{}", error_msg);
+                definition_errors.push(error_msg);
+            }
+        }
+    }
+    
+    // 第三步：保存分配的测试实例
+    let mut created_instances_count = 0;
+    let mut instance_errors = Vec::new();
+    
+    for instance in &allocation_result.allocated_instances {
+        match persistence_service.save_test_instance(instance).await {
+            Ok(_) => created_instances_count += 1,
+            Err(e) => {
+                let error_msg = format!("保存测试实例失败: {} - {}", instance.instance_id, e);
+                error!("{}", error_msg);
+                instance_errors.push(error_msg);
+            }
+        }
+    }
+    
+    // 第四步：生成结果消息
+    let all_errors = [definition_errors, instance_errors].concat();
+    let success = saved_batches_count > 0 && saved_definitions_count > 0 && created_instances_count > 0;
+    
+    let message = if success {
+        if all_errors.is_empty() {
+            format!("成功创建{}个批次，持久化{}个通道定义，创建{}个测试实例", 
+                   saved_batches_count, saved_definitions_count, created_instances_count)
+        } else {
+            format!("批次创建成功，生成{}个批次，保存{}个通道定义，创建{}个测试实例，{}个操作失败", 
+                   saved_batches_count, saved_definitions_count, created_instances_count, all_errors.len())
+        }
+    } else {
+        format!("批次创建失败。错误: {}", all_errors.join("; "))
+    };
+    
+    info!("{}", message);
+    
+    // 详细记录所有生成的批次
+    log::info!("[CreateBatchData] ===== 批次分配完成 =====");
+    for (i, batch) in allocation_result.batches.iter().enumerate() {
+        log::info!("[CreateBatchData] 批次{}: ID={}, 名称={}, 点位数={}", 
+            i + 1, batch.batch_id, batch.batch_name, batch.total_points);
+    }
+    
+    Ok(CreateBatchAndPersistDataResponse {
+        success,
+        message,
+        batch_id: if success { 
+            allocation_result.batches.first().map(|b| b.batch_id.clone()) 
+        } else { 
+            None 
+        },
+        all_batches: allocation_result.batches,
+        saved_definitions_count,
+        created_instances_count,
     })
 } 
