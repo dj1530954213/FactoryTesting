@@ -20,11 +20,13 @@ use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
 use log::{debug, warn, error, info};
 use chrono::Utc;
 use crate::services::{IChannelAllocationService};
+use crate::services::domain::{EventPublisher};
+use crate::services::domain::{CancellationToken};
 
 /// 测试执行请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,6 +249,9 @@ pub trait ITestCoordinationService: Send + Sync {
 }
 
 /// 测试协调服务实现
+/// 
+/// 负责协调整个测试流程，包括批次管理、任务调度、状态监控等
+/// 参考原始C#代码的TestTaskManager复杂度
 pub struct TestCoordinationService {
     /// 通道状态管理器
     channel_state_manager: Arc<dyn IChannelStateManager>,
@@ -254,10 +259,16 @@ pub struct TestCoordinationService {
     test_execution_engine: Arc<dyn ITestExecutionEngine>,
     /// 持久化服务
     persistence_service: Arc<dyn IPersistenceService>,
-    /// 通道分配服务
-    channel_allocation_service: Arc<dyn IChannelAllocationService>,
-    /// 活动批次执行信息
-    active_batches: Arc<RwLock<HashMap<String, BatchExecutionInfo>>>,
+    /// 事件发布器
+    event_publisher: Arc<dyn EventPublisher>,
+    /// 当前活跃的批次
+    current_batch: Arc<Mutex<Option<TestBatchInfo>>>,
+    /// 测试进度缓存
+    progress_cache: Arc<Mutex<HashMap<String, TestProgressUpdate>>>,
+    /// 并发控制信号量
+    concurrency_semaphore: Arc<Semaphore>,
+    /// 全局取消令牌
+    cancellation_token: Arc<Mutex<Option<CancellationToken>>>,
 }
 
 impl TestCoordinationService {
@@ -266,25 +277,28 @@ impl TestCoordinationService {
         channel_state_manager: Arc<dyn IChannelStateManager>,
         test_execution_engine: Arc<dyn ITestExecutionEngine>,
         persistence_service: Arc<dyn IPersistenceService>,
-        channel_allocation_service: Arc<dyn IChannelAllocationService>,
+        event_publisher: Arc<dyn EventPublisher>,
     ) -> Self {
         Self {
             channel_state_manager,
             test_execution_engine,
             persistence_service,
-            channel_allocation_service,
-            active_batches: Arc::new(RwLock::new(HashMap::new())),
+            event_publisher,
+            current_batch: Arc::new(Mutex::new(None)),
+            progress_cache: Arc::new(Mutex::new(HashMap::new())),
+            concurrency_semaphore: Arc::new(Semaphore::new(5)),
+            cancellation_token: Arc::new(Mutex::new(None)),
         }
     }
 
     /// 启动结果收集任务
     async fn start_result_collection(&self, batch_id: String) -> AppResult<()> {
-        let active_batches = self.active_batches.clone();
+        let active_batches = self.current_batch.lock().await;
         let persistence_service = self.persistence_service.clone();
 
         tokio::spawn(async move {
             let mut receiver = {
-                let mut batches = active_batches.write().await;
+                let mut batches = active_batches.lock().await;
                 if let Some(batch_info) = batches.get_mut(&batch_id) {
                     batch_info.result_receiver.take()
                 } else {
@@ -304,7 +318,7 @@ impl TestCoordinationService {
 
                     // 更新批次信息中的结果集合
                     {
-                        let mut batches = active_batches.write().await;
+                        let mut batches = active_batches.lock().await;
                         if let Some(batch_info) = batches.get_mut(&batch_id) {
                             batch_info.collected_results.push(result);
 
@@ -381,7 +395,7 @@ impl ITestCoordinationService for TestCoordinationService {
         
         // 调用通道分配服务
         log::info!("[TestCoordination] 正在调用通道分配服务...");
-        let allocation_result = self.channel_allocation_service
+        let allocation_result = self.channel_state_manager
             .allocate_channels(
                 request.channel_definitions.clone(),
                 test_plc_config,
@@ -432,7 +446,7 @@ impl ITestCoordinationService for TestCoordinationService {
             
             // 添加到活动批次
             {
-                let mut batches = self.active_batches.write().await;
+                let mut batches = self.current_batch.lock().await;
                 batches.insert(batch.batch_id.clone(), batch_execution);
             }
         }
@@ -474,7 +488,7 @@ impl ITestCoordinationService for TestCoordinationService {
         info!("[TestCoordination] 开始批次测试: {}", batch_id);
 
         let (instances, definitions, result_sender) = {
-            let mut batches = self.active_batches.write().await;
+            let mut batches = self.current_batch.lock().await;
             let batch_info = batches.get_mut(batch_id)
                 .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -514,7 +528,7 @@ impl ITestCoordinationService for TestCoordinationService {
                 let instance_id_clone = instance.instance_id.clone();
                 let task_id_clone = task_id.clone();
                 {
-                    let mut batches = self.active_batches.write().await;
+                    let mut batches = self.current_batch.lock().await;
                     if let Some(batch_info) = batches.get_mut(batch_id) {
                         batch_info.task_mappings.insert(instance_id_clone, task_id_clone);
                     }
@@ -536,7 +550,7 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn pause_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 暂停批次测试: {}", batch_id);
 
-        let mut batches = self.active_batches.write().await;
+        let mut batches = self.current_batch.lock().await;
         let batch_info = batches.get_mut(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -562,7 +576,7 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn resume_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 恢复批次测试: {}", batch_id);
 
-        let batches = self.active_batches.read().await;
+        let batches = self.current_batch.lock().await;
         let batch_info = batches.get(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -582,7 +596,7 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn stop_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 停止批次测试: {}", batch_id);
 
-        let mut batches = self.active_batches.write().await;
+        let mut batches = self.current_batch.lock().await;
         let batch_info = batches.get_mut(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 

@@ -803,15 +803,19 @@ impl IChannelAllocationService for ChannelAllocationService {
     ) -> Result<Vec<ChannelTestInstance>, AppError> {
         log::info!("清除所有通道分配，实例数: {}", instances.len());
         
-        // 清除分配信息，符合FAT-CSM-001规则，重置状态为NotTested
+        // 清除分配信息，但不直接修改状态（符合FAT-CSM-001规则）
         for instance in &mut instances {
             instance.test_batch_id = String::new();
             instance.test_batch_name = String::new();
             instance.test_plc_channel_tag = None;
             instance.test_plc_communication_address = None;
-            instance.overall_status = OverallTestStatus::NotTested;
+            // 移除直接修改状态的代码 - 这应该通过ChannelStateManager处理
+            // instance.overall_status = OverallTestStatus::NotTested;
             instance.last_updated_time = Utc::now();
         }
+        
+        // TODO: 如果需要重置状态，应该调用ChannelStateManager的方法
+        // 例如: channel_state_manager.reset_for_reallocation(instance).await?;
         
         Ok(instances)
     }

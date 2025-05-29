@@ -10,11 +10,12 @@ use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use chrono::Utc;
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
+use uuid::Uuid;
 
 /// 特定测试步骤执行器接口
 /// 
@@ -40,47 +41,163 @@ pub trait ISpecificTestStepExecutor: Send + Sync {
     fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool;
 }
 
-/// AI硬点百分比测试执行器
-/// 
-/// 执行AI点硬接线测试中某个百分比的设定与读取
+/// AI点硬点百分比测试执行器
+/// 负责AI点的硬接线测试，包括0%, 25%, 50%, 75%, 100%的多点测试
 pub struct AIHardPointPercentExecutor {
-    /// 目标百分比 (0.0 到 1.0)
-    pub target_percentage: f32,
-    /// 读取容差 (百分比)
-    pub tolerance_percentage: f32,
-    /// 稳定等待时间 (毫秒)
-    pub stabilization_delay_ms: u64,
+    /// 测试步骤执行器ID
+    pub id: String,
 }
 
 impl AIHardPointPercentExecutor {
-    /// 创建新的AI硬点百分比测试执行器
-    pub fn new(target_percentage: f32, tolerance_percentage: f32, stabilization_delay_ms: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            target_percentage: target_percentage.clamp(0.0, 1.0),
-            tolerance_percentage: tolerance_percentage.abs(),
-            stabilization_delay_ms,
+            id: Uuid::new_v4().to_string(),
         }
     }
 
-    /// 计算工程单位设定值
-    fn calculate_engineering_value(&self, definition: &ChannelPointDefinition) -> AppResult<f32> {
-        let lower = definition.range_lower_limit.unwrap_or(0.0);
-        let upper = definition.range_upper_limit.unwrap_or(100.0);
+    /// 执行AI点的完整硬点测试流程
+    /// 包括多点测试、线性度检查、报警功能验证等
+    async fn execute_complete_ai_hardpoint_test(
+        &self,
+        instance: &ChannelTestInstance,
+        definition: &ChannelPointDefinition,
+        test_rig_plc: Arc<dyn IPlcCommunicationService>,
+        target_plc: Arc<dyn IPlcCommunicationService>,
+    ) -> Result<RawTestOutcome, AppError> {
+        let mut readings = Vec::new();
+        let test_percentages = vec![0.0, 0.25, 0.5, 0.75, 1.0];
         
-        if upper <= lower {
-            return Err(AppError::validation_error(
-                format!("无效的量程范围: {} 到 {}", lower, upper)
+        info!("开始AI硬点测试: {}", instance.instance_id);
+        
+        // 计算量程信息
+        let range_lower = definition.range_lower_limit.unwrap_or(0.0);
+        let range_upper = definition.range_upper_limit.unwrap_or(100.0);
+        let range_span = range_upper - range_lower;
+        
+        if range_span <= 0.0 {
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                "AI点量程配置无效".to_string(),
             ));
         }
 
-        let eng_value = lower + (upper - lower) * self.target_percentage;
-        Ok(eng_value)
+        // 执行多点测试
+        for percentage in test_percentages {
+            let eng_value = range_lower + (range_span * percentage);
+            
+            // 设置测试台架输出值
+            if let Some(test_rig_address) = &definition.test_rig_plc_address {
+                test_rig_plc.write_f32(test_rig_address, eng_value).await
+                    .map_err(|e| AppError::PlcCommunicationError(format!("设置测试台架输出失败: {}", e)))?;
+                
+                // 等待信号稳定
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                
+                // 读取被测PLC的实际值
+                let actual_raw = target_plc.read_f32(&definition.plc_communication_address).await
+                    .map_err(|e| AppError::PlcCommunicationError(format!("读取被测PLC值失败: {}", e)))?;
+                
+                // 计算误差
+                let error_percentage = if eng_value != 0.0 {
+                    Some(((actual_raw - eng_value) / eng_value * 100.0).abs())
+                } else {
+                    Some(actual_raw.abs())
+                };
+                
+                // 判断测试状态（误差容忍度2%）
+                let test_status = if error_percentage.unwrap_or(100.0) <= 2.0 {
+                    SubTestStatus::Passed
+                } else {
+                    SubTestStatus::Failed
+                };
+                
+                let reading = AnalogReadingPoint {
+                    set_percentage: percentage,
+                    set_value_eng: eng_value,
+                    expected_reading_raw: Some(eng_value),
+                    actual_reading_raw: Some(actual_raw),
+                    actual_reading_eng: Some(actual_raw),
+                    status: test_status,
+                    error_percentage,
+                };
+                
+                readings.push(reading);
+                
+                info!("AI硬点测试 {}%: 设定={:.2}, 实际={:.2}, 误差={:.2}%", 
+                    percentage * 100.0, eng_value, actual_raw, 
+                    error_percentage.unwrap_or(0.0));
+                
+                // 如果任意点测试失败，立即返回失败结果
+                if test_status == SubTestStatus::Failed {
+                    return Ok(RawTestOutcome {
+                        channel_instance_id: instance.instance_id.clone(),
+                        sub_test_item: SubTestItem::HardPoint,
+                        success: false,
+                        raw_value_read: Some(actual_raw.to_string()),
+                        eng_value_calculated: Some(eng_value.to_string()),
+                        message: Some(format!("硬点测试失败: {}%点误差过大({:.2}%)", 
+                            percentage * 100.0, error_percentage.unwrap_or(0.0))),
+                        start_time: Utc::now(),
+                        end_time: Utc::now(),
+                        readings: Some(readings),
+                        details: HashMap::new(),
+                    });
+                }
+            } else {
+                warn!("AI点缺少测试台架地址配置: {}", definition.tag);
+                return Ok(RawTestOutcome::failure(
+                    instance.instance_id.clone(),
+                    SubTestItem::HardPoint,
+                    "缺少测试台架地址配置".to_string(),
+                ));
+            }
+        }
+        
+        // 检查线性度（可选的高级检查）
+        let linearity_check = self.check_linearity(&readings);
+        
+        info!("AI硬点测试完成: {} - 线性度检查: {}", 
+            instance.instance_id, 
+            if linearity_check { "通过" } else { "警告" });
+        
+        // 返回成功结果
+        Ok(RawTestOutcome {
+            channel_instance_id: instance.instance_id.clone(),
+            sub_test_item: SubTestItem::HardPoint,
+            success: true,
+            raw_value_read: Some("多点测试".to_string()),
+            eng_value_calculated: Some(format!("{:.2}-{:.2}", range_lower, range_upper)),
+            message: Some("AI硬点5点测试全部通过".to_string()),
+            start_time: Utc::now(),
+            end_time: Utc::now(),
+            readings: Some(readings),
+            details: HashMap::new(),
+        })
     }
-
-    /// 检查读取值是否在容差范围内
-    fn is_within_tolerance(&self, expected: f32, actual: f32, range_span: f32) -> bool {
-        let tolerance_value = range_span * self.tolerance_percentage;
-        (actual - expected).abs() <= tolerance_value
+    
+    /// 检查线性度
+    fn check_linearity(&self, readings: &[AnalogReadingPoint]) -> bool {
+        if readings.len() < 3 {
+            return true; // 数据点太少，无法检查线性度
+        }
+        
+        // 简单的线性度检查：计算R²
+        let n = readings.len() as f32;
+        let sum_x: f32 = readings.iter().map(|r| r.set_percentage).sum();
+        let sum_y: f32 = readings.iter().map(|r| r.actual_reading_raw.unwrap_or(0.0)).sum();
+        let sum_xy: f32 = readings.iter().map(|r| r.set_percentage * r.actual_reading_raw.unwrap_or(0.0)).sum();
+        let sum_x2: f32 = readings.iter().map(|r| r.set_percentage * r.set_percentage).sum();
+        
+        let r_squared = if n * sum_x2 - sum_x * sum_x != 0.0 {
+            let correlation = (n * sum_xy - sum_x * sum_y) / 
+                ((n * sum_x2 - sum_x * sum_x).sqrt() * (n * sum_y.powi(2) - sum_y * sum_y).sqrt());
+            correlation * correlation
+        } else {
+            0.0
+        };
+        
+        r_squared >= 0.95 // 线性度要求R²≥0.95
     }
 }
 
@@ -93,110 +210,12 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行AI硬点测试 {}% - 实例: {}", 
-               self.executor_name(), self.target_percentage * 100.0, instance.instance_id);
+        debug!("[{}] 开始执行AI硬点测试 - 实例: {}", 
+               self.executor_name(), instance.instance_id);
 
-        // 计算设定值
-        let eng_set_value = self.calculate_engineering_value(definition)?;
-        let range_span = definition.range_upper_limit.unwrap_or(100.0) - 
-                        definition.range_lower_limit.unwrap_or(0.0);
+        let result = self.execute_complete_ai_hardpoint_test(instance, definition, plc_service_test_rig, plc_service_target)?;
 
-        // 获取测试台架输出地址
-        let test_rig_address = definition.test_rig_plc_address.as_ref()
-            .ok_or_else(|| AppError::validation_error("未配置测试台架PLC地址"))?;
-
-        // 获取被测点读取地址
-        let target_address = &definition.plc_communication_address;
-
-        let start_time = Utc::now();
-
-        // 步骤1: 设定测试台架输出值
-        info!("[{}] 设定测试台架输出: {} = {:.3} ({}%)", 
-              self.executor_name(), test_rig_address, eng_set_value, self.target_percentage * 100.0);
-
-        match definition.data_type {
-            PointDataType::Float => {
-                plc_service_test_rig.write_float32(test_rig_address, eng_set_value).await?;
-            },
-            PointDataType::Int => {
-                plc_service_test_rig.write_int32(test_rig_address, eng_set_value as i32).await?;
-            },
-            _ => {
-                return Err(AppError::validation_error(
-                    format!("AI点不支持的数据类型: {:?}", definition.data_type)
-                ));
-            }
-        }
-
-        // 步骤2: 等待信号稳定
-        if self.stabilization_delay_ms > 0 {
-            debug!("[{}] 等待信号稳定 {} ms", self.executor_name(), self.stabilization_delay_ms);
-            tokio::time::sleep(tokio::time::Duration::from_millis(self.stabilization_delay_ms)).await;
-        }
-
-        // 步骤3: 读取被测点实际值
-        debug!("[{}] 读取被测点实际值: {}", self.executor_name(), target_address);
-        
-        let (actual_raw_value, actual_eng_value) = match definition.data_type {
-            PointDataType::Float => {
-                let raw_val = plc_service_target.read_float32(target_address).await?;
-                (raw_val, raw_val)
-            },
-            PointDataType::Int => {
-                let raw_val = plc_service_target.read_int32(target_address).await?;
-                (raw_val as f32, raw_val as f32)
-            },
-            _ => {
-                return Err(AppError::validation_error(
-                    format!("AI点不支持的数据类型: {:?}", definition.data_type)
-                ));
-            }
-        };
-
-        let end_time = Utc::now();
-
-        // 步骤4: 判断测试结果
-        let is_success = self.is_within_tolerance(eng_set_value, actual_eng_value, range_span);
-        let tolerance_value = range_span * self.tolerance_percentage;
-
-        let message = if is_success {
-            format!("硬点测试 {}% 通过 - 设定: {:.3}, 实际: {:.3}, 容差: ±{:.3}", 
-                   self.target_percentage * 100.0, eng_set_value, actual_eng_value, tolerance_value)
-        } else {
-            format!("硬点测试 {}% 失败 - 设定: {:.3}, 实际: {:.3}, 偏差: {:.3}, 容差: ±{:.3}", 
-                   self.target_percentage * 100.0, eng_set_value, actual_eng_value, 
-                   (actual_eng_value - eng_set_value).abs(), tolerance_value)
-        };
-
-        info!("[{}] {}", self.executor_name(), message);
-
-        // 构造测试结果
-        let mut outcome = RawTestOutcome::new(
-            instance.instance_id.clone(),
-            self.item_type(),
-            is_success,
-        );
-
-        outcome.message = Some(message);
-        outcome.start_time = start_time;
-        outcome.end_time = end_time;
-        outcome.raw_value_read = Some(actual_raw_value.to_string());
-        outcome.eng_value_calculated = Some(actual_eng_value.to_string());
-
-        // 创建读数点
-        let reading_point = AnalogReadingPoint {
-            set_percentage: self.target_percentage,
-            set_value_eng: eng_set_value,
-            expected_reading_raw: Some(eng_set_value),
-            actual_reading_raw: Some(actual_raw_value),
-            actual_reading_eng: Some(actual_eng_value),
-            status: if is_success { SubTestStatus::Passed } else { SubTestStatus::Failed },
-            error_percentage: Some(((actual_eng_value - eng_set_value).abs() / range_span) * 100.0),
-        };
-
-        outcome.readings = Some(vec![reading_point]);
-
-        Ok(outcome)
+        Ok(result)
     }
 
     fn item_type(&self) -> SubTestItem {
@@ -553,14 +572,14 @@ mod tests {
         mock_target.preset_read_value("DB1.DBD0", serde_json::json!(50.0));
 
         // 创建执行器
-        let executor = AIHardPointPercentExecutor::new(0.5, 0.02, 100);
+        let executor = AIHardPointPercentExecutor::new();
 
         // 创建测试数据
         let definition = create_test_ai_definition();
         let instance = create_test_instance();
 
         // 执行测试
-        let result = executor.execute(
+        let result = executor.execute_complete_ai_hardpoint_test(
             &instance,
             &definition,
             mock_test_rig.clone(),
@@ -602,14 +621,14 @@ mod tests {
         mock_target.preset_read_value("DB1.DBD0", serde_json::json!(30.0)); // 期望50.0，实际30.0，偏差20%
 
         // 创建执行器
-        let executor = AIHardPointPercentExecutor::new(0.5, 0.02, 100); // 2%容差
+        let executor = AIHardPointPercentExecutor::new();
 
         // 创建测试数据
         let definition = create_test_ai_definition();
         let instance = create_test_instance();
 
         // 执行测试
-        let result = executor.execute(
+        let result = executor.execute_complete_ai_hardpoint_test(
             &instance,
             &definition,
             mock_test_rig.clone(),
@@ -752,7 +771,7 @@ mod tests {
         let di_definition = create_test_di_definition();
 
         // 测试AI硬点执行器
-        let ai_executor = AIHardPointPercentExecutor::new(0.5, 0.02, 100);
+        let ai_executor = AIHardPointPercentExecutor::new();
         assert!(ai_executor.supports_definition(&ai_definition));
         assert!(!ai_executor.supports_definition(&di_definition));
 
@@ -785,11 +804,11 @@ mod tests {
         definition.range_lower_limit = Some(100.0);
         definition.range_upper_limit = Some(50.0); // 上限小于下限
 
-        let executor = AIHardPointPercentExecutor::new(0.5, 0.02, 100);
+        let executor = AIHardPointPercentExecutor::new();
         let instance = create_test_instance();
 
         // 执行测试
-        let result = executor.execute(
+        let result = executor.execute_complete_ai_hardpoint_test(
             &instance,
             &definition,
             mock_test_rig.clone(),

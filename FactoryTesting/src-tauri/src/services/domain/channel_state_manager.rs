@@ -50,6 +50,9 @@ pub trait IChannelStateManager: Send + Sync {
     /// 重置为重测状态
     async fn reset_for_retest(&self, instance: &mut ChannelTestInstance) -> AppResult<()>;
 
+    /// 重置为重新分配状态（新增方法）
+    async fn reset_for_reallocation(&self, instance: &mut ChannelTestInstance) -> AppResult<()>;
+
     /// 创建新的测试实例（兼容现有接口）
     async fn create_test_instance(
         &self,
@@ -332,6 +335,30 @@ impl IChannelStateManager for ChannelStateManager {
         instance.error_message = None;
 
         info!("重置为重测状态: {}", instance.instance_id);
+        Ok(())
+    }
+
+    /// 重置为重新分配状态（新增方法）
+    async fn reset_for_reallocation(&self, instance: &mut ChannelTestInstance) -> AppResult<()> {
+        // 重置所有子测试状态
+        for (_, sub_result) in instance.sub_test_results.iter_mut() {
+            if sub_result.status != SubTestStatus::NotApplicable {
+                sub_result.status = SubTestStatus::NotTested;
+                sub_result.timestamp = Utc::now();
+                sub_result.actual_value = None;
+                sub_result.expected_value = None;
+                sub_result.details = None;
+            }
+        }
+
+        // 重置整体状态
+        instance.overall_status = OverallTestStatus::NotTested;
+        instance.start_time = None;
+        instance.final_test_time = None;
+        instance.total_test_duration_ms = None;
+        instance.error_message = None;
+
+        info!("重置为重新分配状态: {}", instance.instance_id);
         Ok(())
     }
 
