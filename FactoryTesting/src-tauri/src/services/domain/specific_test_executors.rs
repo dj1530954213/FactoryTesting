@@ -1,9 +1,9 @@
 /// 特定测试步骤执行器
-/// 
+///
 /// 包含各种具体的测试执行器实现，每个执行器负责一个原子的测试操作
 
 use crate::models::{
-    ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem, 
+    ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem,
     AnalogReadingPoint, ModuleType, PointDataType, SubTestStatus
 };
 use crate::services::infrastructure::IPlcCommunicationService;
@@ -18,7 +18,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 /// 特定测试步骤执行器接口
-/// 
+///
 /// 每个执行器负责执行一个原子的测试步骤，与PLC交互并返回原始测试结果
 #[async_trait]
 pub trait ISpecificTestStepExecutor: Send + Sync {
@@ -66,14 +66,14 @@ impl AIHardPointPercentExecutor {
     ) -> Result<RawTestOutcome, AppError> {
         let mut readings = Vec::new();
         let test_percentages = vec![0.0, 0.25, 0.5, 0.75, 1.0];
-        
+
         info!("开始AI硬点测试: {}", instance.instance_id);
-        
+
         // 计算量程信息
         let range_lower = definition.range_lower_limit.unwrap_or(0.0);
         let range_upper = definition.range_upper_limit.unwrap_or(100.0);
         let range_span = range_upper - range_lower;
-        
+
         if range_span <= 0.0 {
             return Ok(RawTestOutcome::failure(
                 instance.instance_id.clone(),
@@ -85,49 +85,49 @@ impl AIHardPointPercentExecutor {
         // 执行多点测试
         for percentage in test_percentages {
             let eng_value = range_lower + (range_span * percentage);
-            
+
             // 设置测试台架输出值
             if let Some(test_rig_address) = &definition.test_rig_plc_address {
-                test_rig_plc.write_f32(test_rig_address, eng_value).await
-                    .map_err(|e| AppError::PlcCommunicationError(format!("设置测试台架输出失败: {}", e)))?;
-                
+                test_rig_plc.write_float32(test_rig_address, eng_value).await
+                    .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
+
                 // 等待信号稳定
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                
+
                 // 读取被测PLC的实际值
-                let actual_raw = target_plc.read_f32(&definition.plc_communication_address).await
-                    .map_err(|e| AppError::PlcCommunicationError(format!("读取被测PLC值失败: {}", e)))?;
-                
+                let actual_raw = target_plc.read_float32(&definition.plc_communication_address).await
+                    .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC值失败: {}", e)))?;
+
                 // 计算误差
                 let error_percentage = if eng_value != 0.0 {
                     Some(((actual_raw - eng_value) / eng_value * 100.0).abs())
                 } else {
                     Some(actual_raw.abs())
                 };
-                
+
                 // 判断测试状态（误差容忍度2%）
                 let test_status = if error_percentage.unwrap_or(100.0) <= 2.0 {
                     SubTestStatus::Passed
                 } else {
                     SubTestStatus::Failed
                 };
-                
+
                 let reading = AnalogReadingPoint {
                     set_percentage: percentage,
                     set_value_eng: eng_value,
                     expected_reading_raw: Some(eng_value),
                     actual_reading_raw: Some(actual_raw),
                     actual_reading_eng: Some(actual_raw),
-                    status: test_status,
+                    status: test_status.clone(),
                     error_percentage,
                 };
-                
+
                 readings.push(reading);
-                
-                info!("AI硬点测试 {}%: 设定={:.2}, 实际={:.2}, 误差={:.2}%", 
-                    percentage * 100.0, eng_value, actual_raw, 
+
+                info!("AI硬点测试 {}%: 设定={:.2}, 实际={:.2}, 误差={:.2}%",
+                    percentage * 100.0, eng_value, actual_raw,
                     error_percentage.unwrap_or(0.0));
-                
+
                 // 如果任意点测试失败，立即返回失败结果
                 if test_status == SubTestStatus::Failed {
                     return Ok(RawTestOutcome {
@@ -136,7 +136,7 @@ impl AIHardPointPercentExecutor {
                         success: false,
                         raw_value_read: Some(actual_raw.to_string()),
                         eng_value_calculated: Some(eng_value.to_string()),
-                        message: Some(format!("硬点测试失败: {}%点误差过大({:.2}%)", 
+                        message: Some(format!("硬点测试失败: {}%点误差过大({:.2}%)",
                             percentage * 100.0, error_percentage.unwrap_or(0.0))),
                         start_time: Utc::now(),
                         end_time: Utc::now(),
@@ -153,14 +153,14 @@ impl AIHardPointPercentExecutor {
                 ));
             }
         }
-        
+
         // 检查线性度（可选的高级检查）
         let linearity_check = self.check_linearity(&readings);
-        
-        info!("AI硬点测试完成: {} - 线性度检查: {}", 
-            instance.instance_id, 
+
+        info!("AI硬点测试完成: {} - 线性度检查: {}",
+            instance.instance_id,
             if linearity_check { "通过" } else { "警告" });
-        
+
         // 返回成功结果
         Ok(RawTestOutcome {
             channel_instance_id: instance.instance_id.clone(),
@@ -175,28 +175,28 @@ impl AIHardPointPercentExecutor {
             details: HashMap::new(),
         })
     }
-    
+
     /// 检查线性度
     fn check_linearity(&self, readings: &[AnalogReadingPoint]) -> bool {
         if readings.len() < 3 {
             return true; // 数据点太少，无法检查线性度
         }
-        
+
         // 简单的线性度检查：计算R²
         let n = readings.len() as f32;
         let sum_x: f32 = readings.iter().map(|r| r.set_percentage).sum();
         let sum_y: f32 = readings.iter().map(|r| r.actual_reading_raw.unwrap_or(0.0)).sum();
         let sum_xy: f32 = readings.iter().map(|r| r.set_percentage * r.actual_reading_raw.unwrap_or(0.0)).sum();
         let sum_x2: f32 = readings.iter().map(|r| r.set_percentage * r.set_percentage).sum();
-        
+
         let r_squared = if n * sum_x2 - sum_x * sum_x != 0.0 {
-            let correlation = (n * sum_xy - sum_x * sum_y) / 
+            let correlation = (n * sum_xy - sum_x * sum_y) /
                 ((n * sum_x2 - sum_x * sum_x).sqrt() * (n * sum_y.powi(2) - sum_y * sum_y).sqrt());
             correlation * correlation
         } else {
             0.0
         };
-        
+
         r_squared >= 0.95 // 线性度要求R²≥0.95
     }
 }
@@ -210,10 +210,10 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行AI硬点测试 - 实例: {}", 
+        debug!("[{}] 开始执行AI硬点测试 - 实例: {}",
                self.executor_name(), instance.instance_id);
 
-        let result = self.execute_complete_ai_hardpoint_test(instance, definition, plc_service_test_rig, plc_service_target)?;
+        let result = self.execute_complete_ai_hardpoint_test(instance, definition, plc_service_test_rig, plc_service_target).await?;
 
         Ok(result)
     }
@@ -233,7 +233,7 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
 }
 
 /// AI报警测试执行器
-/// 
+///
 /// 执行AI点某个报警项的测试（如设置高报触发条件，验证报警是否产生）
 pub struct AIAlarmTestExecutor {
     /// 报警类型
@@ -258,38 +258,38 @@ impl AIAlarmTestExecutor {
     fn get_alarm_config(&self, definition: &ChannelPointDefinition) -> AppResult<(f32, String, String)> {
         match self.alarm_type {
             SubTestItem::LowLowAlarm => {
-                let set_value = definition.sll_set_value.ok_or_else(|| 
+                let set_value = definition.sll_set_value.ok_or_else(||
                     AppError::validation_error("未配置低低报设定值"))?;
-                let set_address = definition.sll_set_point_address.as_ref().ok_or_else(|| 
+                let set_address = definition.sll_set_point_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置低低报设定地址"))?;
-                let feedback_address = definition.sll_feedback_address.as_ref().ok_or_else(|| 
+                let feedback_address = definition.sll_feedback_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置低低报反馈地址"))?;
                 Ok((set_value, set_address.clone(), feedback_address.clone()))
             },
             SubTestItem::LowAlarm => {
-                let set_value = definition.sl_set_value.ok_or_else(|| 
+                let set_value = definition.sl_set_value.ok_or_else(||
                     AppError::validation_error("未配置低报设定值"))?;
-                let set_address = definition.sl_set_point_address.as_ref().ok_or_else(|| 
+                let set_address = definition.sl_set_point_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置低报设定地址"))?;
-                let feedback_address = definition.sl_feedback_address.as_ref().ok_or_else(|| 
+                let feedback_address = definition.sl_feedback_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置低报反馈地址"))?;
                 Ok((set_value, set_address.clone(), feedback_address.clone()))
             },
             SubTestItem::HighAlarm => {
-                let set_value = definition.sh_set_value.ok_or_else(|| 
+                let set_value = definition.sh_set_value.ok_or_else(||
                     AppError::validation_error("未配置高报设定值"))?;
-                let set_address = definition.sh_set_point_address.as_ref().ok_or_else(|| 
+                let set_address = definition.sh_set_point_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置高报设定地址"))?;
-                let feedback_address = definition.sh_feedback_address.as_ref().ok_or_else(|| 
+                let feedback_address = definition.sh_feedback_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置高报反馈地址"))?;
                 Ok((set_value, set_address.clone(), feedback_address.clone()))
             },
             SubTestItem::HighHighAlarm => {
-                let set_value = definition.shh_set_value.ok_or_else(|| 
+                let set_value = definition.shh_set_value.ok_or_else(||
                     AppError::validation_error("未配置高高报设定值"))?;
-                let set_address = definition.shh_set_point_address.as_ref().ok_or_else(|| 
+                let set_address = definition.shh_set_point_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置高高报设定地址"))?;
-                let feedback_address = definition.shh_feedback_address.as_ref().ok_or_else(|| 
+                let feedback_address = definition.shh_feedback_address.as_ref().ok_or_else(||
                     AppError::validation_error("未配置高高报反馈地址"))?;
                 Ok((set_value, set_address.clone(), feedback_address.clone()))
             },
@@ -309,14 +309,14 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
         _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行AI报警测试 {:?} - 实例: {}", 
+        debug!("[{}] 开始执行AI报警测试 {:?} - 实例: {}",
                self.executor_name(), self.alarm_type, instance.instance_id);
 
         let (alarm_set_value, set_address, feedback_address) = self.get_alarm_config(definition)?;
         let start_time = Utc::now();
 
         // 步骤1: 设置报警触发值
-        info!("[{}] 设置报警触发值: {} = {:.3}", 
+        info!("[{}] 设置报警触发值: {} = {:.3}",
               self.executor_name(), set_address, alarm_set_value);
 
         plc_service_target.write_float32(&set_address, alarm_set_value).await?;
@@ -344,7 +344,7 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
             _ => alarm_set_value
         };
 
-        info!("[{}] 复位报警，设置安全值: {} = {:.3}", 
+        info!("[{}] 复位报警，设置安全值: {} = {:.3}",
               self.executor_name(), set_address, safe_value);
         plc_service_target.write_float32(&set_address, safe_value).await?;
 
@@ -362,10 +362,10 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
         // 判断测试结果
         let is_success = alarm_active && alarm_reset;
         let message = if is_success {
-            format!("报警测试 {:?} 通过 - 触发值: {:.3}, 报警激活: {}, 报警复位: {}", 
+            format!("报警测试 {:?} 通过 - 触发值: {:.3}, 报警激活: {}, 报警复位: {}",
                    self.alarm_type, alarm_set_value, alarm_active, alarm_reset)
         } else {
-            format!("报警测试 {:?} 失败 - 触发值: {:.3}, 报警激活: {}, 报警复位: {}", 
+            format!("报警测试 {:?} 失败 - 触发值: {:.3}, 报警激活: {}, 报警复位: {}",
                    self.alarm_type, alarm_set_value, alarm_active, alarm_reset)
         };
 
@@ -408,7 +408,7 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
 }
 
 /// DI状态读取执行器
-/// 
+///
 /// 读取DI点的状态并验证
 pub struct DIStateReadExecutor {
     /// 期望的状态值
@@ -436,7 +436,7 @@ impl ISpecificTestStepExecutor for DIStateReadExecutor {
         _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行DI状态读取测试 - 实例: {}", 
+        debug!("[{}] 开始执行DI状态读取测试 - 实例: {}",
                self.executor_name(), instance.instance_id);
 
         let target_address = &definition.plc_communication_address;
@@ -521,14 +521,14 @@ mod tests {
             PointDataType::Float,
             "DB1.DBD0".to_string(),
         );
-        
+
         definition.range_lower_limit = Some(0.0);
         definition.range_upper_limit = Some(100.0);
         definition.test_rig_plc_address = Some("DB2.DBD0".to_string());
         definition.sh_set_value = Some(80.0);
         definition.sh_set_point_address = Some("DB1.DBD4".to_string());
         definition.sh_feedback_address = Some("M0.0".to_string());
-        
+
         definition
     }
 
@@ -657,7 +657,7 @@ mod tests {
 
         // 设置Mock返回值 - 模拟报警激活
         mock_target.preset_read_value("M0.0", serde_json::json!(true));
-        
+
         // 创建执行器
         let executor = AIAlarmTestExecutor::new(SubTestItem::HighAlarm, 50, 50); // 减少延时以加快测试
 
@@ -854,4 +854,4 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.to_string().contains("未配置高报设定地址"));
     }
-} 
+}

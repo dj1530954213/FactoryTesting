@@ -9,6 +9,9 @@ import zh from '@angular/common/locales/zh';
 import { FormsModule } from '@angular/forms';
 import { provideHttpClient } from '@angular/common/http';
 
+// ECharts 配置
+import { provideEchartsCore } from 'ngx-echarts';
+
 registerLocaleData(zh);
 
 @Injectable()
@@ -22,7 +25,7 @@ export class GlobalErrorHandler implements ErrorHandler {
       cause: error.cause,
       stack: error.stack
     });
-    
+
     // 不重新抛出错误，避免应用崩溃
     // throw error;
   }
@@ -30,12 +33,15 @@ export class GlobalErrorHandler implements ErrorHandler {
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }), 
-    provideRouter(routes), 
-    provideAnimationsAsync(), 
-    provideNzI18n(zh_CN), 
-    importProvidersFrom(FormsModule), 
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
+    provideAnimationsAsync(),
+    provideNzI18n(zh_CN),
+    importProvidersFrom(FormsModule),
     provideHttpClient(),
+    provideEchartsCore({
+      echarts: () => import('echarts')
+    }),
     { provide: ErrorHandler, useClass: GlobalErrorHandler }
   ]
 };

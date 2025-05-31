@@ -1,5 +1,5 @@
 /// 服务层模块，包含应用层和领域层的服务定义
-/// 
+///
 /// 按照清洁架构原则组织：
 /// - Application Layer: 应用服务，协调业务流程
 /// - Domain Layer: 领域服务，包含核心业务逻辑
@@ -33,7 +33,7 @@ pub use application::{
 pub use domain::{
     IChannelStateManager, ChannelStateManager,
     ITestExecutionEngine, TestExecutionEngine, TaskStatus, TestTask,
-    ISpecificTestStepExecutor, AIHardPointPercentExecutor, 
+    ISpecificTestStepExecutor, AIHardPointPercentExecutor,
     AIAlarmTestExecutor, DIStateReadExecutor
 };
 
@@ -42,6 +42,11 @@ pub use channel_allocation_service::{
     IChannelAllocationService, ChannelAllocationService,
     ComparisonTable, TestPlcConfig, BatchAllocationResult,
     AllocationSummary, ModuleTypeStats, ValidationResult
+};
+
+// 重新导出批次分配服务
+pub use application::batch_allocation_service::{
+    AllocationResult, AllocationStrategy
 };
 
 // 重新导出基础设施层的主要类型（避免冲突）
@@ -54,4 +59,4 @@ pub use infrastructure::{
     BackupInfo, IntegrityReport, IntegrityStatus, PersistenceServiceHelper,
     // 应用配置服务
     AppSettingsService, JsonAppSettingsService, AppSettingsConfig, AppSettingsServiceFactory
-}; 
+};

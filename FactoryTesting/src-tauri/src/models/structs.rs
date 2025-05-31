@@ -41,7 +41,7 @@ pub struct ChannelPointDefinition {
     pub power_supply_type: String,
     /// 线制（例如："2线制", "4线制"）
     pub wire_system: String,
-    
+
     // PLC 相关地址信息
     /// PLC绝对地址（如有）
     pub plc_absolute_address: Option<String>,
@@ -132,6 +132,57 @@ impl ChannelPointDefinition {
             channel_tag_in_module,
             data_type,
             power_supply_type: String::from("有源"),
+            wire_system: String::from("4线制"),
+            plc_absolute_address: None,
+            plc_communication_address,
+            range_lower_limit: None,
+            range_upper_limit: None,
+            engineering_unit: None,
+            sll_set_value: None,
+            sll_set_point_address: None,
+            sll_feedback_address: None,
+            sl_set_value: None,
+            sl_set_point_address: None,
+            sl_feedback_address: None,
+            sh_set_value: None,
+            sh_set_point_address: None,
+            sh_feedback_address: None,
+            shh_set_value: None,
+            shh_set_point_address: None,
+            shh_feedback_address: None,
+            maintenance_value_set_point_address: None,
+            maintenance_enable_switch_point_address: None,
+            access_property: None,
+            save_history: None,
+            power_failure_protection: None,
+            test_rig_plc_address: None,
+        }
+    }
+
+    /// 创建新的通道点位定义（可指定供电类型）
+    pub fn new_with_power_type(
+        tag: String,
+        variable_name: String,
+        variable_description: String,
+        station_name: String,
+        module_name: String,
+        module_type: ModuleType,
+        channel_tag_in_module: String,
+        data_type: PointDataType,
+        plc_communication_address: String,
+        power_supply_type: String,
+    ) -> Self {
+        Self {
+            id: default_id(),
+            tag,
+            variable_name,
+            variable_description,
+            station_name,
+            module_name,
+            module_type,
+            channel_tag_in_module,
+            data_type,
+            power_supply_type,
             wire_system: String::from("4线制"),
             plc_absolute_address: None,
             plc_communication_address,
@@ -275,14 +326,14 @@ pub struct ChannelTestInstance {
     pub test_batch_id: String,
     /// 测试批次名称（如"批次1"）
     pub test_batch_name: String,
-    
+
     /// 运行时状态（由ChannelStateManager管理）
     pub overall_status: OverallTestStatus,
     /// 当前正在执行的测试步骤描述
     pub current_step_details: Option<String>,
     /// 最近的错误信息
     pub error_message: Option<String>,
-    
+
     /// 时间信息
     pub creation_time: DateTime<Utc>,
     pub start_time: Option<DateTime<Utc>>,
@@ -296,7 +347,7 @@ pub struct ChannelTestInstance {
 
     /// 硬接线测试中的特定数据
     pub hardpoint_readings: Option<Vec<AnalogReadingPoint>>,
-    
+
     /// 手动测试时的临时输入值
     pub manual_test_current_value_input: Option<String>,
     /// 手动测试时的临时输出值
@@ -528,4 +579,4 @@ impl Default for AppSettings {
             last_backup_time: None,
         }
     }
-} 
+}

@@ -139,6 +139,14 @@ pub enum AppError {
     /// 权限验证错误
     #[error("权限验证错误: {message}")]
     AuthorizationError { message: String },
+
+    /// Mock错误（仅用于测试）
+    #[error("Mock错误: {0}")]
+    MockError(String),
+
+    /// 依赖注入错误
+    #[error("依赖注入错误: {0}")]
+    DependencyInjectionError(String),
 }
 
 impl AppError {
@@ -391,6 +399,8 @@ impl AppError {
             AppError::AuthenticationError { .. } => "AUTHENTICATION_ERROR",
             AppError::AuthorizationError { .. } => "AUTHORIZATION_ERROR",
             AppError::UnknownError { .. } => "UNKNOWN_ERROR",
+            AppError::MockError(..) => "MOCK_ERROR",
+            AppError::DependencyInjectionError(..) => "DEPENDENCY_INJECTION_ERROR",
         }
     }
 }
@@ -439,4 +449,4 @@ impl From<rust_xlsxwriter::XlsxError> for AppError {
     fn from(err: rust_xlsxwriter::XlsxError) -> Self {
         AppError::ExcelError { message: format!("Excel error: {}", err) }
     }
-} 
+}

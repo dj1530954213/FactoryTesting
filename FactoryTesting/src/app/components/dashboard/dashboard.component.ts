@@ -6,6 +6,25 @@ import { Subscription, interval } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { SystemStatus, TestBatchInfo, OverallTestStatus } from '../../models';
 
+// NG-ZORRO 组件导入
+import { NzCardModule } from 'ng-zorro-antd/card';
+import { NzStatisticModule } from 'ng-zorro-antd/statistic';
+import { NzGridModule } from 'ng-zorro-antd/grid';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzSpinModule } from 'ng-zorro-antd/spin';
+import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzTagModule } from 'ng-zorro-antd/tag';
+import { NzProgressModule } from 'ng-zorro-antd/progress';
+import { NzListModule } from 'ng-zorro-antd/list';
+import { NzAvatarModule } from 'ng-zorro-antd/avatar';
+import { NzDividerModule } from 'ng-zorro-antd/divider';
+import { NzSpaceModule } from 'ng-zorro-antd/space';
+
+// ECharts 导入
+import { NgxEchartsModule } from 'ngx-echarts';
+import { EChartsOption } from 'echarts';
+
 interface AvailableBatch {
   id: string;
   productModel: string;
@@ -39,7 +58,27 @@ interface RecentActivity {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule],
+  imports: [
+    CommonModule,
+    RouterModule,
+    FormsModule,
+    // NG-ZORRO 模块
+    NzCardModule,
+    NzStatisticModule,
+    NzGridModule,
+    NzIconModule,
+    NzButtonModule,
+    NzSpinModule,
+    NzAlertModule,
+    NzTagModule,
+    NzProgressModule,
+    NzListModule,
+    NzAvatarModule,
+    NzDividerModule,
+    NzSpaceModule,
+    // ECharts 模块
+    NgxEchartsModule
+  ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
@@ -80,6 +119,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     failed: 0
   };
 
+  // ECharts 图表配置
+  testProgressChartOption: EChartsOption = {};
+  systemStatusChartOption: EChartsOption = {};
+  batchStatusChartOption: EChartsOption = {};
+
   private subscriptions: Subscription[] = [];
 
   constructor(
@@ -90,7 +134,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.loadDashboardData();
     this.loadAvailableBatches();
-    
+    this.initializeCharts();
+
     // 每30秒自动刷新数据
     const refreshSubscription = interval(30000).subscribe(() => {
       this.loadDashboardData();
@@ -120,14 +165,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.systemStatus = systemStatus || null;
       this.totalChannels = allChannels?.length || 0;
       this.totalBatches = allBatches?.length || 0;
-      
+
       // 计算待测批次数量
-      this.pendingBatches = (allBatches || []).filter(batch => 
+      this.pendingBatches = (allBatches || []).filter(batch =>
         batch.overall_status === OverallTestStatus.NotTested
       ).length;
-      
+
       // 计算总体成功率
-      const completedBatches = (allBatches || []).filter(batch => 
+      const completedBatches = (allBatches || []).filter(batch =>
         batch.overall_status === OverallTestStatus.TestCompletedPassed ||
         batch.overall_status === OverallTestStatus.TestCompletedFailed
       );
@@ -136,7 +181,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         const passedTests = completedBatches.reduce((sum, batch) => sum + (batch.passed_points || 0), 0);
         this.overallSuccessRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
       }
-      
+
       // 获取最近的批次
       this.recentBatches = (allBatches || [])
         .sort((a: TestBatchInfo, b: TestBatchInfo) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -228,10 +273,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   startTest() {
     if (!this.selectedBatch) return;
-    
+
     this.testInProgress = true;
     this.testCompleted = false;
-    
+
     // 初始化测试进度
     this.currentTestProgress = {
       total: this.selectedBatch.totalPoints,
@@ -240,7 +285,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       failed: 0,
       pending: this.selectedBatch.totalPoints
     };
-    
+
     // 模拟测试进度
     this.simulateTestProgress();
   }
@@ -250,7 +295,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (this.currentTestProgress.completed < this.currentTestProgress.total) {
         this.currentTestProgress.completed++;
         this.currentTestProgress.pending--;
-        
+
         // 随机分配通过或失败
         if (Math.random() > 0.1) { // 90% 通过率
           this.currentTestProgress.passed++;
@@ -304,8 +349,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   viewTestDetails() {
-    this.router.navigate(['/test-execution'], { 
-      queryParams: { batchId: this.selectedBatchId } 
+    this.router.navigate(['/test-execution'], {
+      queryParams: { batchId: this.selectedBatchId }
     });
   }
 
@@ -348,16 +393,52 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  getBatchStatusText(status: string): string {
-    const statusMap: { [key: string]: string } = {
-      'pending': '待开始',
-      'ready': '准备就绪',
-      'running': '进行中',
-      'completed': '已完成',
-      'failed': '失败',
-      'cancelled': '已取消'
+  getBatchStatusText(status: string | OverallTestStatus): string {
+    if (typeof status === 'string') {
+      const statusMap: { [key: string]: string } = {
+        'pending': '待开始',
+        'ready': '准备就绪',
+        'running': '进行中',
+        'completed': '已完成',
+        'failed': '失败',
+        'cancelled': '已取消'
+      };
+      return statusMap[status] || status;
+    }
+
+    // 处理 OverallTestStatus 枚举
+    const overallStatusMap: { [key in OverallTestStatus]: string } = {
+      [OverallTestStatus.NotTested]: '未测试',
+      [OverallTestStatus.HardPointTesting]: '硬点测试中',
+      [OverallTestStatus.AlarmTesting]: '报警测试中',
+      [OverallTestStatus.TestCompletedPassed]: '测试完成并通过',
+      [OverallTestStatus.TestCompletedFailed]: '测试完成并失败'
     };
-    return statusMap[status] || status;
+    return overallStatusMap[status] || '未知状态';
+  }
+
+  getBatchStatusColor(status: string | OverallTestStatus): string {
+    if (typeof status === 'string') {
+      const colorMap: { [key: string]: string } = {
+        'pending': '#d9d9d9',
+        'ready': '#1890ff',
+        'running': '#fa8c16',
+        'completed': '#52c41a',
+        'failed': '#ff4d4f',
+        'cancelled': '#8c8c8c'
+      };
+      return colorMap[status] || '#d9d9d9';
+    }
+
+    // 处理 OverallTestStatus 枚举
+    const overallColorMap: { [key in OverallTestStatus]: string } = {
+      [OverallTestStatus.NotTested]: '#d9d9d9',
+      [OverallTestStatus.HardPointTesting]: '#1890ff',
+      [OverallTestStatus.AlarmTesting]: '#fa8c16',
+      [OverallTestStatus.TestCompletedPassed]: '#52c41a',
+      [OverallTestStatus.TestCompletedFailed]: '#ff4d4f'
+    };
+    return overallColorMap[status] || '#d9d9d9';
   }
 
   getBatchStatusClass(status: string): string {
@@ -373,8 +454,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   viewBatchDetails(batch: TestBatchInfo) {
-    this.router.navigate(['/test-execution'], { 
-      queryParams: { batchId: batch.batch_id } 
+    this.router.navigate(['/test-execution'], {
+      queryParams: { batchId: batch.batch_id }
     });
   }
 
@@ -387,4 +468,173 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadDashboardData();
     this.loadAvailableBatches();
   }
+
+  // 初始化图表
+  private initializeCharts() {
+    this.initTestProgressChart();
+    this.initSystemStatusChart();
+    this.initBatchStatusChart();
+  }
+
+  // 初始化测试进度图表
+  private initTestProgressChart() {
+    this.testProgressChartOption = {
+      title: {
+        text: '测试进度',
+        left: 'center',
+        textStyle: {
+          fontSize: 14,
+          fontWeight: 'normal'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a} <br/>{b}: {c} ({d}%)'
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left',
+        data: ['已完成', '进行中', '待测试']
+      },
+      series: [
+        {
+          name: '测试进度',
+          type: 'pie',
+          radius: ['40%', '70%'],
+          center: ['50%', '60%'],
+          data: [
+            { value: this.currentTestProgress.completed, name: '已完成', itemStyle: { color: '#52c41a' } },
+            { value: this.testInProgress ? 1 : 0, name: '进行中', itemStyle: { color: '#1890ff' } },
+            { value: this.currentTestProgress.pending, name: '待测试', itemStyle: { color: '#d9d9d9' } }
+          ],
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          }
+        }
+      ]
+    };
+  }
+
+  // 初始化系统状态图表
+  private initSystemStatusChart() {
+    this.systemStatusChartOption = {
+      title: {
+        text: '系统状态监控',
+        left: 'center',
+        textStyle: {
+          fontSize: 14,
+          fontWeight: 'normal'
+        }
+      },
+      tooltip: {
+        trigger: 'axis'
+      },
+      xAxis: {
+        type: 'category',
+        data: ['CPU', '内存', 'PLC连接', '数据库', '网络']
+      },
+      yAxis: {
+        type: 'value',
+        max: 100,
+        axisLabel: {
+          formatter: '{value}%'
+        }
+      },
+      series: [
+        {
+          name: '状态',
+          type: 'bar',
+          data: [
+            { value: 85, itemStyle: { color: '#52c41a' } },
+            { value: 72, itemStyle: { color: '#52c41a' } },
+            { value: this.systemStatus?.system_health === 'healthy' ? 100 : 0, itemStyle: { color: this.systemStatus?.system_health === 'healthy' ? '#52c41a' : '#ff4d4f' } },
+            { value: 95, itemStyle: { color: '#52c41a' } },
+            { value: 88, itemStyle: { color: '#52c41a' } }
+          ]
+        }
+      ]
+    };
+  }
+
+  // 初始化批次状态图表
+  private initBatchStatusChart() {
+    const statusCounts = this.calculateBatchStatusCounts();
+
+    this.batchStatusChartOption = {
+      title: {
+        text: '批次状态分布',
+        left: 'center',
+        textStyle: {
+          fontSize: 14,
+          fontWeight: 'normal'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a} <br/>{b}: {c} ({d}%)'
+      },
+      legend: {
+        orient: 'horizontal',
+        bottom: '0%',
+        data: ['未测试', '测试中', '已完成', '失败']
+      },
+      series: [
+        {
+          name: '批次状态',
+          type: 'pie',
+          radius: '60%',
+          center: ['50%', '45%'],
+          data: [
+            { value: statusCounts.notTested, name: '未测试', itemStyle: { color: '#d9d9d9' } },
+            { value: statusCounts.testing, name: '测试中', itemStyle: { color: '#1890ff' } },
+            { value: statusCounts.passed, name: '已完成', itemStyle: { color: '#52c41a' } },
+            { value: statusCounts.failed, name: '失败', itemStyle: { color: '#ff4d4f' } }
+          ]
+        }
+      ]
+    };
+  }
+
+  // 计算批次状态统计
+  private calculateBatchStatusCounts() {
+    const counts = {
+      notTested: 0,
+      testing: 0,
+      passed: 0,
+      failed: 0
+    };
+
+    this.recentBatches.forEach(batch => {
+      switch (batch.overall_status) {
+        case OverallTestStatus.NotTested:
+          counts.notTested++;
+          break;
+        case OverallTestStatus.HardPointTesting:
+        case OverallTestStatus.AlarmTesting:
+          counts.testing++;
+          break;
+        case OverallTestStatus.TestCompletedPassed:
+          counts.passed++;
+          break;
+        case OverallTestStatus.TestCompletedFailed:
+          counts.failed++;
+          break;
+      }
+    });
+
+    return counts;
+  }
+
+  // 更新图表数据
+  updateCharts() {
+    this.initTestProgressChart();
+    this.initSystemStatusChart();
+    this.initBatchStatusChart();
+  }
+
+
 }

@@ -15,7 +15,7 @@ pub struct PersistenceConfig {
     pub storage_root_dir: PathBuf,
     /// 通道定义存储目录
     pub channel_definitions_dir: String,
-    /// 测试实例存储目录  
+    /// 测试实例存储目录
     pub test_instances_dir: String,
     /// 测试批次存储目录
     pub test_batches_dir: String,
@@ -153,71 +153,75 @@ impl HasTimestamps for RawTestOutcome {
 #[async_trait]
 pub trait ExtendedPersistenceService: PersistenceService {
     // 高级查询功能
-    
+
     /// 条件查询通道定义
     async fn query_channel_definitions(&self, criteria: &QueryCriteria) -> AppResult<QueryResult<ChannelPointDefinition>>;
-    
+
     /// 条件查询测试实例
     async fn query_test_instances(&self, criteria: &QueryCriteria) -> AppResult<QueryResult<ChannelTestInstance>>;
-    
+
     /// 条件查询测试批次
     async fn query_test_batches(&self, criteria: &QueryCriteria) -> AppResult<QueryResult<TestBatchInfo>>;
-    
+
     /// 条件查询测试结果
     async fn query_test_outcomes(&self, criteria: &QueryCriteria) -> AppResult<QueryResult<RawTestOutcome>>;
-    
+
     // 批量操作功能
-    
+
     /// 批量保存通道定义
     async fn batch_save_channel_definitions(&self, definitions: &[ChannelPointDefinition]) -> AppResult<()>;
-    
+
     /// 批量保存测试实例
     async fn batch_save_test_instances(&self, instances: &[ChannelTestInstance]) -> AppResult<()>;
-    
+
     /// 批量保存测试结果
     async fn batch_save_test_outcomes(&self, outcomes: &[RawTestOutcome]) -> AppResult<()>;
-    
+
     /// 批量删除（按ID列表）
     async fn batch_delete_by_ids(&self, entity_type: &str, ids: &[String]) -> AppResult<()>;
-    
+
     // 备份和恢复功能
-    
+
     /// 创建数据备份并返回备份信息
     async fn backup(&self, backup_name: &str) -> AppResult<BackupInfo>;
-    
+
     /// 从备份恢复数据
     async fn restore_from_backup(&self, backup_path: &PathBuf) -> AppResult<()>;
-    
+
     /// 列出所有可用备份
     async fn list_backups(&self) -> AppResult<Vec<BackupInfo>>;
-    
+
     /// 删除旧备份
     async fn cleanup_old_backups(&self) -> AppResult<u32>;
-    
+
     // 数据完整性和统计
-    
+
     /// 验证数据完整性
     async fn verify_data_integrity(&self) -> AppResult<IntegrityReport>;
-    
+
     /// 获取统计信息
     async fn get_statistics(&self) -> AppResult<PersistenceStats>;
-    
+
     /// 获取存储配置
     fn get_config(&self) -> &PersistenceConfig;
-    
+
     /// 更新存储配置
     async fn update_config(&mut self, config: PersistenceConfig) -> AppResult<()>;
-    
+
     // 数据清理和维护
-    
+
     /// 清理过期数据
     async fn cleanup_expired_data(&self, retention_days: u32) -> AppResult<u32>;
-    
+
     /// 压缩存储空间
     async fn compact_storage(&self) -> AppResult<u64>; // 返回释放的字节数
-    
+
     /// 重建索引（如果适用）
     async fn rebuild_indexes(&self) -> AppResult<()>;
+
+    /// 获取数据库连接
+    /// 用于需要直接访问数据库连接的场景
+    fn get_database_connection(&self) -> sea_orm::DatabaseConnection;
 }
 
 /// 备份信息
@@ -289,7 +293,7 @@ impl PersistenceServiceFactory {
     pub async fn create_sqlite_service(config: PersistenceConfig, db_path: Option<&std::path::Path>) -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
         crate::services::infrastructure::persistence::SqliteOrmPersistenceService::new(config, db_path).await
     }
-    
+
     /// 创建默认的SQLite ORM持久化服务（使用内存数据库）
     pub async fn create_default_sqlite_service() -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
         Self::create_sqlite_service(PersistenceConfig::default(), Some(std::path::Path::new(":memory:"))).await
@@ -325,7 +329,7 @@ impl PersistenceServiceHelper {
                 format!("存储目录 {:?} 没有写入权限: {}", path, e),
                 e.kind().to_string()
             ))?;
-        
+
         // 清理临时文件
         tokio::fs::remove_file(&temp_file_path).await
             .map_err(|e| crate::utils::error::AppError::io_error(
@@ -375,7 +379,7 @@ impl PersistenceServiceHelper {
                     format!("读取目录 {} 失败: {}", dir.display(), e),
                     e.kind().to_string()
                 ))?;
-            
+
             while let Some(entry) = entries.next_entry().await
                 .map_err(|e| crate::utils::error::AppError::io_error(
                     format!("遍历目录项 {} 失败: {}", dir.display(), e),
@@ -416,8 +420,8 @@ impl PersistenceServiceHelper {
     }
 
     /// 验证JSON文件是否能被指定类型反序列化
-    pub async fn validate_json_file<T>(file_path: &PathBuf) -> AppResult<()> 
-    where 
+    pub async fn validate_json_file<T>(file_path: &PathBuf) -> AppResult<()>
+    where
         T: serde::de::DeserializeOwned,
     {
         let content = tokio::fs::read_to_string(file_path).await
@@ -431,4 +435,4 @@ impl PersistenceServiceHelper {
             ))?;
         Ok(())
     }
-} 
+}

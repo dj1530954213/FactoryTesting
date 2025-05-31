@@ -1,8 +1,6 @@
 .dashboard-container {
   padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-  background: #f8f9fa;
+  background-color: #f0f2f5;
   min-height: 100vh;
 }
 
@@ -675,32 +673,32 @@
   .dashboard-container {
     padding: 16px;
   }
-  
+
   .system-overview {
     grid-template-columns: 1fr;
   }
-  
+
   .workflow-step {
     flex-direction: column;
     text-align: center;
   }
-  
+
   .step-number {
     margin-right: 0;
     margin-bottom: 16px;
   }
-  
+
   .test-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
-  
+
   .test-controls,
   .export-controls {
     flex-direction: column;
   }
-  
+
   .btn {
     width: 100%;
   }
@@ -863,18 +861,195 @@
   .nav-cards {
     grid-template-columns: 1fr;
   }
-  
+
   .nav-card {
     padding: 20px;
   }
-  
+
   .nav-icon {
     font-size: 40px;
     margin-bottom: 12px;
   }
-  
+
   .quick-navigation,
   .recent-activity {
     padding: 24px;
   }
+}
+
+/* NG-ZORRO 组件样式覆盖 */
+.page-header-card {
+  margin-bottom: 24px;
+}
+
+.statistics-row {
+  margin-bottom: 24px;
+}
+
+.charts-row {
+  margin-bottom: 24px;
+}
+
+.chart-container {
+  height: 300px;
+  width: 100%;
+}
+
+.quick-navigation-card {
+  margin-bottom: 24px;
+}
+
+.nav-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 120px;
+}
+
+.nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.nav-content {
+  text-align: center;
+  padding: 16px;
+}
+
+.nav-icon {
+  font-size: 24px;
+  color: #1890ff;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.nav-content h3 {
+  margin: 8px 0 4px 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.nav-content p {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+}
+
+.recent-batches-card {
+  margin-bottom: 24px;
+}
+
+.empty-state-card,
+.loading-card {
+  margin-bottom: 24px;
+}
+
+.empty-state,
+.loading-state {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: #d9d9d9;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.empty-state h3 {
+  margin: 16px 0 8px 0;
+  color: #666;
+}
+
+.empty-state p {
+  margin-bottom: 24px;
+  color: #999;
+}
+
+.loading-state p {
+  margin-top: 16px;
+  color: #666;
+}
+
+.error-alert {
+  margin-bottom: 24px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 16px;
+  }
+
+  .chart-container {
+    height: 250px;
+  }
+
+  .nav-card {
+    height: auto;
+    min-height: 100px;
+  }
+
+  .nav-content {
+    padding: 12px;
+  }
+
+  .nav-icon {
+    font-size: 20px;
+  }
+}
+
+/* 状态颜色 */
+.status-healthy {
+  color: #52c41a;
+}
+
+.status-unhealthy {
+  color: #ff4d4f;
+}
+
+.status-warning {
+  color: #fa8c16;
+}
+
+/* 卡片动画 */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+}
+
+/* 统计数字样式 */
+.ant-statistic-content {
+  font-weight: 600;
+}
+
+/* 列表项样式 */
+.ant-list-item {
+  padding: 16px 24px;
+}
+
+.ant-list-item:hover {
+  background-color: #fafafa;
+}
+
+/* 标签样式 */
+.ant-tag {
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* 按钮样式 */
+.ant-btn-link {
+  padding: 0;
+  height: auto;
+  line-height: 1.5;
+}
+
+/* 图表标题样式 */
+.ant-card-head-title {
+  font-size: 16px;
+  font-weight: 500;
 }

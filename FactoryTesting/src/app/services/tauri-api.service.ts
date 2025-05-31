@@ -26,7 +26,7 @@ import {
 export class TauriApiService {
   private systemStatusSubject = new BehaviorSubject<SystemStatus | null>(null);
   public systemStatus$ = this.systemStatusSubject.asObservable();
-  
+
   // 缓存Tauri环境检测结果，避免重复检测
   private _isTauriEnvironment: boolean | null = null;
   private _environmentChecked = false;
@@ -35,7 +35,7 @@ export class TauriApiService {
     // 重置环境检测缓存，确保每次启动都重新检测
     this._environmentChecked = false;
     this._isTauriEnvironment = null;
-    
+
     // 启动系统状态实时轮询（每5秒更新一次）
     this.startSystemStatusPolling();
   }
@@ -262,23 +262,23 @@ export class TauriApiService {
     // 多重检测逻辑
     // 1. 检查__TAURI__对象是否存在
     const hasTauri = !!(window as any).__TAURI__;
-    
+
     // 2. 检查是否为tauri协议
     const isTauriProtocol = window.location.protocol === 'tauri:';
-    
+
     // 3. 检查是否为file协议（Tauri应用在某些情况下使用file协议）
     const isFileProtocol = window.location.protocol === 'file:';
-    
+
     // 4. 检查用户代理字符串是否包含Tauri标识
     const userAgent = navigator.userAgent || '';
     const hasTauriUserAgent = userAgent.includes('Tauri') || userAgent.includes('tauri');
-    
+
     // 5. 检查是否存在Tauri特有的全局对象
     const hasTauriGlobals = !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI_METADATA__;
-    
+
     // 6. 检查窗口对象的特殊属性
     const hasWindowTauri = !!(window as any).window && !!(window as any).window.__TAURI__;
-    
+
     // 7. 尝试检测Tauri的invoke函数
     let hasInvokeFunction = false;
     try {
@@ -286,12 +286,12 @@ export class TauriApiService {
     } catch (e) {
       hasInvokeFunction = false;
     }
-    
+
     // 8. 检查是否在localhost但不是标准的开发端口
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isStandardDevPort = window.location.port === '4200' || window.location.port === '3000' || window.location.port === '8080';
     const isPossibleTauriPort = isLocalhost && !isStandardDevPort;
-    
+
     // 输出详细检测信息
     console.log('=== Tauri环境检测详情 ===');
     console.log('  当前URL:', window.location.href);
@@ -309,7 +309,7 @@ export class TauriApiService {
     console.log('  用户代理包含Tauri:', hasTauriUserAgent);
     console.log('  Tauri全局对象存在:', hasTauriGlobals);
     console.log('  可能的Tauri端口:', isPossibleTauriPort);
-    
+
     // 如果满足以下任一条件，认为是Tauri环境：
     // 1. __TAURI__对象存在
     // 2. 使用tauri协议
@@ -317,13 +317,13 @@ export class TauriApiService {
     // 4. 存在Tauri特有的全局对象
     // 5. invoke函数可用
     // 6. 在localhost的非标准开发端口（可能是Tauri应用）
-    const result = hasTauri || isTauriProtocol || (isFileProtocol && hasTauriUserAgent) || 
-                   hasTauriGlobals || hasInvokeFunction || hasWindowTauri || 
+    const result = hasTauri || isTauriProtocol || (isFileProtocol && hasTauriUserAgent) ||
+                   hasTauriGlobals || hasInvokeFunction || hasWindowTauri ||
                    (isPossibleTauriPort && (hasTauriUserAgent || hasTauriGlobals));
-    
+
     console.log('  最终检测结果:', result);
     console.log('========================');
-    
+
     // 如果检测失败，尝试延迟检测
     if (!result && isLocalhost) {
       console.log('首次检测失败，将在500ms后重新检测...');
@@ -334,12 +334,21 @@ export class TauriApiService {
         console.log('延迟检测结果:', retryResult);
       }, 500);
     }
-    
+
     // 缓存结果
     this._isTauriEnvironment = result;
     this._environmentChecked = true;
-    
+
     return result;
+  }
+
+  /**
+   * 强制重新检测Tauri环境
+   */
+  forceRedetectEnvironment(): boolean {
+    this._environmentChecked = false;
+    this._isTauriEnvironment = null;
+    return this.isTauriEnvironment();
   }
 
   // ============================================================================
@@ -456,7 +465,7 @@ export class TauriApiService {
    * 自动分配批次 - 根据导入的通道定义自动创建测试批次和实例
    */
   autoAllocateBatch(batchData: any): Observable<any> {
-    return from(invoke('import_excel_and_prepare_batch_cmd', { 
+    return from(invoke('import_excel_and_prepare_batch_cmd', {
       args: {
         file_path_str: batchData.filePath,
         product_model: batchData.productModel,
@@ -469,10 +478,10 @@ export class TauriApiService {
    * 解析Excel文件但不持久化数据
    */
   parseExcelWithoutPersistence(filePath: string, fileName: string): Observable<any> {
-    return from(invoke('parse_excel_without_persistence_cmd', { 
+    return from(invoke('parse_excel_without_persistence_cmd', {
       args: {
-        file_path: filePath, 
-        file_name: fileName 
+        file_path: filePath,
+        file_name: fileName
       }
     }));
   }
@@ -481,7 +490,7 @@ export class TauriApiService {
    * 创建批次并持久化数据（在开始测试时调用）
    */
   createBatchAndPersistData(batchInfo: any, definitions: any[]): Observable<any> {
-    return from(invoke('create_batch_and_persist_data_cmd', { 
+    return from(invoke('create_batch_and_persist_data_cmd', {
       request: {
         batch_info: batchInfo,
         definitions: definitions
@@ -493,16 +502,36 @@ export class TauriApiService {
    * 解析Excel文件并自动创建批次
    */
   parseExcelAndCreateBatch(filePath: string, fileName: string): Observable<any> {
-    return from(invoke('parse_excel_and_create_batch_cmd', { 
+    return from(invoke('parse_excel_and_create_batch_cmd', {
       args: {
-        file_path: filePath, 
-        file_name: fileName 
+        file_path: filePath,
+        file_name: fileName
       }
     }));
   }
 
   /**
-   * 准备批次测试实例 - 自动分配逻辑
+   * 导入Excel文件并分配通道 - 完整的导入和分配流程
+   */
+  importExcelAndAllocateChannels(filePath: string, productModel?: string, serialNumber?: string): Observable<any> {
+    return from(invoke('import_excel_and_prepare_batch_cmd', {
+      args: {
+        file_path_str: filePath,
+        product_model: productModel,
+        serial_number: serialNumber
+      }
+    }));
+  }
+
+  /**
+   * 获取批次详情和状态
+   */
+  getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
+    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { batch_id: batchId }));
+  }
+
+  /**
+   * 准备批次测试实例
    */
   prepareTestInstancesForBatch(request: PrepareTestInstancesRequest): Observable<PrepareTestInstancesResponse> {
     return from(invoke<PrepareTestInstancesResponse>('prepare_test_instances_for_batch_cmd', {
@@ -521,43 +550,10 @@ export class TauriApiService {
   }
 
   /**
-   * 获取批次详情
-   */
-  getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
-    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { 
-      batch_id: batchId 
-    }));
-  }
-
-  /**
    * 获取通道映射配置
    */
   getChannelMappings(): Observable<any[]> {
     return from(invoke<any[]>('get_channel_mappings_cmd'));
-  }
-
-  /**
-   * 强制重新检测Tauri环境
-   */
-  forceRedetectEnvironment(): boolean {
-    this._environmentChecked = false;
-    this._isTauriEnvironment = null;
-    return this.isTauriEnvironment();
-  }
-
-  /**
-   * 导入Excel文件并自动分配通道
-   */
-  importExcelAndAllocateChannels(
-    filePath: string, 
-    productModel?: string, 
-    serialNumber?: string
-  ): Observable<any> {
-    return from(invoke('import_excel_and_allocate_channels_cmd', { 
-      file_path: filePath, 
-      product_model: productModel, 
-      serial_number: serialNumber 
-    }));
   }
 
   /**
@@ -566,4 +562,4 @@ export class TauriApiService {
   clearSessionData(): Observable<string> {
     return from(invoke<string>('clear_session_data'));
   }
-} 
+}

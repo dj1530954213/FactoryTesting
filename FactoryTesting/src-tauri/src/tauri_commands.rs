@@ -1,5 +1,5 @@
 /// Tauri 命令模块
-/// 
+///
 /// 这个模块定义了所有前端可以调用的 Tauri 命令
 /// 将后端服务暴露给前端 Angular 应用
 
@@ -21,7 +21,8 @@ use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
     IPlcCommunicationService, MockPlcService,
     excel::ExcelImporter,
-    persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig}
+    persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig},
+    SimpleEventPublisher
 };
 use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
@@ -47,7 +48,7 @@ pub struct AppState {
     pub app_settings_service: Arc<dyn AppSettingsService>,
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
-    
+
     // 会话管理：跟踪当前会话中创建的批次
     pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
     pub session_start_time: DateTime<Utc>,
@@ -69,36 +70,36 @@ impl AppState {
 
         // 创建持久化服务 - 使用实际的SQLite文件而不是内存数据库
         let db_file_path = config.storage_root_dir.join("factory_testing_data.sqlite");
-        
+
         // 确保数据库目录存在
         if let Some(parent_dir) = db_file_path.parent() {
-            tokio::fs::create_dir_all(parent_dir).await.map_err(|e| 
+            tokio::fs::create_dir_all(parent_dir).await.map_err(|e|
                 AppError::io_error(
                     format!("创建数据库目录失败: {:?}", parent_dir),
                     e.kind().to_string()
                 )
             )?;
         }
-        
+
         // 如果数据库文件不存在，创建一个空文件
         if !db_file_path.exists() {
-            tokio::fs::write(&db_file_path, "").await.map_err(|e| 
+            tokio::fs::write(&db_file_path, "").await.map_err(|e|
                 AppError::io_error(
                     format!("创建数据库文件失败: {:?}", db_file_path),
                     e.kind().to_string()
                 )
             )?;
         }
-        
+
         let sqlite_persistence_service = SqliteOrmPersistenceService::new(config.clone(), Some(&db_file_path)).await?;
-        
+
         // 执行数据库迁移
         let db_conn = sqlite_persistence_service.get_database_connection();
         if let Err(e) = crate::database_migration::DatabaseMigration::migrate(db_conn).await {
             log::error!("数据库迁移失败: {}", e);
             return Err(e);
         }
-        
+
         let persistence_service: Arc<dyn IPersistenceService> = Arc::new(sqlite_persistence_service);
 
         // 创建应用配置服务
@@ -106,7 +107,7 @@ impl AppState {
         let mut app_settings_service: Arc<dyn AppSettingsService> = Arc::new(
             JsonAppSettingsService::new(app_settings_config)
         );
-        
+
         // 初始化应用配置服务
         if let Some(service) = Arc::get_mut(&mut app_settings_service) {
             service.initialize().await?;
@@ -130,13 +131,24 @@ impl AppState {
             )
         );
 
+        // 创建事件发布器
+        let event_publisher: Arc<dyn crate::services::traits::EventPublisher> = Arc::new(
+            SimpleEventPublisher::new()
+        );
+
+        // 创建通道分配服务
+        let channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService> = Arc::new(
+            ChannelAllocationService::new()
+        );
+
         // 创建测试协调服务
         let test_coordination_service: Arc<dyn ITestCoordinationService> = Arc::new(
             TestCoordinationService::new(
                 channel_state_manager.clone(),
                 test_execution_engine.clone(),
                 persistence_service.clone(),
-                Arc::new(ChannelAllocationService::new()),
+                event_publisher,
+                channel_allocation_service.clone(),
             )
         );
 
@@ -162,8 +174,8 @@ impl AppState {
             report_generation_service,
             app_settings_service,
             test_plc_config_service,
-            channel_allocation_service: Arc::new(ChannelAllocationService::new()),
-            
+            channel_allocation_service,
+
             // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),
             session_start_time: Utc::now(),
@@ -185,7 +197,7 @@ pub async fn submit_test_execution(
         .submit_test_execution(request)
         .await
         .map_err(|e| e.to_string())?;
-    
+
     // 将生成的所有批次ID添加到会话跟踪中
     {
         let mut session_batch_ids = state.session_batch_ids.lock().await;
@@ -193,7 +205,7 @@ pub async fn submit_test_execution(
             session_batch_ids.insert(batch.batch_id.clone());
         }
     }
-    
+
     Ok(response)
 }
 
@@ -279,7 +291,7 @@ pub async fn get_session_batches(
         let batch_ids = state.session_batch_ids.lock().await;
         batch_ids.clone()
     };
-    
+
     // 如果没有跟踪的批次，返回最近的所有批次
     if session_batch_ids.is_empty() {
         state.persistence_service
@@ -292,12 +304,12 @@ pub async fn get_session_batches(
             .load_all_batch_info()
             .await
             .map_err(|e| e.to_string())?;
-        
+
         let session_batches = all_batches
             .into_iter()
             .filter(|batch| session_batch_ids.contains(&batch.batch_id))
             .collect();
-        
+
         Ok(session_batches)
     }
 }
@@ -320,11 +332,11 @@ pub async fn create_test_data(
     state: State<'_, AppState>,
 ) -> Result<Vec<ChannelPointDefinition>, String> {
     use crate::models::{ModuleType, PointDataType};
-    
+
     log::info!("[CreateTestData] 开始创建测试数据");
-    
+
     let mut definitions = Vec::new();
-    
+
     // 创建AI有源通道（4个）
     for i in 1..=4 {
         let mut def = ChannelPointDefinition::new(
@@ -344,7 +356,7 @@ pub async fn create_test_data(
         def.test_rig_plc_address = Some(format!("DB2.DBD{}", i * 4));
         definitions.push(def);
     }
-    
+
     // 创建AO无源通道（4个）
     for i in 1..=4 {
         let mut def = ChannelPointDefinition::new(
@@ -363,7 +375,7 @@ pub async fn create_test_data(
         def.range_upper_limit = Some(20.0);
         definitions.push(def);
     }
-    
+
     // 创建DI有源通道（4个）
     for i in 1..=4 {
         let mut def = ChannelPointDefinition::new(
@@ -381,7 +393,7 @@ pub async fn create_test_data(
         def.test_rig_plc_address = Some(format!("DB4.DBX{}.{}", i / 8, i % 8));
         definitions.push(def);
     }
-    
+
     // 创建DO无源通道（4个）
     for i in 1..=4 {
         let mut def = ChannelPointDefinition::new(
@@ -398,7 +410,7 @@ pub async fn create_test_data(
         def.power_supply_type = "无源".to_string();
         definitions.push(def);
     }
-    
+
     // 创建AI无源通道（4个）
     for i in 1..=4 {
         let mut def = ChannelPointDefinition::new(
@@ -417,9 +429,9 @@ pub async fn create_test_data(
         def.range_upper_limit = Some(10.0);
         definitions.push(def);
     }
-    
+
     log::info!("[CreateTestData] 创建了 {} 个测试通道定义", definitions.len());
-    
+
     // 保存到数据库
     for def in &definitions {
         if let Err(e) = state.persistence_service.save_channel_definition(def).await {
@@ -428,7 +440,7 @@ pub async fn create_test_data(
             log::debug!("[CreateTestData] 保存通道定义成功: {} - {}", def.id, def.tag);
         }
     }
-    
+
     log::info!("[CreateTestData] 所有测试数据创建完成");
     Ok(definitions)
 }
@@ -459,26 +471,26 @@ pub async fn create_test_batch_with_definitions(
         .save_batch_info(&batch_info)
         .await
         .map_err(|e| e.to_string())?;
-    
+
     // 保存通道定义
     for definition in definitions {
         state.persistence_service
             .save_channel_definition(&definition)
             .await
             .map_err(|e| e.to_string())?;
-        
+
         // 为每个定义创建测试实例
         let instance = ChannelTestInstance::new(
             definition.id.clone(),
             batch_info.batch_id.clone(),
         );
-        
+
         state.persistence_service
             .save_test_instance(&instance)
             .await
             .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(batch_info.batch_id)
 }
 
@@ -754,4 +766,4 @@ pub async fn save_app_settings_cmd(
             log::error!("保存应用配置失败: {}", e);
             format!("保存应用配置失败: {}", e)
         })
-} 
+}

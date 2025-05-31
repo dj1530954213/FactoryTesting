@@ -1,5 +1,5 @@
 /// 测试执行引擎
-/// 
+///
 /// 负责管理和并发执行测试任务，协调多个测试执行器完成完整的测试序列
 
 use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
@@ -102,40 +102,36 @@ impl TestExecutionEngine {
                     // 硬点测试 - 多个百分比点
                     let percentages = [0.0, 0.25, 0.5, 0.75, 1.0];
                     for percentage in percentages {
-                        executors.push(Box::new(AIHardPointPercentExecutor::new(
-                            percentage, 
-                            0.02, // 2% 容差
-                            1000  // 1秒稳定时间
-                        )));
+                        executors.push(Box::new(AIHardPointPercentExecutor::new()));
                     }
                 }
 
                 // 报警测试
                 if definition.sll_set_point_address.is_some() {
                     executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::LowLowAlarm, 
+                        SubTestItem::LowLowAlarm,
                         2000, // 2秒触发延时
                         1000  // 1秒复位延时
                     )));
                 }
                 if definition.sl_set_point_address.is_some() {
                     executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::LowAlarm, 
-                        2000, 
+                        SubTestItem::LowAlarm,
+                        2000,
                         1000
                     )));
                 }
                 if definition.sh_set_point_address.is_some() {
                     executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::HighAlarm, 
-                        2000, 
+                        SubTestItem::HighAlarm,
+                        2000,
                         1000
                     )));
                 }
                 if definition.shh_set_point_address.is_some() {
                     executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::HighHighAlarm, 
-                        2000, 
+                        SubTestItem::HighHighAlarm,
+                        2000,
                         1000
                     )));
                 }
@@ -177,7 +173,7 @@ impl TestExecutionEngine {
         result_sender: mpsc::Sender<RawTestOutcome>,
         task_cancellation_token: CancellationToken,
     ) {
-        info!("[TestEngine] 开始执行测试序列 - 任务: {}, 实例: {}, 点位: {}", 
+        info!("[TestEngine] 开始执行测试序列 - 任务: {}, 实例: {}, 点位: {}",
               task_id, instance.instance_id, definition.tag);
 
         // 更新任务状态为运行中
@@ -190,11 +186,11 @@ impl TestExecutionEngine {
 
         // 确定测试步骤
         let executors = self.determine_test_steps(&definition);
-        
+
         if executors.is_empty() {
-            warn!("[TestEngine] 没有找到适用的测试执行器 - 点位: {}, 类型: {:?}", 
+            warn!("[TestEngine] 没有找到适用的测试执行器 - 点位: {}, 类型: {:?}",
                   definition.tag, definition.module_type);
-            
+
             // 更新任务状态为失败
             {
                 let mut tasks = self.active_tasks.write().await;
@@ -216,7 +212,7 @@ impl TestExecutionEngine {
             // 检查取消令牌
             if task_cancellation_token.is_cancelled() || self.global_cancellation_token.is_cancelled() {
                 info!("[TestEngine] 任务被取消 - 任务: {}", task_id);
-                
+
                 // 更新任务状态为已取消
                 {
                     let mut tasks = self.active_tasks.write().await;
@@ -228,15 +224,15 @@ impl TestExecutionEngine {
             }
 
             step_count += 1;
-            
+
             // 检查执行器是否支持当前点位定义
             if !executor.supports_definition(&definition) {
-                debug!("[TestEngine] 跳过不支持的测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}", 
+                debug!("[TestEngine] 跳过不支持的测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}",
                        task_id, step_count, total_steps, executor.executor_name());
                 continue;
             }
 
-            debug!("[TestEngine] 执行测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}", 
+            debug!("[TestEngine] 执行测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}",
                    task_id, step_count, total_steps, executor.executor_name());
 
             // 执行测试步骤
@@ -247,7 +243,7 @@ impl TestExecutionEngine {
                 self.plc_service_target.clone(),
             ).await {
                 Ok(outcome) => {
-                    debug!("[TestEngine] 测试步骤完成 - 任务: {}, 步骤: {}/{}, 结果: {}", 
+                    debug!("[TestEngine] 测试步骤完成 - 任务: {}, 步骤: {}/{}, 结果: {}",
                            task_id, step_count, total_steps, outcome.success);
 
                     // 发送测试结果
@@ -263,7 +259,7 @@ impl TestExecutionEngine {
                     }
                 },
                 Err(e) => {
-                    error!("[TestEngine] 测试步骤执行失败 - 任务: {}, 步骤: {}/{}, 错误: {}", 
+                    error!("[TestEngine] 测试步骤执行失败 - 任务: {}, 步骤: {}/{}, 错误: {}",
                            task_id, step_count, total_steps, e);
 
                     // 创建失败的测试结果
@@ -293,7 +289,7 @@ impl TestExecutionEngine {
             }
         }
 
-        info!("[TestEngine] 测试序列完成 - 任务: {}, 状态: {}", 
+        info!("[TestEngine] 测试序列完成 - 任务: {}, 状态: {}",
               task_id, if has_failure { "失败" } else { "成功" });
     }
 }
@@ -309,8 +305,8 @@ impl ITestExecutionEngine for TestExecutionEngine {
     ) -> AppResult<String> {
         let task_id = Uuid::new_v4().to_string();
         let task_cancellation_token = self.global_cancellation_token.child_token();
-        
-        info!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}", 
+
+        info!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}",
               task_id, instance.instance_id, definition.tag);
 
         // 创建任务记录
@@ -352,7 +348,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
                 Ok(permit) => permit,
                 Err(_) => {
                     error!("[TestEngine] 获取信号量许可失败 - 任务: {}", task_id);
-                    
+
                     // 更新任务状态为失败
                     {
                         let mut tasks = active_tasks.write().await;
@@ -397,7 +393,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
     /// 取消任务
     async fn cancel_task(&self, task_id: &str) -> AppResult<()> {
         info!("[TestEngine] 取消任务: {}", task_id);
-        
+
         let tasks = self.active_tasks.read().await;
         match tasks.get(task_id) {
             Some(task) => {
@@ -418,30 +414,30 @@ impl ITestExecutionEngine for TestExecutionEngine {
     /// 停止所有任务
     async fn stop_all_tasks(&self) -> AppResult<()> {
         info!("[TestEngine] 停止所有任务");
-        
+
         self.global_cancellation_token.cancel();
-        
+
         // 等待所有任务完成
         let mut retry_count = 0;
         const MAX_RETRIES: usize = 50; // 最多等待5秒
-        
+
         while retry_count < MAX_RETRIES {
             let active_count = self.get_active_task_count().await;
             if active_count == 0 {
                 break;
             }
-            
+
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             retry_count += 1;
         }
-        
+
         let final_count = self.get_active_task_count().await;
         if final_count > 0 {
             warn!("[TestEngine] 仍有 {} 个任务未完成", final_count);
         } else {
             info!("[TestEngine] 所有任务已停止");
         }
-        
+
         Ok(())
     }
-} 
+}

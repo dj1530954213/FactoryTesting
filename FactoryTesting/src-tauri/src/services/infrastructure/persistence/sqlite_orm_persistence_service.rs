@@ -16,12 +16,12 @@ use crate::models::entities; // 导入实体模块
 use crate::services::traits::{BaseService, PersistenceService};
 // 导入 ExtendedPersistenceService 和相关结构体
 use crate::services::infrastructure::persistence::persistence_service::{
-    ExtendedPersistenceService, 
-    BackupInfo, 
-    QueryCriteria, 
-    QueryResult, 
-    PersistenceStats, 
-    PersistenceConfig, 
+    ExtendedPersistenceService,
+    BackupInfo,
+    QueryCriteria,
+    QueryResult,
+    PersistenceStats,
+    PersistenceConfig,
     IntegrityReport,
     IntegrityStatus, // 导入 IntegrityStatus
     IntegrityCheckResult // 导入 IntegrityCheckResult
@@ -45,9 +45,9 @@ pub struct SqliteOrmPersistenceService {
 
 impl SqliteOrmPersistenceService {
     /// 创建新的 SqliteOrmPersistenceService 实例
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `config` - 持久化服务的配置
     /// * `db_path_opt` - SQLite数据库文件的可选路径。如果为None，则使用默认路径。
     pub async fn new(config: PersistenceConfig, db_path_opt: Option<&Path>) -> AppResult<Self> {
@@ -73,7 +73,7 @@ impl SqliteOrmPersistenceService {
                     .map_err(|e| AppError::io_error("获取当前目录失败".to_string(), e.kind().to_string()))?
                     .join(&determined_db_file_path)
             };
-            
+
             // 在Windows上，需要使用正确的路径格式
             #[cfg(windows)]
             {
@@ -88,7 +88,7 @@ impl SqliteOrmPersistenceService {
         if determined_db_file_path.to_str() != Some(":memory:") {
             let parent_dir = determined_db_file_path.parent().unwrap_or_else(|| &config.storage_root_dir);
             if !parent_dir.exists() {
-                tokio::fs::create_dir_all(parent_dir).await.map_err(|e| 
+                tokio::fs::create_dir_all(parent_dir).await.map_err(|e|
                     AppError::io_error(
                         format!("创建数据库目录失败: {:?}", parent_dir),
                         e.kind().to_string()
@@ -100,7 +100,7 @@ impl SqliteOrmPersistenceService {
         let conn = Database::connect(&db_url)
             .await
             .map_err(|db_err| AppError::persistence_error(db_err.to_string()))?;
-        
+
         Self::setup_schema(&conn).await?;
 
         Ok(Self {
@@ -121,7 +121,7 @@ impl SqliteOrmPersistenceService {
         let stmt_channel_point_definitions = schema.create_table_from_entity(entities::channel_point_definition::Entity).if_not_exists().to_owned();
         db.execute(backend.build(&stmt_channel_point_definitions))
             .await.map_err(|e| AppError::persistence_error(format!("创建 channel_point_definitions 表失败: {}", e)))?;
-        
+
         let stmt_test_batch_info = schema.create_table_from_entity(entities::test_batch_info::Entity).if_not_exists().to_owned();
         db.execute(backend.build(&stmt_test_batch_info))
             .await.map_err(|e| AppError::persistence_error(format!("创建 test_batch_info 表失败: {}", e)))?;
@@ -187,7 +187,7 @@ impl BaseService for SqliteOrmPersistenceService {
             let active_guard = self.is_active.lock().unwrap();
             if !*active_guard {
                 return Err(AppError::service_health_check_error(
-                    self.service_name().to_string(), 
+                    self.service_name().to_string(),
                     "服务已被关闭".to_string() // 更清晰的错误消息
                 ));
             }
@@ -203,7 +203,7 @@ impl BaseService for SqliteOrmPersistenceService {
 
 #[async_trait]
 impl PersistenceService for SqliteOrmPersistenceService {
-    // --- ChannelPointDefinition --- 
+    // --- ChannelPointDefinition ---
     async fn save_channel_definition(&self, definition: &ChannelPointDefinition) -> AppResult<()> {
         let active_model: entities::channel_point_definition::ActiveModel = definition.into();
         entities::channel_point_definition::Entity::insert(active_model)
@@ -241,7 +241,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
         }
     }
 
-    // --- TestBatchInfo --- 
+    // --- TestBatchInfo ---
     async fn save_batch_info(&self, batch: &TestBatchInfo) -> AppResult<()> {
         let active_model: entities::test_batch_info::ActiveModel = batch.into();
         entities::test_batch_info::Entity::insert(active_model)
@@ -279,7 +279,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
         }
     }
 
-    // --- ChannelTestInstance --- 
+    // --- ChannelTestInstance ---
     async fn save_test_instance(&self, instance: &ChannelTestInstance) -> AppResult<()> {
         let active_model: entities::channel_test_instance::ActiveModel = instance.into();
         entities::channel_test_instance::Entity::insert(active_model)
@@ -318,7 +318,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
         }
     }
 
-    // --- RawTestOutcome --- 
+    // --- RawTestOutcome ---
     async fn save_test_outcome(&self, outcome: &RawTestOutcome) -> AppResult<()> {
         let active_model: entities::raw_test_outcome::ActiveModel = outcome.into();
         entities::raw_test_outcome::Entity::insert(active_model)
@@ -347,7 +347,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .all(self.db_conn.as_ref())
             .await
             .map_err(|e| AppError::persistence_error(format!("按批次ID查询测试结果失败: {}", e)))?;
-        
+
         // 过滤属于指定批次的结果
         // 这需要通过 channel_instance_id 关联到 channel_test_instance 表
         // 暂时返回所有结果，后续可以优化为正确的关联查询
@@ -355,19 +355,19 @@ impl PersistenceService for SqliteOrmPersistenceService {
     }
 
     // 测试PLC配置相关方法
-    
+
     /// 保存测试PLC通道配置
     async fn save_test_plc_channel(&self, channel: &crate::models::test_plc_config::TestPlcChannelConfig) -> AppResult<()> {
         use sea_orm::{ActiveModelTrait, Set};
-        
+
         debug!("开始保存测试PLC通道配置: ID={:?}, 地址={}", channel.id, channel.channel_address);
-        
+
         let active_model: entities::test_plc_channel_config::ActiveModel = channel.into();
-        
+
         // 检查是否有ID，如果有ID则尝试更新，否则插入
         if let Some(id) = &channel.id {
             debug!("通道配置有ID，检查是否存在: {}", id);
-            
+
             // 检查记录是否存在
             let existing = entities::test_plc_channel_config::Entity::find_by_id(id.clone())
                 .one(self.db_conn.as_ref())
@@ -376,7 +376,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
                     error!("检查测试PLC通道配置是否存在失败: {}", e);
                     AppError::persistence_error(format!("检查测试PLC通道配置是否存在失败: {}", e))
                 })?;
-            
+
             if existing.is_some() {
                 debug!("记录存在，执行更新操作");
                 // 记录存在，执行更新
@@ -409,11 +409,11 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 })?;
             info!("新测试PLC通道配置插入成功: {}", channel.channel_address);
         }
-        
+
         debug!("测试PLC通道配置保存操作完成");
         Ok(())
     }
-    
+
     /// 加载测试PLC通道配置
     async fn load_test_plc_channel(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::TestPlcChannelConfig>> {
         let model = entities::test_plc_channel_config::Entity::find_by_id(id.to_string())
@@ -422,7 +422,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载测试PLC通道配置失败: {}", e)))?;
         Ok(model.map(|m| (&m).into()))
     }
-    
+
     /// 加载所有测试PLC通道配置
     async fn load_all_test_plc_channels(&self) -> AppResult<Vec<crate::models::test_plc_config::TestPlcChannelConfig>> {
         let models = entities::test_plc_channel_config::Entity::find()
@@ -431,7 +431,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载所有测试PLC通道配置失败: {}", e)))?;
         Ok(models.iter().map(|m| m.into()).collect())
     }
-    
+
     /// 删除测试PLC通道配置
     async fn delete_test_plc_channel(&self, id: &str) -> AppResult<()> {
         let delete_result = entities::test_plc_channel_config::Entity::delete_by_id(id.to_string())
@@ -444,7 +444,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             Ok(())
         }
     }
-    
+
     /// 保存PLC连接配置
     async fn save_plc_connection(&self, connection: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<()> {
         // 检查是否已存在相同ID的记录
@@ -460,7 +460,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             active_model.id = sea_orm::ActiveValue::Unchanged(connection.id.clone());
             // 更新时间
             active_model.updated_at = sea_orm::ActiveValue::Set(chrono::Utc::now());
-            
+
             entities::plc_connection_config::Entity::update(active_model)
                 .exec(self.db_conn.as_ref())
                 .await
@@ -473,10 +473,10 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .await
                 .map_err(|e| AppError::persistence_error(format!("保存PLC连接配置失败: {}", e)))?;
         }
-        
+
         Ok(())
     }
-    
+
     /// 加载PLC连接配置
     async fn load_plc_connection(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::PlcConnectionConfig>> {
         let model = entities::plc_connection_config::Entity::find_by_id(id.to_string())
@@ -485,7 +485,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载PLC连接配置失败: {}", e)))?;
         Ok(model.map(|m| (&m).into()))
     }
-    
+
     /// 加载所有PLC连接配置
     async fn load_all_plc_connections(&self) -> AppResult<Vec<crate::models::test_plc_config::PlcConnectionConfig>> {
         let models = entities::plc_connection_config::Entity::find()
@@ -494,7 +494,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载所有PLC连接配置失败: {}", e)))?;
         Ok(models.iter().map(|m| m.into()).collect())
     }
-    
+
     /// 删除PLC连接配置
     async fn delete_plc_connection(&self, id: &str) -> AppResult<()> {
         let delete_result = entities::plc_connection_config::Entity::delete_by_id(id.to_string())
@@ -507,7 +507,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             Ok(())
         }
     }
-    
+
     /// 保存通道映射配置
     async fn save_channel_mapping(&self, mapping: &crate::models::test_plc_config::ChannelMappingConfig) -> AppResult<()> {
         let active_model: entities::channel_mapping_config::ActiveModel = mapping.into();
@@ -517,7 +517,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("保存通道映射配置失败: {}", e)))?;
         Ok(())
     }
-    
+
     /// 加载通道映射配置
     async fn load_channel_mapping(&self, id: &str) -> AppResult<Option<crate::models::test_plc_config::ChannelMappingConfig>> {
         let model = entities::channel_mapping_config::Entity::find_by_id(id.to_string())
@@ -526,7 +526,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载通道映射配置失败: {}", e)))?;
         Ok(model.map(|m| (&m).into()))
     }
-    
+
     /// 加载所有通道映射配置
     async fn load_all_channel_mappings(&self) -> AppResult<Vec<crate::models::test_plc_config::ChannelMappingConfig>> {
         let models = entities::channel_mapping_config::Entity::find()
@@ -535,7 +535,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("加载所有通道映射配置失败: {}", e)))?;
         Ok(models.iter().map(|m| m.into()).collect())
     }
-    
+
     /// 删除通道映射配置
     async fn delete_channel_mapping(&self, id: &str) -> AppResult<()> {
         let delete_result = entities::channel_mapping_config::Entity::delete_by_id(id.to_string())
@@ -572,32 +572,32 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
         //     return Ok(Vec::new());
         // }
         // let mut backups = Vec::new();
-        // let mut entries = tokio::fs::read_dir(backup_dir).await.map_err(|e| 
+        // let mut entries = tokio::fs::read_dir(backup_dir).await.map_err(|e|
         //     AppError::io_error("读取备份目录失败".to_string(), e.kind().to_string())
         // )?;
-        // while let Some(entry) = entries.next_entry().await.map_err(|e| 
+        // while let Some(entry) = entries.next_entry().await.map_err(|e|
         //     AppError::io_error("读取备份目录条目失败".to_string(), e.kind().to_string()))? {
         //     let path = entry.path();
         //     if path.is_file() && path.extension().map_or(false, |ext| ext == "sqlite") {
-        //         let metadata = tokio::fs::metadata(&path).await.map_err(|e| 
+        //         let metadata = tokio::fs::metadata(&path).await.map_err(|e|
         //             AppError::io_error(format!("获取备份文件 {:?} 元数据失败", path), e.kind().to_string()))?;
         //         let name_cow = path.file_stem().unwrap_or_default().to_string_lossy();
         //         let is_auto = name_cow.starts_with("auto_");
         //         let name_owned = name_cow.into_owned();
         //         backups.push(BackupInfo {
-        //             name: name_owned, 
+        //             name: name_owned,
         //             path,
         //             size_bytes: metadata.len(),
         //             created_at: metadata.created().map(DateTime::from).unwrap_or_else(|_| Utc::now()),
         //             description: Some(format!("SQLite backup created on {}", Utc::now().to_rfc2822())),
-        //             is_auto_backup: is_auto, 
+        //             is_auto_backup: is_auto,
         //         });
         //     }
         // }
         // backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         // Ok(backups)
     }
-    
+
     // --- Placeholder implementations for other ExtendedPersistenceService methods ---
     async fn query_channel_definitions(&self, _criteria: &QueryCriteria) -> AppResult<QueryResult<ChannelPointDefinition>> {
         Err(AppError::not_implemented_error("query_channel_definitions not implemented for SqliteOrmPersistenceService".to_string()))
@@ -614,8 +614,27 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
     async fn batch_save_channel_definitions(&self, _definitions: &[ChannelPointDefinition]) -> AppResult<()> {
         Err(AppError::not_implemented_error("batch_save_channel_definitions not implemented for SqliteOrmPersistenceService".to_string()))
     }
-    async fn batch_save_test_instances(&self, _instances: &[ChannelTestInstance]) -> AppResult<()> {
-        Err(AppError::not_implemented_error("batch_save_test_instances not implemented for SqliteOrmPersistenceService".to_string()))
+    async fn batch_save_test_instances(&self, instances: &[ChannelTestInstance]) -> AppResult<()> {
+        if instances.is_empty() {
+            return Ok(());
+        }
+
+        log::info!("开始批量保存 {} 个测试实例", instances.len());
+
+        // 将实例转换为ActiveModel
+        let active_models: Vec<entities::channel_test_instance::ActiveModel> = instances
+            .iter()
+            .map(|instance| instance.into())
+            .collect();
+
+        // 批量插入
+        entities::channel_test_instance::Entity::insert_many(active_models)
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("批量保存测试实例失败: {}", e)))?;
+
+        log::info!("成功批量保存 {} 个测试实例", instances.len());
+        Ok(())
     }
     async fn batch_save_test_outcomes(&self, _outcomes: &[RawTestOutcome]) -> AppResult<()> {
         Err(AppError::not_implemented_error("batch_save_test_outcomes not implemented for SqliteOrmPersistenceService".to_string()))
@@ -687,8 +706,8 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
             test_batches_count,
             test_outcomes_count,
             total_storage_size_bytes,
-            last_backup_time: None, 
-            last_integrity_check_time: None, 
+            last_backup_time: None,
+            last_integrity_check_time: None,
         })
     }
     fn get_config(&self) -> &PersistenceConfig {
@@ -709,4 +728,8 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
     async fn rebuild_indexes(&self) -> AppResult<()> {
         Err(AppError::not_implemented_error("rebuild_indexes not implemented for SqliteOrmPersistenceService".to_string()))
     }
-} 
+
+    fn get_database_connection(&self) -> sea_orm::DatabaseConnection {
+        (*self.db_conn).clone()
+    }
+}

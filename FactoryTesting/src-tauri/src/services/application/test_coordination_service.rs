@@ -1,5 +1,5 @@
 /// 测试协调服务
-/// 
+///
 /// 负责协调整个测试流程，包括：
 /// 1. 接收测试请求并验证
 /// 2. 协调通道状态管理器和测试执行引擎
@@ -7,7 +7,7 @@
 /// 4. 提供统一的测试API
 
 use crate::models::{
-    ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, TestBatchInfo, 
+    ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, TestBatchInfo,
     OverallTestStatus
 };
 use crate::services::domain::{
@@ -20,13 +20,13 @@ use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
-use tokio::sync::{mpsc, RwLock, Mutex, Semaphore};
+use tokio::sync::{mpsc, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
 use log::{debug, warn, error, info};
 use chrono::Utc;
 use crate::services::{IChannelAllocationService};
-use crate::services::domain::{EventPublisher};
-use crate::services::domain::{CancellationToken};
+use crate::services::traits::EventPublisher;
+use tokio_util::sync::CancellationToken;
 
 /// 测试执行请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +128,7 @@ impl BatchExecutionInfo {
         channel_definitions: Vec<ChannelPointDefinition>,
     ) -> Self {
         let (result_sender, result_receiver) = mpsc::channel(1000);
-        
+
         Self {
             batch_info,
             channel_definitions,
@@ -147,7 +147,7 @@ impl BatchExecutionInfo {
     /// 获取进度信息
     pub fn get_progress(&self) -> Vec<TestProgressUpdate> {
         let mut progress = Vec::new();
-        
+
         for instance in &self.test_instances {
             // 计算该实例的完成状态
             let instance_results: Vec<_> = self.collected_results
@@ -157,7 +157,7 @@ impl BatchExecutionInfo {
 
             let completed_sub_tests = instance_results.len();
             let total_sub_tests = self.estimate_total_sub_tests(&instance.definition_id);
-            
+
             // 确定整体状态 - 使用现有的OverallTestStatus变体
             let overall_status = if completed_sub_tests == 0 {
                 OverallTestStatus::NotTested
@@ -249,7 +249,7 @@ pub trait ITestCoordinationService: Send + Sync {
 }
 
 /// 测试协调服务实现
-/// 
+///
 /// 负责协调整个测试流程，包括批次管理、任务调度、状态监控等
 /// 参考原始C#代码的TestTaskManager复杂度
 pub struct TestCoordinationService {
@@ -261,8 +261,10 @@ pub struct TestCoordinationService {
     persistence_service: Arc<dyn IPersistenceService>,
     /// 事件发布器
     event_publisher: Arc<dyn EventPublisher>,
+    /// 通道分配服务
+    channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService>,
     /// 当前活跃的批次
-    current_batch: Arc<Mutex<Option<TestBatchInfo>>>,
+    active_batches: Arc<Mutex<HashMap<String, BatchExecutionInfo>>>,
     /// 测试进度缓存
     progress_cache: Arc<Mutex<HashMap<String, TestProgressUpdate>>>,
     /// 并发控制信号量
@@ -278,13 +280,15 @@ impl TestCoordinationService {
         test_execution_engine: Arc<dyn ITestExecutionEngine>,
         persistence_service: Arc<dyn IPersistenceService>,
         event_publisher: Arc<dyn EventPublisher>,
+        channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService>,
     ) -> Self {
         Self {
             channel_state_manager,
             test_execution_engine,
             persistence_service,
             event_publisher,
-            current_batch: Arc::new(Mutex::new(None)),
+            channel_allocation_service,
+            active_batches: Arc::new(Mutex::new(HashMap::new())),
             progress_cache: Arc::new(Mutex::new(HashMap::new())),
             concurrency_semaphore: Arc::new(Semaphore::new(5)),
             cancellation_token: Arc::new(Mutex::new(None)),
@@ -293,7 +297,7 @@ impl TestCoordinationService {
 
     /// 启动结果收集任务
     async fn start_result_collection(&self, batch_id: String) -> AppResult<()> {
-        let active_batches = self.current_batch.lock().await;
+        let active_batches = self.active_batches.clone();
         let persistence_service = self.persistence_service.clone();
 
         tokio::spawn(async move {
@@ -308,7 +312,7 @@ impl TestCoordinationService {
 
             if let Some(mut receiver) = receiver {
                 while let Some(result) = receiver.recv().await {
-                    debug!("[TestCoordination] 收到测试结果: {} - {}", 
+                    debug!("[TestCoordination] 收到测试结果: {} - {}",
                            result.channel_instance_id, result.success);
 
                     // 保存结果到持久化存储
@@ -323,7 +327,7 @@ impl TestCoordinationService {
                             batch_info.collected_results.push(result);
 
                             // 检查是否所有测试都完成了
-                            let total_expected = batch_info.test_instances.len() * 
+                            let total_expected = batch_info.test_instances.len() *
                                 batch_info.test_instances.iter()
                                     .map(|inst| batch_info.estimate_total_sub_tests(&inst.definition_id))
                                     .sum::<usize>();
@@ -351,7 +355,7 @@ impl ITestCoordinationService for TestCoordinationService {
         request: TestExecutionRequest,
     ) -> AppResult<TestExecutionResponse> {
         log::info!("[TestCoordination] ===== 开始提交测试执行请求 =====");
-        log::info!("[TestCoordination] 批次: {}, 通道数: {}, 自动开始: {}", 
+        log::info!("[TestCoordination] 批次: {}, 通道数: {}, 自动开始: {}",
               request.batch_info.batch_id, request.channel_definitions.len(), request.auto_start);
 
         // 验证请求
@@ -369,19 +373,19 @@ impl ITestCoordinationService for TestCoordinationService {
 
         // ===== 使用通道分配服务来正确分配批次 =====
         log::info!("[TestCoordination] ===== 开始使用通道分配服务分配通道 =====");
-        
+
         // 详细记录输入的通道定义
         let mut type_counts = std::collections::HashMap::new();
         for def in &request.channel_definitions {
             let key = format!("{:?}_{}", def.module_type, def.power_supply_type);
             *type_counts.entry(key).or_insert(0) += 1;
         }
-        
+
         log::info!("[TestCoordination] 输入通道详情:");
         for (type_name, count) in &type_counts {
             log::info!("[TestCoordination]   {}: {} 个", type_name, count);
         }
-        
+
         // 创建默认的测试PLC配置（暂时使用空配置，实际应该从设置中获取）
         use crate::services::channel_allocation_service::TestPlcConfig;
         let test_plc_config = TestPlcConfig {
@@ -389,13 +393,13 @@ impl ITestCoordinationService for TestCoordinationService {
             ip_address: "192.168.1.100".to_string(),
             comparison_tables: Vec::new(), // 暂时使用空配置
         };
-        
-        log::info!("[TestCoordination] 测试PLC配置: 品牌={}, IP={}, 映射表数量={}", 
+
+        log::info!("[TestCoordination] 测试PLC配置: 品牌={}, IP={}, 映射表数量={}",
             test_plc_config.brand_type, test_plc_config.ip_address, test_plc_config.comparison_tables.len());
-        
+
         // 调用通道分配服务
         log::info!("[TestCoordination] 正在调用通道分配服务...");
-        let allocation_result = self.channel_state_manager
+        let allocation_result = self.channel_allocation_service
             .allocate_channels(
                 request.channel_definitions.clone(),
                 test_plc_config,
@@ -403,15 +407,15 @@ impl ITestCoordinationService for TestCoordinationService {
                 request.batch_info.serial_number.clone(),
             )
             .await?;
-        
+
         log::info!("[TestCoordination] ===== 通道分配完成 =====");
         log::info!("[TestCoordination] 生成批次数: {}", allocation_result.batches.len());
         log::info!("[TestCoordination] 生成实例数: {}", allocation_result.allocated_instances.len());
-        log::info!("[TestCoordination] 分配统计: 总定义={}, 已分配={}, 跳过={}", 
+        log::info!("[TestCoordination] 分配统计: 总定义={}, 已分配={}, 跳过={}",
             allocation_result.allocation_summary.total_definitions,
             allocation_result.allocation_summary.allocated_instances,
             allocation_result.allocation_summary.skipped_definitions);
-        
+
         // 详细记录每个批次信息
         for (i, batch) in allocation_result.batches.iter().enumerate() {
             log::info!("[TestCoordination] 批次{}: ID={}, 名称={}, 点位数={}",
@@ -427,26 +431,26 @@ impl ITestCoordinationService for TestCoordinationService {
                 .filter(|instance| instance.test_batch_id == batch.batch_id)
                 .cloned()
                 .collect();
-            
-            info!("[TestCoordination] 批次 {} 包含 {} 个实例", 
+
+            info!("[TestCoordination] 批次 {} 包含 {} 个实例",
                   batch.batch_name, batch_instances.len());
-            
+
             // 创建批次执行信息
             let mut batch_execution = BatchExecutionInfo::new(
                 batch.clone(),
                 request.channel_definitions.clone(),
             );
-            
+
             // 设置测试实例
             batch_execution.test_instances = batch_instances;
             total_instance_count += batch_execution.test_instances.len();
-            
+
             // 启动结果收集任务
             self.start_result_collection(batch.batch_id.clone()).await?;
-            
+
             // 添加到活动批次
             {
-                let mut batches = self.current_batch.lock().await;
+                let mut batches = self.active_batches.lock().await;
                 batches.insert(batch.batch_id.clone(), batch_execution);
             }
         }
@@ -475,9 +479,9 @@ impl ITestCoordinationService for TestCoordinationService {
             all_batches: allocation_result.batches,
             instance_count: total_instance_count,
             status: if request.auto_start { "running" } else { "submitted" }.to_string(),
-            message: format!("成功分配 {} 个批次，共 {} 个测试实例{}。批次列表: {}", 
+            message: format!("成功分配 {} 个批次，共 {} 个测试实例{}。批次列表: {}",
                            batches_count,
-                           total_instance_count, 
+                           total_instance_count,
                            if request.auto_start { "并开始执行" } else { "" },
                            batches_list),
         })
@@ -488,11 +492,11 @@ impl ITestCoordinationService for TestCoordinationService {
         info!("[TestCoordination] 开始批次测试: {}", batch_id);
 
         let (instances, definitions, result_sender) = {
-            let mut batches = self.current_batch.lock().await;
+            let mut batches = self.active_batches.lock().await;
             let batch_info = batches.get_mut(batch_id)
                 .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
-            if batch_info.status != BatchExecutionStatus::Submitted && 
+            if batch_info.status != BatchExecutionStatus::Submitted &&
                batch_info.status != BatchExecutionStatus::Paused {
                 return Err(AppError::validation_error(
                     format!("批次状态不允许启动: {:?}", batch_info.status)
@@ -513,7 +517,7 @@ impl ITestCoordinationService for TestCoordinationService {
         for instance in instances {
             // 查找对应的定义
             if let Some(definition) = definitions.iter().find(|d| d.id == instance.definition_id) {
-                debug!("[TestCoordination] 提交测试任务: 实例 {}, 定义 {}", 
+                debug!("[TestCoordination] 提交测试任务: 实例 {}, 定义 {}",
                        instance.instance_id, definition.id);
 
                 let task_id = self.test_execution_engine
@@ -528,16 +532,16 @@ impl ITestCoordinationService for TestCoordinationService {
                 let instance_id_clone = instance.instance_id.clone();
                 let task_id_clone = task_id.clone();
                 {
-                    let mut batches = self.current_batch.lock().await;
+                    let mut batches = self.active_batches.lock().await;
                     if let Some(batch_info) = batches.get_mut(batch_id) {
                         batch_info.task_mappings.insert(instance_id_clone, task_id_clone);
                     }
                 }
 
-                debug!("[TestCoordination] 测试任务已提交: {} -> {}", 
+                debug!("[TestCoordination] 测试任务已提交: {} -> {}",
                        instance.instance_id, task_id);
             } else {
-                warn!("[TestCoordination] 未找到实例 {} 对应的定义 {}", 
+                warn!("[TestCoordination] 未找到实例 {} 对应的定义 {}",
                       instance.instance_id, instance.definition_id);
             }
         }
@@ -550,7 +554,7 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn pause_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 暂停批次测试: {}", batch_id);
 
-        let mut batches = self.current_batch.lock().await;
+        let mut batches = self.active_batches.lock().await;
         let batch_info = batches.get_mut(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -576,7 +580,7 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn resume_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 恢复批次测试: {}", batch_id);
 
-        let batches = self.current_batch.lock().await;
+        let batches = self.active_batches.lock().await;
         let batch_info = batches.get(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -596,11 +600,11 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn stop_batch_testing(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 停止批次测试: {}", batch_id);
 
-        let mut batches = self.current_batch.lock().await;
+        let mut batches = self.active_batches.lock().await;
         let batch_info = batches.get_mut(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
-        if batch_info.status == BatchExecutionStatus::Completed || 
+        if batch_info.status == BatchExecutionStatus::Completed ||
            batch_info.status == BatchExecutionStatus::Stopped {
             return Ok(()); // 已经完成或停止
         }
@@ -620,7 +624,7 @@ impl ITestCoordinationService for TestCoordinationService {
 
     /// 获取批次测试进度
     async fn get_batch_progress(&self, batch_id: &str) -> AppResult<Vec<TestProgressUpdate>> {
-        let batches = self.active_batches.read().await;
+        let batches = self.active_batches.lock().await;
         let batch_info = batches.get(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -629,7 +633,7 @@ impl ITestCoordinationService for TestCoordinationService {
 
     /// 获取批次测试结果
     async fn get_batch_results(&self, batch_id: &str) -> AppResult<Vec<RawTestOutcome>> {
-        let batches = self.active_batches.read().await;
+        let batches = self.active_batches.lock().await;
         let batch_info = batches.get(batch_id)
             .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
 
@@ -640,9 +644,9 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn cleanup_completed_batch(&self, batch_id: &str) -> AppResult<()> {
         info!("[TestCoordination] 清理完成的批次: {}", batch_id);
 
-        let mut batches = self.active_batches.write().await;
+        let mut batches = self.active_batches.lock().await;
         if let Some(batch_info) = batches.get(batch_id) {
-            if batch_info.status != BatchExecutionStatus::Completed && 
+            if batch_info.status != BatchExecutionStatus::Completed &&
                batch_info.status != BatchExecutionStatus::Stopped {
                 return Err(AppError::validation_error(
                     format!("批次状态不允许清理: {:?}", batch_info.status)
@@ -664,13 +668,66 @@ mod tests {
     use crate::services::infrastructure::plc::plc_communication_service::PlcCommunicationService;
     use crate::services::infrastructure::persistence::persistence_service::PersistenceConfig;
     use crate::services::channel_allocation_service::{
-        IChannelAllocationService, BatchAllocationResult, AllocationSummary, ModuleTypeStats, 
+        IChannelAllocationService, BatchAllocationResult, AllocationSummary, ModuleTypeStats,
         ValidationResult, TestPlcConfig
     };
     use crate::models::{ModuleType, PointDataType};
     use std::sync::Arc;
     use std::path::Path;
     use async_trait::async_trait;
+    use crate::services::traits::{EventPublisher, BaseService, BatchStatistics};
+    use crate::models::RawTestOutcome;
+    use crate::utils::error::AppResult;
+
+    /// Mock 事件发布器
+    struct MockEventPublisher;
+
+    #[async_trait]
+    impl BaseService for MockEventPublisher {
+        fn service_name(&self) -> &'static str {
+            "MockEventPublisher"
+        }
+
+        async fn initialize(&mut self) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn shutdown(&mut self) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn health_check(&self) -> AppResult<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl EventPublisher for MockEventPublisher {
+        async fn publish_test_status_changed(
+            &self,
+            _instance_id: &str,
+            _old_status: crate::models::enums::OverallTestStatus,
+            _new_status: crate::models::enums::OverallTestStatus,
+        ) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn publish_test_completed(&self, _outcome: &RawTestOutcome) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn publish_batch_status_changed(&self, _batch_id: &str, _statistics: &BatchStatistics) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn publish_plc_connection_changed(&self, _connected: bool) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn publish_error(&self, _error: &crate::utils::error::AppError) -> AppResult<()> {
+            Ok(())
+        }
+    }
 
     /// Mock 通道分配服务
     struct MockChannelAllocationService;
@@ -687,15 +744,15 @@ mod tests {
             // 模拟分配：使用新的正确分配逻辑
             let channels_per_batch = 8;
             let total_batches = (definitions.len() + channels_per_batch - 1) / channels_per_batch;
-            
+
             let mut batches = Vec::new();
             let mut allocated_instances = Vec::new();
-            
+
             for batch_idx in 0..total_batches {
                 let batch_number = batch_idx + 1;
                 let batch_id = format!("mock_batch_{}", batch_number);
                 let batch_name = format!("模拟批次{}", batch_number);
-                
+
                 // 创建批次信息
                 let mut batch_info = TestBatchInfo {
                     batch_id: batch_id.clone(),
@@ -715,12 +772,12 @@ mod tests {
                     batch_name: batch_name.clone(),
                     custom_data: HashMap::new(),
                 };
-                
+
                 // 计算此批次的通道范围
                 let start_idx = batch_idx * channels_per_batch;
                 let end_idx = std::cmp::min(start_idx + channels_per_batch, definitions.len());
                 let batch_definitions = &definitions[start_idx..end_idx];
-                
+
                 // 为此批次的通道创建实例
                 for definition in batch_definitions {
                     let instance = ChannelTestInstance {
@@ -748,12 +805,12 @@ mod tests {
                     };
                     allocated_instances.push(instance);
                 }
-                
+
                 // 更新批次的通道数量
                 batch_info.total_points = batch_definitions.len() as u32;
                 batches.push(batch_info);
             }
-            
+
             // 创建分配统计
             let allocation_summary = AllocationSummary {
                 total_definitions: definitions.len() as u32,
@@ -762,7 +819,7 @@ mod tests {
                 by_module_type: HashMap::new(),
                 allocation_errors: Vec::new(),
             };
-            
+
             Ok(BatchAllocationResult {
                 batches,
                 allocated_instances,
@@ -802,6 +859,7 @@ mod tests {
         Arc<dyn IChannelStateManager>,
         Arc<dyn ITestExecutionEngine>,
         Arc<dyn IPersistenceService>,
+        Arc<dyn EventPublisher>,
         Arc<dyn IChannelAllocationService>,
     ) {
         // 创建Mock PLC服务
@@ -812,7 +870,7 @@ mod tests {
 
         // 创建持久化服务配置
         let config = PersistenceConfig::default();
-        
+
         // 创建内存数据库持久化服务
         let persistence_service = Arc::new(
             SqliteOrmPersistenceService::new(config, Some(Path::new(":memory:"))).await.unwrap()
@@ -832,10 +890,13 @@ mod tests {
             )
         );
 
+        // 创建Mock事件发布器
+        let event_publisher = Arc::new(MockEventPublisher);
+
         // 创建Mock通道分配服务
         let channel_allocation_service = Arc::new(MockChannelAllocationService);
 
-        (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service)
+        (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service)
     }
 
     /// 创建测试用的通道定义
@@ -851,11 +912,11 @@ mod tests {
             PointDataType::Float,
             "DB1.DBD0".to_string(),
         );
-        
+
         definition.range_lower_limit = Some(0.0);
         definition.range_upper_limit = Some(100.0);
         definition.test_rig_plc_address = Some("DB2.DBD0".to_string());
-        
+
         definition
     }
 
@@ -869,13 +930,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_test_execution_success() {
-        let (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service) = 
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            event_publisher,
             channel_allocation_service,
         );
 
@@ -887,7 +949,7 @@ mod tests {
         };
 
         let response = coordination_service.submit_test_execution(request).await;
-        
+
         assert!(response.is_ok());
         let response = response.unwrap();
         assert_eq!(response.instance_count, 1);
@@ -897,13 +959,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_test_execution_with_auto_start() {
-        let (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service) = 
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            event_publisher,
             channel_allocation_service,
         );
 
@@ -915,7 +978,7 @@ mod tests {
         };
 
         let response = coordination_service.submit_test_execution(request).await;
-        
+
         assert!(response.is_ok());
         let response = response.unwrap();
         assert_eq!(response.instance_count, 1);
@@ -925,13 +988,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_empty_channel_definitions() {
-        let (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service) = 
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            event_publisher,
             channel_allocation_service,
         );
 
@@ -943,7 +1007,7 @@ mod tests {
         };
 
         let response = coordination_service.submit_test_execution(request).await;
-        
+
         assert!(response.is_err());
         let error = response.unwrap_err();
         assert!(error.to_string().contains("通道定义列表不能为空"));
@@ -951,13 +1015,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_lifecycle() {
-        let (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service) = 
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            event_publisher,
             channel_allocation_service,
         );
 
@@ -1004,13 +1069,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_batch_results() {
-        let (channel_state_manager, test_execution_engine, persistence_service, channel_allocation_service) = 
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
             channel_state_manager,
             test_execution_engine,
             persistence_service,
+            event_publisher,
             channel_allocation_service,
         );
 
@@ -1038,16 +1104,16 @@ mod tests {
     async fn test_batch_execution_status_transitions() {
         let batch_info = create_test_batch_info();
         let channel_definitions = vec![create_test_channel_definition()];
-        
+
         let mut batch_execution = BatchExecutionInfo::new(batch_info, channel_definitions);
-        
+
         // 初始状态应该是Submitted
         assert_eq!(batch_execution.status, BatchExecutionStatus::Submitted);
-        
+
         // 模拟状态转换
         batch_execution.status = BatchExecutionStatus::Running;
         assert_eq!(batch_execution.status, BatchExecutionStatus::Running);
-        
+
         batch_execution.status = BatchExecutionStatus::Completed;
         assert_eq!(batch_execution.status, BatchExecutionStatus::Completed);
     }
@@ -1074,13 +1140,13 @@ mod tests {
         let mut di_definition = create_test_channel_definition();
         di_definition.module_type = ModuleType::DI;
         di_definition.data_type = PointDataType::Bool;
-        
+
         let batch_execution = BatchExecutionInfo::new(
             create_test_batch_info(),
             vec![di_definition.clone()],
         );
-        
+
         let count = batch_execution.estimate_total_sub_tests(&di_definition.id);
         assert_eq!(count, 1);
     }
-} 
+}

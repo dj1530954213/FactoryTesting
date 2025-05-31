@@ -1,14 +1,25 @@
 /// 数据管理相关的Tauri命令
-/// 
+///
 /// 包括Excel文件解析、批次创建等功能
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
-use crate::models::{ChannelPointDefinition, TestBatchInfo};
-use crate::services::IChannelAllocationService;
-use crate::services::infrastructure::ExcelImporter;
-use crate::AppState;
+use crate::models::structs::{ChannelPointDefinition, TestBatchInfo};
+use crate::services::application::data_import_service::{DataImportService, ImportResult};
+use crate::services::application::batch_allocation_service::{BatchAllocationService, AllocationStrategy, AllocationResult as BatchAllocationResult};
+use crate::services::infrastructure::excel::ExcelImporter;
+use crate::tauri_commands::AppState;
 use log::{info, error, warn};
+use std::collections::HashMap;
+use std::sync::Arc;
+
+/// 通道分配结果（用于命令层）
+#[derive(Debug, Serialize)]
+pub struct AllocationResult {
+    pub batches: Vec<TestBatchInfo>,
+    pub allocated_instances: Vec<crate::models::structs::ChannelTestInstance>,
+    pub allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary,
+}
 
 /// Excel文件解析请求
 #[derive(Debug, Deserialize)]
@@ -52,11 +63,11 @@ pub struct CreateBatchResponse {
 }
 
 /// 解析Excel文件
-/// 
+///
 /// # 参数
 /// * `file_path` - Excel文件路径
 /// * `state` - 应用状态
-/// 
+///
 /// # 返回
 /// * `Result<ParseExcelResponse, String>` - 解析结果
 #[tauri::command]
@@ -65,12 +76,12 @@ pub async fn parse_excel_file(
     state: State<'_, AppState>
 ) -> Result<ParseExcelResponse, String> {
     info!("收到Excel文件解析请求: {}", file_path);
-    
+
     match ExcelImporter::parse_excel_file(&file_path).await {
         Ok(definitions) => {
             let total_count = definitions.len();
             info!("Excel文件解析成功，共解析{}个通道定义", total_count);
-            
+
             Ok(ParseExcelResponse {
                 success: true,
                 message: format!("成功解析{}个通道定义", total_count),
@@ -91,11 +102,11 @@ pub async fn parse_excel_file(
 }
 
 /// 创建测试批次
-/// 
+///
 /// # 参数
 /// * `batch_data` - 批次创建请求数据
 /// * `state` - 应用状态
-/// 
+///
 /// # 返回
 /// * `Result<CreateBatchResponse, String>` - 创建结果
 #[tauri::command]
@@ -103,16 +114,16 @@ pub async fn create_test_batch(
     batch_data: CreateBatchRequest,
     state: State<'_, AppState>
 ) -> Result<CreateBatchResponse, String> {
-    info!("收到创建测试批次请求: 产品型号={}, 序列号={}", 
-          batch_data.batch_info.product_model, 
+    info!("收到创建测试批次请求: 产品型号={}, 序列号={}",
+          batch_data.batch_info.product_model,
           batch_data.batch_info.serial_number);
-    
+
     // 创建测试批次信息
     let mut test_batch = TestBatchInfo::new(
         Some(batch_data.batch_info.product_model.clone()),
         Some(batch_data.batch_info.serial_number.clone()),
     );
-    
+
     // 设置可选信息
     test_batch.customer_name = batch_data.batch_info.customer_name.clone();
     test_batch.operator_name = batch_data.batch_info.operator_name.clone();
@@ -120,22 +131,22 @@ pub async fn create_test_batch(
     // 注释掉不存在的字段
     // test_batch.source_file_name = Some(batch_data.file_name.clone());
     // test_batch.source_file_path = Some(batch_data.file_path.clone());
-    
+
     // 获取持久化服务
     let persistence_service = &state.persistence_service;
-    
+
     // 保存批次信息
     match persistence_service.save_batch_info(&test_batch).await {
         Ok(_) => {
             info!("测试批次创建成功: {}", test_batch.batch_id);
-            
+
             // 将批次ID添加到当前会话跟踪中
             {
                 let mut session_batch_ids = state.session_batch_ids.lock().await;
                 session_batch_ids.insert(test_batch.batch_id.clone());
                 info!("批次 {} 已添加到当前会话跟踪", test_batch.batch_id);
             }
-            
+
             // 保存通道定义
             let mut saved_count = 0;
             for definition in &batch_data.preview_data {
@@ -146,9 +157,9 @@ pub async fn create_test_batch(
                     }
                 }
             }
-            
+
             info!("成功保存{}个通道定义", saved_count);
-            
+
             Ok(CreateBatchResponse {
                 success: true,
                 message: format!("成功创建测试批次，保存{}个通道定义", saved_count),
@@ -172,30 +183,30 @@ pub async fn get_batch_list(
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
     info!("获取批次列表");
-    
+
     let persistence_service = &state.persistence_service;
-    
+
     // 获取当前会话中的批次ID列表
     let session_batch_ids = {
         let session_batch_ids_guard = state.session_batch_ids.lock().await;
         session_batch_ids_guard.clone()
     };
-    
+
     info!("当前会话中有{}个批次", session_batch_ids.len());
-    
+
     // 如果当前会话中没有批次，直接返回空列表
     if session_batch_ids.is_empty() {
         info!("当前会话中没有可用的测试批次，用户需要先导入Excel文件");
         return Ok(vec![]);
     }
-    
+
     match persistence_service.load_all_batch_info().await {
         Ok(batches) => {
             // 只返回当前会话中创建的批次
             let current_session_batches: Vec<TestBatchInfo> = batches.into_iter()
                 .filter(|batch| session_batch_ids.contains(&batch.batch_id))
                 .collect();
-            
+
             info!("成功获取{}个当前会话批次", current_session_batches.len());
             Ok(current_session_batches)
         }
@@ -213,9 +224,9 @@ pub async fn get_batch_channel_definitions(
     state: State<'_, AppState>
 ) -> Result<Vec<ChannelPointDefinition>, String> {
     info!("获取批次{}的通道定义", batch_id);
-    
+
     let persistence_service = &state.persistence_service;
-    
+
     match persistence_service.load_all_channel_definitions().await {
         Ok(definitions) => {
             // 这里应该根据batch_id过滤，但目前的持久化服务接口还不支持
@@ -286,7 +297,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
     state: State<'_, AppState>
 ) -> Result<ImportAndPrepareBatchResponse, String> {
     info!("收到导入Excel并准备批次请求: {}", args.file_path_str);
-    
+
     // 1. 解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
         Ok(defs) => defs,
@@ -295,19 +306,19 @@ pub async fn import_excel_and_prepare_batch_cmd(
             return Err(format!("Excel文件解析失败: {}", e));
         }
     };
-    
+
     // 2. 创建测试批次
     let mut test_batch_info = TestBatchInfo::new(
         args.product_model.clone(),
         args.serial_number.clone(),
     );
     test_batch_info.total_points = definitions.len() as u32;
-    
+
     // 3. 保存批次信息
     match state.persistence_service.save_batch_info(&test_batch_info).await {
         Ok(_) => {
             info!("批次信息保存成功: {}", test_batch_info.batch_id);
-            
+
             // 将批次ID添加到当前会话跟踪中
             {
                 let mut session_batch_ids = state.session_batch_ids.lock().await;
@@ -320,7 +331,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
             return Err(format!("保存批次信息失败: {}", e));
         }
     }
-    
+
     // 4. 为每个定义创建测试实例
     let mut instances = Vec::new();
     for definition in &definitions {
@@ -328,7 +339,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
         if let Err(e) = state.persistence_service.save_channel_definition(definition).await {
             error!("保存通道定义失败: {} - {}", definition.tag, e);
         }
-        
+
         // 创建测试实例
         match state.channel_state_manager.create_test_instance(
             &definition.id,
@@ -346,9 +357,9 @@ pub async fn import_excel_and_prepare_batch_cmd(
             }
         }
     }
-    
+
     info!("成功创建批次，包含{}个测试实例", instances.len());
-    
+
     Ok(ImportAndPrepareBatchResponse {
         batch_info: test_batch_info,
         instances,
@@ -362,7 +373,7 @@ pub async fn start_tests_for_batch_cmd(
     state: State<'_, AppState>
 ) -> Result<(), String> {
     info!("开始批次测试: {}", args.batch_id);
-    
+
     state.test_coordination_service
         .start_batch_testing(&args.batch_id)
         .await
@@ -379,7 +390,7 @@ pub async fn get_batch_status_cmd(
     state: State<'_, AppState>
 ) -> Result<BatchDetailsPayload, String> {
     info!("获取批次状态: {}", batch_id);
-    
+
     // 获取批次信息
     let batch_info = match state.persistence_service.load_batch_info(&batch_id).await {
         Ok(Some(info)) => info,
@@ -389,7 +400,7 @@ pub async fn get_batch_status_cmd(
             return Err(format!("获取批次信息失败: {}", e));
         }
     };
-    
+
     // 获取测试实例
     let instances = match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
         Ok(instances) => instances,
@@ -398,14 +409,14 @@ pub async fn get_batch_status_cmd(
             return Err(format!("获取测试实例失败: {}", e));
         }
     };
-    
+
     // 计算进度信息
     let total_points = instances.len() as u32;
     let mut tested_points = 0;
     let mut passed_points = 0;
     let mut failed_points = 0;
     let mut skipped_points = 0;
-    
+
     for instance in &instances {
         match instance.overall_status {
             crate::models::OverallTestStatus::TestCompletedPassed => {
@@ -424,7 +435,7 @@ pub async fn get_batch_status_cmd(
             }
         }
     }
-    
+
     let progress = BatchProgressInfo {
         total_points,
         tested_points,
@@ -432,7 +443,7 @@ pub async fn get_batch_status_cmd(
         failed_points,
         skipped_points,
     };
-    
+
     Ok(BatchDetailsPayload {
         batch_info,
         instances,
@@ -472,7 +483,7 @@ pub async fn prepare_test_instances_for_batch_cmd(
     state: State<'_, AppState>
 ) -> Result<PrepareTestInstancesResponse, String> {
     info!("准备批次测试实例: 批次ID = {}", args.batch_id);
-    
+
     // 1. 验证批次是否存在
     let mut batch_info = match state.persistence_service.load_batch_info(&args.batch_id).await {
         Ok(Some(info)) => info,
@@ -482,7 +493,7 @@ pub async fn prepare_test_instances_for_batch_cmd(
             return Err(format!("获取批次信息失败: {}", e));
         }
     };
-    
+
     // 2. 获取要分配的通道定义
     let all_definitions = match state.persistence_service.load_all_channel_definitions().await {
         Ok(definitions) => definitions,
@@ -491,7 +502,7 @@ pub async fn prepare_test_instances_for_batch_cmd(
             return Err(format!("获取通道定义失败: {}", e));
         }
     };
-    
+
     // 3. 根据definition_ids过滤定义（如果提供了）
     let target_definitions = if let Some(ref definition_ids) = args.definition_ids {
         all_definitions.into_iter()
@@ -500,13 +511,13 @@ pub async fn prepare_test_instances_for_batch_cmd(
     } else {
         all_definitions
     };
-    
+
     if target_definitions.is_empty() {
         return Err("没有找到可用的通道定义进行分配".to_string());
     }
-    
+
     info!("找到 {} 个通道定义需要分配测试实例", target_definitions.len());
-    
+
     // 4. 检查是否已存在测试实例
     let existing_instances = match state.persistence_service.load_test_instances_by_batch(&args.batch_id).await {
         Ok(instances) => instances,
@@ -515,25 +526,25 @@ pub async fn prepare_test_instances_for_batch_cmd(
             Vec::new()
         }
     };
-    
+
     let existing_definition_ids: std::collections::HashSet<String> = existing_instances
         .iter()
         .map(|instance| instance.definition_id.clone())
         .collect();
-    
+
     // 5. 为每个定义创建测试实例（跳过已存在的）
     let mut instances = existing_instances;
     let mut allocation_errors = Vec::new();
     let mut allocated_count = 0;
     let mut skipped_count = 0;
-    
+
     for definition in &target_definitions {
         if existing_definition_ids.contains(&definition.id) {
             info!("跳过已存在的测试实例: 定义ID = {}", definition.id);
             skipped_count += 1;
             continue;
         }
-        
+
         // 使用通道状态管理器创建测试实例
         match state.channel_state_manager.create_test_instance(
             &definition.id,
@@ -558,16 +569,16 @@ pub async fn prepare_test_instances_for_batch_cmd(
             }
         }
     }
-    
+
     // 6. 更新批次信息
     batch_info.total_points = instances.len() as u32;
     batch_info.last_updated_time = chrono::Utc::now();
-    
+
     // 保存更新后的批次信息
     if let Err(e) = state.persistence_service.save_batch_info(&batch_info).await {
         warn!("更新批次信息失败: {}", e);
     }
-    
+
     // 7. 构建分配摘要
     let allocation_summary = AllocationSummary {
         total_definitions: target_definitions.len() as u32,
@@ -575,13 +586,13 @@ pub async fn prepare_test_instances_for_batch_cmd(
         skipped_definitions: skipped_count,
         allocation_errors,
     };
-    
-    info!("批次测试实例准备完成: 总定义数={}, 新分配={}, 跳过={}, 错误数={}", 
+
+    info!("批次测试实例准备完成: 总定义数={}, 新分配={}, 跳过={}, 错误数={}",
           allocation_summary.total_definitions,
           allocation_summary.allocated_instances,
           allocation_summary.skipped_definitions,
           allocation_summary.allocation_errors.len());
-    
+
     Ok(PrepareTestInstancesResponse {
         batch_info,
         instances,
@@ -597,9 +608,10 @@ pub async fn import_excel_and_allocate_channels_cmd(
     file_path: String,
     product_model: Option<String>,
     serial_number: Option<String>,
-) -> Result<crate::services::BatchAllocationResult, String> {
+    state: State<'_, AppState>
+) -> Result<AllocationResult, String> {
     log::info!("开始导入Excel文件并分配通道: {}", file_path);
-    
+
     // 1. 解析Excel文件
     let excel_response = match ExcelImporter::parse_excel_file(&file_path).await {
         Ok(definitions) => definitions,
@@ -608,38 +620,52 @@ pub async fn import_excel_and_allocate_channels_cmd(
             return Err(format!("Excel文件解析失败: {}", e));
         }
     };
-    
+
     // 2. 转换为通道定义
     let definitions = excel_response;
-    
+
     log::info!("成功转换 {} 个通道定义", definitions.len());
-    
+
     // 3. 创建默认测试PLC配置
     let test_plc_config = create_default_test_plc_config().await?;
-    
+
     // 4. 执行通道分配
-    let allocation_service = crate::services::ChannelAllocationService::new();
+    let persistence_service = &state.persistence_service;
+    let db_conn = persistence_service.get_database_connection();
+    let allocation_service = crate::services::application::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
+
     let result = allocation_service
-        .allocate_channels(definitions, test_plc_config, product_model, serial_number)
+        .create_test_batch(
+            "自动分配批次".to_string(),
+            product_model,
+            None, // operator_name
+            crate::services::application::batch_allocation_service::AllocationStrategy::Smart,
+            None, // filter_criteria
+        )
         .await
         .map_err(|e| e.to_string())?;
-    
+
     log::info!(
-        "通道分配完成，生成 {} 个批次，{} 个实例",
-        result.batches.len(),
-        result.allocated_instances.len()
+        "通道分配完成，生成批次: {}，{} 个实例",
+        result.batch_info.batch_name,
+        result.test_instances.len()
     );
-    
-    Ok(result)
+
+    // 转换为期望的返回格式
+    Ok(AllocationResult {
+        batches: vec![result.batch_info],
+        allocated_instances: result.test_instances,
+        allocation_summary: result.allocation_summary,
+    })
 }
 
 /// 创建默认测试PLC配置的辅助函数
 async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConfig, String> {
     log::info!("创建默认测试PLC配置 - 基于正确分配数据的映射规则");
     let mut comparison_tables = Vec::new();
-    
+
     // ===== 根据correct_allocation_data.json的正确分配规则创建测试PLC通道映射 =====
-    
+
     // ===== AI测试需要的AO通道 =====
     // AI有源 → AO无源 (AO1_X)
     for channel in 1..=8 {
@@ -650,7 +676,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: false, // AO无源，用于测试AI有源
         });
     }
-    
+
     // AI无源 → AO有源 (AO2_X)
     for channel in 1..=8 {
         comparison_tables.push(crate::services::ComparisonTable {
@@ -660,7 +686,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: true, // AO有源，用于测试AI无源
         });
     }
-    
+
     // ===== AO测试需要的AI通道 =====
     // AO无源 → AI有源 (AI1_X)
     for channel in 1..=8 {
@@ -671,9 +697,9 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: true, // AI有源，用于测试AO无源
         });
     }
-    
+
     // AO有源 → AI无源 (AI2_X) - 暂时不需要，因为在正确数据中AO有源数量很少
-    
+
     // ===== DI测试需要的DO通道 =====
     // DI有源 → DO无源 (DO1_X)
     for channel in 1..=16 {
@@ -684,7 +710,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: false, // DO无源，用于测试DI有源
         });
     }
-    
+
     // DI无源 → DO有源 (DO2_X)
     for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
@@ -694,7 +720,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: true, // DO有源，用于测试DI无源
         });
     }
-    
+
     // ===== DO测试需要的DI通道 =====
     // DO有源 → DI无源 (DI1_X)
     for channel in 1..=16 {
@@ -705,7 +731,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: false, // DI无源，用于测试DO有源
         });
     }
-    
+
     // DO无源 → DI有源 (DI2_X)
     for channel in 1..=16 {
         comparison_tables.push(crate::services::ComparisonTable {
@@ -715,7 +741,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
             is_powered: true, // DI有源，用于测试DO无源
         });
     }
-    
+
     log::info!("创建默认测试PLC配置完成，总通道数: {}", comparison_tables.len());
     log::info!("通道分布详情:");
     log::info!("  AO无源(测试AI有源): {} 个 -> {}", 8, "AO1_1..AO1_8");
@@ -725,7 +751,7 @@ async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConf
     log::info!("  DO有源(测试DI无源): {} 个 -> {}", 16, "DO2_1..DO2_16");
     log::info!("  DI无源(测试DO有源): {} 个 -> {}", 16, "DI1_1..DI1_16");
     log::info!("  DI有源(测试DO无源): {} 个 -> {}", 16, "DI2_1..DI2_16");
-    
+
     Ok(crate::services::TestPlcConfig {
         brand_type: "Micro850".to_string(),
         ip_address: "127.0.0.1".to_string(),
@@ -751,13 +777,13 @@ pub struct ParseExcelWithoutPersistenceResponse {
 }
 
 /// 解析Excel文件但不持久化数据
-/// 
+///
 /// 这个命令只解析Excel文件，将结果返回给前端，
 /// 不会将数据保存到数据库中。数据只有在用户明确开始测试时才会持久化。
-/// 
+///
 /// # 参数
 /// * `args` - 包含文件路径和文件名的参数
-/// 
+///
 /// # 返回
 /// * `Result<ParseExcelWithoutPersistenceResponse, String>` - 解析结果（不持久化）
 #[tauri::command]
@@ -765,7 +791,7 @@ pub async fn parse_excel_without_persistence_cmd(
     args: ParseExcelAndCreateBatchCmdArgs,
 ) -> Result<ParseExcelWithoutPersistenceResponse, String> {
     info!("收到解析Excel文件请求（不持久化）: 文件={}, 路径={}", args.file_name, args.file_path);
-    
+
     // 解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path).await {
         Ok(defs) => {
@@ -783,7 +809,7 @@ pub async fn parse_excel_without_persistence_cmd(
             });
         }
     };
-    
+
     if definitions.is_empty() {
         warn!("Excel文件中没有找到有效的通道定义");
         return Ok(ParseExcelWithoutPersistenceResponse {
@@ -794,20 +820,20 @@ pub async fn parse_excel_without_persistence_cmd(
             suggested_batch_info: TestBatchInfo::new(None, None),
         });
     }
-    
+
     // 创建建议的批次信息（不保存）
     let mut suggested_batch = TestBatchInfo::new(
         Some("自动导入".to_string()), // 默认产品型号
         None, // 序列号留空，用户可以后续修改
     );
-    
+
     // 设置批次信息
     suggested_batch.total_points = definitions.len() as u32;
     suggested_batch.batch_name = format!("从{}导入", args.file_name);
-    
+
     let definitions_count = definitions.len();
     info!("Excel解析完成，返回{}个通道定义（未持久化）", definitions_count);
-    
+
     Ok(ParseExcelWithoutPersistenceResponse {
         success: true,
         message: format!("成功解析{}个通道定义，数据未持久化", definitions_count),
@@ -828,14 +854,14 @@ pub struct ParseExcelAndCreateBatchResponse {
 }
 
 /// 解析Excel文件并自动创建批次
-/// 
+///
 /// 这个命令将Excel解析和批次创建合并为一个操作，
 /// 简化前端的调用流程
-/// 
+///
 /// # 参数
 /// * `args` - 包含文件路径和文件名的参数
 /// * `state` - 应用状态
-/// 
+///
 /// # 返回
 /// * `Result<ParseExcelAndCreateBatchResponse, String>` - 操作结果
 #[tauri::command]
@@ -844,7 +870,7 @@ pub async fn parse_excel_and_create_batch_cmd(
     state: State<'_, AppState>
 ) -> Result<ParseExcelAndCreateBatchResponse, String> {
     info!("收到解析Excel并创建批次请求: 文件={}, 路径={}", args.file_name, args.file_path);
-    
+
     // 第一步：解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path).await {
         Ok(defs) => {
@@ -862,7 +888,7 @@ pub async fn parse_excel_and_create_batch_cmd(
             });
         }
     };
-    
+
     if definitions.is_empty() {
         warn!("Excel文件中没有找到有效的通道定义");
         return Ok(ParseExcelAndCreateBatchResponse {
@@ -873,25 +899,25 @@ pub async fn parse_excel_and_create_batch_cmd(
             batch_info: None,
         });
     }
-    
+
     // 第二步：创建测试批次
     let mut test_batch = TestBatchInfo::new(
         Some("自动导入".to_string()), // 默认产品型号
         None, // 序列号留空，用户可以后续修改
     );
-    
+
     // 设置批次信息
     test_batch.total_points = definitions.len() as u32;
     test_batch.batch_name = format!("从{}导入", args.file_name);
-    
+
     // 获取持久化服务
     let persistence_service = &state.persistence_service;
-    
+
     // 第三步：保存批次信息
     match persistence_service.save_batch_info(&test_batch).await {
         Ok(_) => {
             info!("测试批次创建成功: {}", test_batch.batch_id);
-            
+
             // 将批次ID添加到当前会话跟踪中
             {
                 let mut session_batch_ids = state.session_batch_ids.lock().await;
@@ -910,11 +936,11 @@ pub async fn parse_excel_and_create_batch_cmd(
             });
         }
     }
-    
+
     // 第四步：保存通道定义
     let mut saved_count = 0;
     let mut errors = Vec::new();
-    
+
     for definition in &definitions {
         match persistence_service.save_channel_definition(definition).await {
             Ok(_) => saved_count += 1,
@@ -925,7 +951,7 @@ pub async fn parse_excel_and_create_batch_cmd(
             }
         }
     }
-    
+
     // 第五步：返回结果
     let success = saved_count > 0;
     let message = if success {
@@ -937,9 +963,9 @@ pub async fn parse_excel_and_create_batch_cmd(
     } else {
         format!("批次创建失败，无法保存任何通道定义。错误: {}", errors.join("; "))
     };
-    
+
     info!("{}", message);
-    
+
     Ok(ParseExcelAndCreateBatchResponse {
         success,
         message,
@@ -950,7 +976,7 @@ pub async fn parse_excel_and_create_batch_cmd(
 }
 
 /// 清理当前会话数据
-/// 
+///
 /// 这个命令会清除当前会话中创建的所有批次数据，
 /// 确保测试区域回到初始状态
 #[tauri::command]
@@ -958,7 +984,7 @@ pub async fn clear_session_data(
     state: State<'_, AppState>
 ) -> Result<String, String> {
     info!("收到清理会话数据请求");
-    
+
     // 获取当前会话中的批次ID列表
     let session_batch_ids = {
         let mut session_batch_ids_guard = state.session_batch_ids.lock().await;
@@ -966,18 +992,18 @@ pub async fn clear_session_data(
         session_batch_ids_guard.clear(); // 清空会话跟踪
         ids
     };
-    
+
     if session_batch_ids.is_empty() {
         info!("当前会话中没有需要清理的数据");
         return Ok("当前会话中没有需要清理的数据".to_string());
     }
-    
+
     info!("开始清理{}个批次的数据", session_batch_ids.len());
-    
+
     let persistence_service = &state.persistence_service;
     let mut cleaned_count = 0;
     let mut errors = Vec::new();
-    
+
     // 删除每个批次及其相关数据
     for batch_id in &session_batch_ids {
         // 删除批次的测试实例
@@ -993,7 +1019,7 @@ pub async fn clear_session_data(
                 errors.push(format!("加载批次{}的测试实例失败: {}", batch_id, e));
             }
         }
-        
+
         // 删除批次信息
         match persistence_service.delete_batch_info(batch_id).await {
             Ok(_) => {
@@ -1005,13 +1031,13 @@ pub async fn clear_session_data(
             }
         }
     }
-    
+
     let message = if errors.is_empty() {
         format!("成功清理{}个批次的会话数据", cleaned_count)
     } else {
         format!("清理完成，成功删除{}个批次，{}个操作失败", cleaned_count, errors.len())
     };
-    
+
     info!("{}", message);
     Ok(message)
 }
@@ -1036,16 +1062,16 @@ pub struct CreateBatchAndPersistDataResponse {
 }
 
 /// 创建批次并持久化数据
-/// 
+///
 /// 这个命令在用户明确开始测试时被调用，
 /// 将之前解析的Excel数据持久化到数据库中
-/// 
+///
 /// ⚠️ 修复：现在使用通道分配服务来正确生成多个批次
-/// 
+///
 /// # 参数
 /// * `request` - 包含批次信息和通道定义的请求
 /// * `state` - 应用状态
-/// 
+///
 /// # 返回
 /// * `Result<CreateBatchAndPersistDataResponse, String>` - 持久化结果
 #[tauri::command]
@@ -1053,17 +1079,17 @@ pub async fn create_batch_and_persist_data_cmd(
     request: CreateBatchAndPersistDataRequest,
     state: State<'_, AppState>
 ) -> Result<CreateBatchAndPersistDataResponse, String> {
-    info!("收到创建批次并持久化数据请求: 批次ID={}, 定义数量={}", 
+    info!("收到创建批次并持久化数据请求: 批次ID={}, 定义数量={}",
           request.batch_info.batch_id, request.definitions.len());
-    
+
     // ===== 使用通道分配服务进行正确的批次分配 =====
     log::info!("[CreateBatchData] ===== 开始使用通道分配服务 =====");
     log::info!("[CreateBatchData] 输入: {} 个通道定义", request.definitions.len());
-    
+
     // ===== 修复：从数据库获取真实的测试PLC配置 =====
     let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
         Ok(config) => {
-            log::info!("[CreateBatchData] 成功获取数据库中的测试PLC配置: {} 个通道映射", 
+            log::info!("[CreateBatchData] 成功获取数据库中的测试PLC配置: {} 个通道映射",
                 config.comparison_tables.len());
             config
         }
@@ -1086,21 +1112,31 @@ pub async fn create_batch_and_persist_data_cmd(
             }
         }
     };
-    
+
     // 调用通道分配服务
-    let allocation_result = match state.channel_allocation_service
-        .allocate_channels(
-            request.definitions.clone(),
-            test_plc_config,
+    let persistence_service = &state.persistence_service;
+    let db_conn = persistence_service.get_database_connection();
+    let allocation_service = crate::services::application::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
+
+    let allocation_result = match allocation_service
+        .create_test_batch(
+            request.batch_info.batch_name.clone(),
             request.batch_info.product_model.clone(),
-            request.batch_info.serial_number.clone(),
+            request.batch_info.operator_name.clone(),
+            crate::services::application::batch_allocation_service::AllocationStrategy::Smart,
+            None, // filter_criteria
         )
         .await
     {
         Ok(result) => {
-            log::info!("[CreateBatchData] 通道分配成功: {} 个批次, {} 个实例", 
-                result.batches.len(), result.allocated_instances.len());
-            result
+            log::info!("[CreateBatchData] 通道分配成功: 批次 {}, {} 个实例",
+                result.batch_info.batch_name, result.test_instances.len());
+            // 转换为期望的格式
+            AllocationResult {
+                batches: vec![result.batch_info],
+                allocated_instances: result.test_instances,
+                allocation_summary: result.allocation_summary,
+            }
         }
         Err(e) => {
             error!("通道分配失败: {}", e);
@@ -1114,9 +1150,9 @@ pub async fn create_batch_and_persist_data_cmd(
             });
         }
     };
-    
+
     let persistence_service = &state.persistence_service;
-    
+
     // 第一步：保存所有生成的批次信息
     let mut saved_batches_count = 0;
     for batch in &allocation_result.batches {
@@ -1124,7 +1160,7 @@ pub async fn create_batch_and_persist_data_cmd(
             Ok(_) => {
                 log::info!("[CreateBatchData] 成功保存批次: {} ({})", batch.batch_name, batch.batch_id);
                 saved_batches_count += 1;
-                
+
                 // 将批次ID添加到当前会话跟踪中
                 {
                     let mut session_batch_ids = state.session_batch_ids.lock().await;
@@ -1136,11 +1172,11 @@ pub async fn create_batch_and_persist_data_cmd(
             }
         }
     }
-    
+
     // 第二步：保存通道定义
     let mut saved_definitions_count = 0;
     let mut definition_errors = Vec::new();
-    
+
     for definition in &request.definitions {
         match persistence_service.save_channel_definition(definition).await {
             Ok(_) => saved_definitions_count += 1,
@@ -1151,11 +1187,11 @@ pub async fn create_batch_and_persist_data_cmd(
             }
         }
     }
-    
+
     // 第三步：保存分配的测试实例
     let mut created_instances_count = 0;
     let mut instance_errors = Vec::new();
-    
+
     for instance in &allocation_result.allocated_instances {
         match persistence_service.save_test_instance(instance).await {
             Ok(_) => created_instances_count += 1,
@@ -1166,42 +1202,228 @@ pub async fn create_batch_and_persist_data_cmd(
             }
         }
     }
-    
+
     // 第四步：生成结果消息
     let all_errors = [definition_errors, instance_errors].concat();
     let success = saved_batches_count > 0 && saved_definitions_count > 0 && created_instances_count > 0;
-    
+
     let message = if success {
         if all_errors.is_empty() {
-            format!("成功创建{}个批次，持久化{}个通道定义，创建{}个测试实例", 
+            format!("成功创建{}个批次，持久化{}个通道定义，创建{}个测试实例",
                    saved_batches_count, saved_definitions_count, created_instances_count)
         } else {
-            format!("批次创建成功，生成{}个批次，保存{}个通道定义，创建{}个测试实例，{}个操作失败", 
+            format!("批次创建成功，生成{}个批次，保存{}个通道定义，创建{}个测试实例，{}个操作失败",
                    saved_batches_count, saved_definitions_count, created_instances_count, all_errors.len())
         }
     } else {
         format!("批次创建失败。错误: {}", all_errors.join("; "))
     };
-    
+
     info!("{}", message);
-    
+
     // 详细记录所有生成的批次
     log::info!("[CreateBatchData] ===== 批次分配完成 =====");
     for (i, batch) in allocation_result.batches.iter().enumerate() {
-        log::info!("[CreateBatchData] 批次{}: ID={}, 名称={}, 点位数={}", 
+        log::info!("[CreateBatchData] 批次{}: ID={}, 名称={}, 点位数={}",
             i + 1, batch.batch_id, batch.batch_name, batch.total_points);
     }
-    
+
     Ok(CreateBatchAndPersistDataResponse {
         success,
         message,
-        batch_id: if success { 
-            allocation_result.batches.first().map(|b| b.batch_id.clone()) 
-        } else { 
-            None 
+        batch_id: if success {
+            allocation_result.batches.first().map(|b| b.batch_id.clone())
+        } else {
+            None
         },
         all_batches: allocation_result.batches,
         saved_definitions_count,
         created_instances_count,
     })
-} 
+}
+
+// ============================================================================
+// 新的重构后的命令 - 使用重构后的服务
+// ============================================================================
+
+/// 导入Excel文件到数据库
+#[tauri::command]
+pub async fn import_excel_to_database_cmd(
+    file_path: String,
+    replace_existing: bool,
+    state: State<'_, AppState>
+) -> Result<ImportResult, String> {
+    info!("收到Excel导入数据库请求: {}", file_path);
+
+    // 从持久化服务获取数据库连接
+    let db = state.persistence_service.get_database_connection();
+    let import_service = DataImportService::new(Arc::new(db.clone()));
+
+    match import_service.import_from_excel(&file_path, replace_existing).await {
+        Ok(result) => {
+            info!("Excel导入完成: 成功{}个，失败{}个", result.successful_imports, result.failed_imports);
+            Ok(result)
+        }
+        Err(e) => {
+            error!("Excel导入失败: {:?}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 创建测试批次并分配通道
+#[tauri::command]
+pub async fn create_test_batch_with_allocation_cmd(
+    batch_name: String,
+    product_model: Option<String>,
+    operator_name: Option<String>,
+    strategy: String, // "ByModuleType", "ByStation", "Smart"
+    filter_criteria: Option<HashMap<String, String>>,
+    state: State<'_, AppState>
+) -> Result<AllocationResult, String> {
+    info!("收到创建测试批次请求: {}", batch_name);
+
+    // 解析分配策略
+    let allocation_strategy = match strategy.as_str() {
+        "ByModuleType" => AllocationStrategy::ByModuleType,
+        "ByStation" => AllocationStrategy::ByStation,
+        "ByProductModel" => AllocationStrategy::ByProductModel,
+        "Smart" => AllocationStrategy::Smart,
+        _ => AllocationStrategy::Smart, // 默认使用智能分配
+    };
+
+    let db = state.persistence_service.get_database_connection();
+    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+
+    match allocation_service.create_test_batch(
+        batch_name,
+        product_model,
+        operator_name,
+        allocation_strategy,
+        filter_criteria,
+    ).await {
+        Ok(result) => {
+            info!("测试批次创建完成: {} - {}个通道",
+                  result.batch_info.batch_name,
+                  result.allocation_summary.total_channels);
+            // 转换为命令层的 AllocationResult
+            Ok(AllocationResult {
+                batches: vec![result.batch_info],
+                allocated_instances: result.test_instances,
+                allocation_summary: result.allocation_summary,
+            })
+        }
+        Err(e) => {
+            error!("创建测试批次失败: {:?}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 获取数据库中的通道定义总数
+#[tauri::command]
+pub async fn get_channel_definitions_count_cmd(
+    state: State<'_, AppState>
+) -> Result<u64, String> {
+    let db = state.persistence_service.get_database_connection();
+    let import_service = DataImportService::new(Arc::new(db.clone()));
+
+    match import_service.get_total_count().await {
+        Ok(count) => Ok(count),
+        Err(e) => {
+            error!("获取通道定义总数失败: {:?}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 清空所有通道定义数据
+#[tauri::command]
+pub async fn clear_all_channel_definitions_cmd(
+    state: State<'_, AppState>
+) -> Result<u64, String> {
+    warn!("收到清空所有通道定义数据请求");
+
+    let db = state.persistence_service.get_database_connection();
+    let import_service = DataImportService::new(Arc::new(db.clone()));
+
+    match import_service.clear_all_data().await {
+        Ok(deleted_count) => {
+            info!("成功清空{}条通道定义数据", deleted_count);
+            Ok(deleted_count)
+        }
+        Err(e) => {
+            error!("清空通道定义数据失败: {:?}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 一键导入Excel并创建批次
+#[tauri::command]
+pub async fn import_excel_and_create_batch_cmd(
+    file_path: String,
+    batch_name: String,
+    product_model: Option<String>,
+    operator_name: Option<String>,
+    replace_existing: bool,
+    allocation_strategy: String,
+    state: State<'_, AppState>
+) -> Result<(ImportResult, AllocationResult), String> {
+    info!("收到一键导入Excel并创建批次请求: {}", file_path);
+
+    // 第一步：导入Excel数据
+    let db = state.persistence_service.get_database_connection();
+    let import_service = DataImportService::new(Arc::new(db.clone()));
+    let import_result = match import_service.import_from_excel(&file_path, replace_existing).await {
+        Ok(result) => {
+            info!("Excel导入完成: 成功{}个，失败{}个", result.successful_imports, result.failed_imports);
+            result
+        }
+        Err(e) => {
+            error!("Excel导入失败: {:?}", e);
+            return Err(e.to_string());
+        }
+    };
+
+    // 如果导入失败，直接返回
+    if !import_result.is_successful() {
+        return Err("Excel导入失败，无法创建批次".to_string());
+    }
+
+    // 第二步：创建测试批次
+    let strategy = match allocation_strategy.as_str() {
+        "ByModuleType" => AllocationStrategy::ByModuleType,
+        "ByStation" => AllocationStrategy::ByStation,
+        "ByProductModel" => AllocationStrategy::ByProductModel,
+        "Smart" => AllocationStrategy::Smart,
+        _ => AllocationStrategy::Smart,
+    };
+
+    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+    let allocation_result = match allocation_service.create_test_batch(
+        batch_name,
+        product_model,
+        operator_name,
+        strategy,
+        None, // 不使用过滤条件，使用所有导入的数据
+    ).await {
+        Ok(result) => {
+            info!("测试批次创建完成: {} - {}个通道",
+                  result.batch_info.batch_name,
+                  result.allocation_summary.total_channels);
+            // 转换为命令层的 AllocationResult
+            AllocationResult {
+                batches: vec![result.batch_info],
+                allocated_instances: result.test_instances,
+                allocation_summary: result.allocation_summary,
+            }
+        }
+        Err(e) => {
+            error!("创建测试批次失败: {:?}", e);
+            return Err(e.to_string());
+        }
+    };
+
+    Ok((import_result, allocation_result))
+}

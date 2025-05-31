@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 /// 整体测试状态枚举
 /// 表示一个通道测试实例的总体状态
@@ -33,6 +35,48 @@ pub enum OverallTestStatus {
 impl Default for OverallTestStatus {
     fn default() -> Self {
         Self::NotTested
+    }
+}
+
+impl Display for OverallTestStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            OverallTestStatus::NotTested => "NotTested",
+            OverallTestStatus::Skipped => "Skipped",
+            OverallTestStatus::WiringConfirmationRequired => "WiringConfirmationRequired",
+            OverallTestStatus::WiringConfirmed => "WiringConfirmed",
+            OverallTestStatus::HardPointTestInProgress => "HardPointTestInProgress",
+            OverallTestStatus::HardPointTesting => "HardPointTesting",
+            OverallTestStatus::HardPointTestCompleted => "HardPointTestCompleted",
+            OverallTestStatus::ManualTestInProgress => "ManualTestInProgress",
+            OverallTestStatus::ManualTesting => "ManualTesting",
+            OverallTestStatus::TestCompletedPassed => "TestCompletedPassed",
+            OverallTestStatus::TestCompletedFailed => "TestCompletedFailed",
+            OverallTestStatus::Retesting => "Retesting",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for OverallTestStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "NotTested" => Ok(OverallTestStatus::NotTested),
+            "Skipped" => Ok(OverallTestStatus::Skipped),
+            "WiringConfirmationRequired" => Ok(OverallTestStatus::WiringConfirmationRequired),
+            "WiringConfirmed" => Ok(OverallTestStatus::WiringConfirmed),
+            "HardPointTestInProgress" => Ok(OverallTestStatus::HardPointTestInProgress),
+            "HardPointTesting" => Ok(OverallTestStatus::HardPointTesting),
+            "HardPointTestCompleted" => Ok(OverallTestStatus::HardPointTestCompleted),
+            "ManualTestInProgress" => Ok(OverallTestStatus::ManualTestInProgress),
+            "ManualTesting" => Ok(OverallTestStatus::ManualTesting),
+            "TestCompletedPassed" => Ok(OverallTestStatus::TestCompletedPassed),
+            "TestCompletedFailed" => Ok(OverallTestStatus::TestCompletedFailed),
+            "Retesting" => Ok(OverallTestStatus::Retesting),
+            _ => Err(format!("Invalid OverallTestStatus: {}", s)),
+        }
     }
 }
 
@@ -92,6 +136,43 @@ impl Default for ModuleType {
     }
 }
 
+impl Display for ModuleType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ModuleType::AI => "AI",
+            ModuleType::AO => "AO",
+            ModuleType::DI => "DI",
+            ModuleType::DO => "DO",
+            ModuleType::AINone => "AINone",
+            ModuleType::AONone => "AONone",
+            ModuleType::DINone => "DINone",
+            ModuleType::DONone => "DONone",
+            ModuleType::Communication => "Communication",
+            ModuleType::Other(s) => s,
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for ModuleType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "AI" => Ok(ModuleType::AI),
+            "AO" => Ok(ModuleType::AO),
+            "DI" => Ok(ModuleType::DI),
+            "DO" => Ok(ModuleType::DO),
+            "AINone" => Ok(ModuleType::AINone),
+            "AONone" => Ok(ModuleType::AONone),
+            "DINone" => Ok(ModuleType::DINone),
+            "DONone" => Ok(ModuleType::DONone),
+            "Communication" => Ok(ModuleType::Communication),
+            _ => Ok(ModuleType::Other(s.to_string())),
+        }
+    }
+}
+
 /// 点位数据类型枚举
 /// 表示PLC点位的数据类型
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +203,42 @@ impl Default for PointDataType {
     }
 }
 
+impl Display for PointDataType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            PointDataType::Bool => "Bool",
+            PointDataType::Float => "Float",
+            PointDataType::Int => "Int",
+            PointDataType::String => "String",
+            PointDataType::Double => "Double",
+            PointDataType::Int16 => "Int16",
+            PointDataType::Int32 => "Int32",
+            PointDataType::UInt16 => "UInt16",
+            PointDataType::UInt32 => "UInt32",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for PointDataType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Bool" => Ok(PointDataType::Bool),
+            "Float" | "Real" => Ok(PointDataType::Float),
+            "Int" => Ok(PointDataType::Int),
+            "String" => Ok(PointDataType::String),
+            "Double" => Ok(PointDataType::Double),
+            "Int16" => Ok(PointDataType::Int16),
+            "Int32" => Ok(PointDataType::Int32),
+            "UInt16" => Ok(PointDataType::UInt16),
+            "UInt32" => Ok(PointDataType::UInt32),
+            _ => Err(format!("Invalid PointDataType: {}", s)),
+        }
+    }
+}
+
 /// 子测试项枚举
 /// 对应原ChannelMapping.cs中的各种子测试项
 /// 使用Eq和Hash特征以便作为HashMap的键使用
@@ -140,7 +257,7 @@ pub enum SubTestItem {
     Report,
     /// 维护功能测试（AI/AO模块）
     Maintenance,
-    
+
     // AI模块特有测试项
     /// 低低报警测试
     LowLowAlarm,
@@ -170,11 +287,11 @@ pub enum SubTestItem {
     Output75Percent,
     /// 输出100%测试
     Output100Percent,
-    
+
     // 通信测试项
     /// 通信连接测试
     CommunicationTest,
-    
+
     // 自定义测试项（支持扩展）
     Custom(String),
 }
@@ -205,4 +322,4 @@ impl Default for LogLevel {
     fn default() -> Self {
         Self::Info
     }
-} 
+}

@@ -10,6 +10,9 @@ pub mod persistence;
 /// Excel文件处理相关模块
 pub mod excel;
 
+/// 事件发布相关模块
+pub mod event_publisher;
+
 // 为后续步骤准备的模块（暂时注释）
 // pub mod excel;
 
@@ -48,6 +51,11 @@ pub use excel::{
     ExcelImporter,
 };
 
+// 重新导出事件发布相关服务
+pub use event_publisher::{
+    SimpleEventPublisher,
+};
+
 // 或者更明确地导出需要的类型，例如：
 // pub use plc::plc_communication_service::IPlcCommunicationService;
 // pub use plc::mock_plc_service::MockPlcService;
@@ -57,4 +65,4 @@ pub use excel::{
 
 // 暂时先不 re-export，让调用方使用完整路径，或者只导出模块
 // pub use plc; // 移除或改为 pub use plc::SpecificType;
-// pub use persistence; // 移除或改为 pub use persistence::SpecificType; 
+// pub use persistence; // 移除或改为 pub use persistence::SpecificType;

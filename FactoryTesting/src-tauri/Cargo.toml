@@ -62,6 +62,10 @@ bcrypt = "0.15"
 # 配置管理依赖
 config = "0.14"
 
+# 随机数生成（用于Mock）
+rand = "0.8"
+
 [dev-dependencies]
 tempfile = "3.0"
 mockall = "0.12"
+tokio-test = "0.4"
