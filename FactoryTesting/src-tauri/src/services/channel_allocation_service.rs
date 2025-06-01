@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::models::{
     ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, ModuleType, OverallTestStatus
 };
+use crate::models::test_plc_config::TestPlcChannelConfig;
 use crate::error::AppError;
 use chrono::Utc;
 
@@ -178,6 +179,8 @@ impl ChannelAllocationService {
         allocation_sequence.extend(channel_groups.ai_powered_true.clone());
         // AI无源 → AO有源
         allocation_sequence.extend(channel_groups.ai_powered_false.clone());
+        // AO有源 → AI无源
+        allocation_sequence.extend(channel_groups.ao_powered_true.clone());
         // AO无源 → AI有源
         allocation_sequence.extend(channel_groups.ao_powered_false.clone());
         // DI有源 → DO无源
@@ -192,6 +195,7 @@ impl ChannelAllocationService {
         log::info!("=== 分配序列统计 ===");
         log::info!("AI有源→AO无源: {} 个通道", channel_groups.ai_powered_true.len());
         log::info!("AI无源→AO有源: {} 个通道", channel_groups.ai_powered_false.len());
+        log::info!("AO有源→AI无源: {} 个通道", channel_groups.ao_powered_true.len());
         log::info!("AO无源→AI有源: {} 个通道", channel_groups.ao_powered_false.len());
         log::info!("DI有源→DO无源: {} 个通道", channel_groups.di_powered_true.len());
         log::info!("DI无源→DO有源: {} 个通道", channel_groups.di_powered_false.len());
@@ -199,10 +203,7 @@ impl ChannelAllocationService {
         log::info!("DO无源→DI有源: {} 个通道", channel_groups.do_powered_false.len());
         log::info!("总计: {} 个通道需要分配", allocation_sequence.len());
 
-        // 步骤4: 创建测试PLC通道池
-        let mut test_channel_pools = self.create_test_channel_pools(&test_plc_config);
-
-        // 步骤5: 执行正确的批次分配
+        // 步骤4: 执行正确的批次分配（每个批次重新使用完整的测试PLC通道池）
         let mut batches = Vec::new();
         let mut all_instances = Vec::new();
         let mut remaining_channels = allocation_sequence;
@@ -212,11 +213,11 @@ impl ChannelAllocationService {
             log::info!("=== 开始分配批次{} ===", batch_counter);
             log::info!("剩余待分配通道数: {}", remaining_channels.len());
 
-            // 每个批次开始时重新创建完整的测试PLC通道池（支持通道重用）
+            // 每个批次重新创建完整的测试PLC通道池（支持通道复用）
             let mut fresh_test_channel_pools = self.create_test_channel_pools(&test_plc_config);
 
             // 为当前批次分配通道
-            let (batch_instances, used_channels) = self.allocate_single_batch(
+            let (batch_instances, used_channels) = self.allocate_single_batch_with_capacity_limit(
                 &remaining_channels,
                 &mut fresh_test_channel_pools,
                 batch_counter,
@@ -284,8 +285,8 @@ impl ChannelAllocationService {
 
         // 设置每批次最大通道数限制 - 根据测试PLC的实际容量和分批策略
         // 测试PLC总容量：AI:8 + AO:16 + DI:32 + DO:32 = 88个通道
-        // 但为了避免测试PLC通道冲突，我们需要智能分批
-        const MAX_CHANNELS_PER_BATCH: usize = 60; // 降低每批次限制，促进分批
+        // 修复：提高每批次限制以支持88个通道的完整分配
+        const MAX_CHANNELS_PER_BATCH: usize = 88; // 支持完整的88个通道分配
 
         // 为当前批次生成统一的批次ID
         let batch_id = format!("{}_batch_{}", uuid::Uuid::new_v4().to_string(), batch_number);
@@ -354,7 +355,32 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
         }
 
-        // 3. AO无源 → AI有源
+        // 3. AO有源 → AI无源
+        let ao_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AO) && self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(ao_powered_true_channels.len(), test_channel_pools.ai_powered_false.len());
+        for i in 0..allocated_count {
+            let def = ao_powered_true_channels[i];
+            let test_channel = &test_channel_pools.ai_powered_false[i];
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AO有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 4. AO无源 → AI有源
         let ao_powered_false_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::AO) && !self.is_powered_channel(def))
             .filter(|def| !used_channel_ids.contains(&def.id))
@@ -379,7 +405,7 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
         }
 
-        // 4. DI有源 → DO无源
+        // 5. DI有源 → DO无源
         let di_powered_true_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::DI) && self.is_powered_channel(def))
             .filter(|def| !used_channel_ids.contains(&def.id))
@@ -404,7 +430,7 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
         }
 
-        // 5. DI无源 → DO有源
+        // 6. DI无源 → DO有源
         let di_powered_false_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::DI) && !self.is_powered_channel(def))
             .filter(|def| !used_channel_ids.contains(&def.id))
@@ -429,7 +455,7 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
         }
 
-        // 6. DO有源 → DI无源
+        // 7. DO有源 → DI无源
         let do_powered_true_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::DO) && self.is_powered_channel(def))
             .filter(|def| !used_channel_ids.contains(&def.id))
@@ -454,7 +480,7 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
         }
 
-        // 7. DO无源 → DI有源
+        // 8. DO无源 → DI有源
         let do_powered_false_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::DO) && !self.is_powered_channel(def))
             .filter(|def| !used_channel_ids.contains(&def.id))
@@ -470,6 +496,703 @@ impl ChannelAllocationService {
                 &batch_id,
                 batch_number,
                 test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  DO无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        log::info!("批次{}分配完成：总共分配{}个通道", batch_number, batch_instances.len());
+
+        Ok((batch_instances, used_channel_ids))
+    }
+
+    /// 为单个批次分配通道（带容量限制版本）
+    ///
+    /// 这是修复后的批次分配逻辑：
+    /// 1. 每个批次重新使用完整的测试PLC通道池（支持通道复用）
+    /// 2. 根据测试PLC的实际容量来确定每批次的最大通道数
+    /// 3. 优先填满一个批次再开始下一个批次
+    fn allocate_single_batch_with_capacity_limit(
+        &self,
+        remaining_channels: &[ChannelPointDefinition],
+        test_channel_pools: &mut TestChannelPools,
+        batch_number: u32,
+        test_plc_config: &TestPlcConfig,
+        product_model: Option<String>,
+        serial_number: Option<String>,
+    ) -> Result<(Vec<ChannelTestInstance>, Vec<String>), AppError> {
+        let mut batch_instances = Vec::new();
+        let mut used_channel_ids = Vec::new();
+
+        // 为当前批次生成统一的批次ID
+        let batch_id = format!("{}_batch_{}", uuid::Uuid::new_v4().to_string(), batch_number);
+
+        log::info!("--- 批次{}分配详情 ---", batch_number);
+        log::info!("批次ID: {}", batch_id);
+
+        // 计算测试PLC的实际容量限制
+        let max_channels_per_batch = self.calculate_max_channels_per_batch(test_plc_config);
+        log::info!("每批次最大通道数限制: {}", max_channels_per_batch);
+
+        // 显示当前测试PLC通道池状态
+        log::info!("=== 当前测试PLC通道池状态 ===");
+        log::info!("AO无源池: {} 个通道", test_channel_pools.ao_powered_false.len());
+        log::info!("AO有源池: {} 个通道", test_channel_pools.ao_powered_true.len());
+        log::info!("AI有源池: {} 个通道", test_channel_pools.ai_powered_true.len());
+        log::info!("AI无源池: {} 个通道", test_channel_pools.ai_powered_false.len());
+        log::info!("DO无源池: {} 个通道", test_channel_pools.do_powered_false.len());
+        log::info!("DO有源池: {} 个通道", test_channel_pools.do_powered_true.len());
+        log::info!("DI无源池: {} 个通道", test_channel_pools.di_powered_false.len());
+        log::info!("DI有源池: {} 个通道", test_channel_pools.di_powered_true.len());
+
+        // 按类型分配通道，限制每批次最大通道数
+
+        // 按照正确的分配规则进行分配：
+        // 测试PLC -> 被测PLC
+        // AI有源 -> AO无源
+        // AI无源 -> AO有源
+        // AO无源 -> AI有源
+        // AO有源 -> AI无源
+        // DI有源 -> DO无源
+        // DI无源 -> DO有源
+        // DO有源 -> DI无源
+        // DO无源 -> DI有源
+
+        // 1. AI有源(被测) → AO无源(测试PLC)
+        let ai_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AI) && self.is_powered_channel(def))
+            .collect();
+
+        let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+        let allocated_count = std::cmp::min(
+            std::cmp::min(ai_powered_true_channels.len(), test_channel_pools.ao_powered_false.len()),
+            available_slots
+        );
+        for i in 0..allocated_count {
+            let def = ai_powered_true_channels[i];
+            let test_channel = &test_channel_pools.ao_powered_false[i];
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AI有源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+
+            if batch_instances.len() >= max_channels_per_batch {
+                log::info!("批次{}已达到最大通道数限制，停止分配", batch_number);
+                break;
+            }
+        }
+
+        // 2. AI无源(被测) → AO有源(测试PLC)
+        if batch_instances.len() < max_channels_per_batch {
+            let ai_powered_false_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::AI) && !self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(ai_powered_false_channels.len(), test_channel_pools.ao_powered_true.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = ai_powered_false_channels[i];
+                let test_channel = &test_channel_pools.ao_powered_true[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  AI无源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 3. AO有源(被测) → AI无源(测试PLC) - 注意：当前测试PLC配置中AI无源=0，此规则暂时无法分配
+        if batch_instances.len() < max_channels_per_batch {
+            let ao_powered_true_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::AO) && self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(ao_powered_true_channels.len(), test_channel_pools.ai_powered_false.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = ao_powered_true_channels[i];
+                let test_channel = &test_channel_pools.ai_powered_false[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  AO有源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 4. AO无源(被测) → AI有源(测试PLC)
+        if batch_instances.len() < max_channels_per_batch {
+            let ao_powered_false_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::AO) && !self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(ao_powered_false_channels.len(), test_channel_pools.ai_powered_true.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = ao_powered_false_channels[i];
+                let test_channel = &test_channel_pools.ai_powered_true[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  AO无源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 5. DI有源 → DO无源
+        if batch_instances.len() < max_channels_per_batch {
+            let di_powered_true_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DI) && self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(di_powered_true_channels.len(), test_channel_pools.do_powered_false.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = di_powered_true_channels[i];
+                let test_channel = &test_channel_pools.do_powered_false[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  DI有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 6. DI无源 → DO有源
+        if batch_instances.len() < max_channels_per_batch {
+            let di_powered_false_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DI) && !self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(di_powered_false_channels.len(), test_channel_pools.do_powered_true.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = di_powered_false_channels[i];
+                let test_channel = &test_channel_pools.do_powered_true[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  DI无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 7. DO有源 → DI无源
+        if batch_instances.len() < max_channels_per_batch {
+            let do_powered_true_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DO) && self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(do_powered_true_channels.len(), test_channel_pools.di_powered_false.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = do_powered_true_channels[i];
+                let test_channel = &test_channel_pools.di_powered_false[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  DO有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        // 8. DO无源 → DI有源
+        if batch_instances.len() < max_channels_per_batch {
+            let do_powered_false_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DO) && !self.is_powered_channel(def))
+                .filter(|def| !used_channel_ids.contains(&def.id))
+                .collect();
+
+            let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+            let allocated_count = std::cmp::min(
+                std::cmp::min(do_powered_false_channels.len(), test_channel_pools.di_powered_true.len()),
+                available_slots
+            );
+            for i in 0..allocated_count {
+                let def = do_powered_false_channels[i];
+                let test_channel = &test_channel_pools.di_powered_true[i];
+
+                let instance = self.create_test_instance(
+                    def,
+                    &batch_id,
+                    batch_number,
+                    test_channel,
+                    product_model.clone(),
+                    serial_number.clone(),
+                )?;
+
+                log::info!("  DO无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                batch_instances.push(instance);
+                used_channel_ids.push(def.id.clone());
+
+                if batch_instances.len() >= max_channels_per_batch {
+                    break;
+                }
+            }
+        }
+
+        log::info!("批次{}分配完成：总共分配{}个通道", batch_number, batch_instances.len());
+
+        Ok((batch_instances, used_channel_ids))
+    }
+
+    /// 计算每批次最大通道数
+    ///
+    /// 根据测试PLC的实际通道容量来确定每批次能分配的最大通道数
+    fn calculate_max_channels_per_batch(&self, test_plc_config: &TestPlcConfig) -> usize {
+        // 计算测试PLC各类型通道的最小容量
+        let test_channel_counts = self.calculate_test_channel_counts(test_plc_config);
+
+        // 每批次的容量受限于测试PLC通道池的最小容量
+        // 例如：如果AO无源只有8个，那么AI有源最多只能分配8个
+        let ai_capacity = test_channel_counts.ao_powered_false_count + test_channel_counts.ao_powered_true_count;
+        let ao_capacity = test_channel_counts.ai_powered_true_count + test_channel_counts.ai_powered_false_count;
+        let di_capacity = test_channel_counts.do_powered_false_count + test_channel_counts.do_powered_true_count;
+        let do_capacity = test_channel_counts.di_powered_true_count + test_channel_counts.di_powered_false_count;
+
+        let total_capacity = ai_capacity + ao_capacity + di_capacity + do_capacity;
+
+        log::info!("=== 测试PLC容量计算 ===");
+        log::info!("AI通道容量: {}", ai_capacity);
+        log::info!("AO通道容量: {}", ao_capacity);
+        log::info!("DI通道容量: {}", di_capacity);
+        log::info!("DO通道容量: {}", do_capacity);
+        log::info!("总容量: {}", total_capacity);
+
+        // 返回测试PLC的实际总容量，不设置人为限制
+        // 让分配算法根据实际的测试PLC通道可用性来决定每批次的大小
+        total_capacity
+    }
+
+    /// 分配特定类型的通道
+    ///
+    /// 这是一个辅助方法，用于分配特定类型的通道到当前批次
+    #[allow(clippy::too_many_arguments)]
+    fn allocate_channel_type<F>(
+        &self,
+        remaining_channels: &[ChannelPointDefinition],
+        _test_channel_pools: &mut TestChannelPools,
+        batch_instances: &mut Vec<ChannelTestInstance>,
+        used_channel_ids: &mut Vec<String>,
+        batch_id: &str,
+        batch_number: u32,
+        max_channels_per_batch: usize,
+        filter_fn: F,
+        test_channel_pool: &mut Vec<ComparisonTable>,
+        channel_type_name: &str,
+        product_model: Option<String>,
+        serial_number: Option<String>,
+    ) -> Result<(), AppError>
+    where
+        F: Fn(&ChannelPointDefinition) -> bool,
+    {
+        let filtered_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| filter_fn(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
+        let allocated_count = std::cmp::min(
+            std::cmp::min(filtered_channels.len(), test_channel_pool.len()),
+            available_slots
+        );
+
+        for i in 0..allocated_count {
+            let def = filtered_channels[i];
+            let test_channel = &test_channel_pool[i];
+
+            let instance = self.create_test_instance(
+                def,
+                batch_id,
+                batch_number,
+                test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  {}[{}]: {} → {}", channel_type_name, i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+
+            if batch_instances.len() >= max_channels_per_batch {
+                log::info!("批次{}已达到最大通道数限制，停止分配", batch_number);
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 为单个批次分配通道（正确版本）
+    ///
+    /// 这是修复后的批次分配逻辑：
+    /// 1. 使用全局通道池，逐步消耗
+    /// 2. 根据测试PLC的实际容量来确定每批次的最大通道数
+    /// 3. 优先填满一个批次再开始下一个批次
+    fn allocate_single_batch_correct(
+        &self,
+        remaining_channels: &[ChannelPointDefinition],
+        global_test_channel_pools: &mut TestChannelPools,
+        batch_number: u32,
+        test_plc_config: &TestPlcConfig,
+        product_model: Option<String>,
+        serial_number: Option<String>,
+    ) -> Result<(Vec<ChannelTestInstance>, Vec<String>), AppError> {
+        let mut batch_instances = Vec::new();
+        let mut used_channel_ids = Vec::new();
+
+        // 为当前批次生成统一的批次ID
+        let batch_id = format!("{}_batch_{}", uuid::Uuid::new_v4().to_string(), batch_number);
+
+        log::info!("--- 批次{}分配详情 ---", batch_number);
+        log::info!("批次ID: {}", batch_id);
+
+        // 显示当前全局通道池状态
+        log::info!("=== 当前全局通道池状态 ===");
+        log::info!("AO无源池: {} 个通道", global_test_channel_pools.ao_powered_false.len());
+        log::info!("AO有源池: {} 个通道", global_test_channel_pools.ao_powered_true.len());
+        log::info!("AI有源池: {} 个通道", global_test_channel_pools.ai_powered_true.len());
+        log::info!("AI无源池: {} 个通道", global_test_channel_pools.ai_powered_false.len());
+        log::info!("DO无源池: {} 个通道", global_test_channel_pools.do_powered_false.len());
+        log::info!("DO有源池: {} 个通道", global_test_channel_pools.do_powered_true.len());
+        log::info!("DI无源池: {} 个通道", global_test_channel_pools.di_powered_false.len());
+        log::info!("DI有源池: {} 个通道", global_test_channel_pools.di_powered_true.len());
+
+        // 按类型分配通道，逐步消耗全局通道池
+
+        // 1. AI有源 → AO无源
+        let ai_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AI) && self.is_powered_channel(def))
+            .collect();
+
+        let allocated_count = std::cmp::min(ai_powered_true_channels.len(), global_test_channel_pools.ao_powered_false.len());
+        for i in 0..allocated_count {
+            let def = ai_powered_true_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.ao_powered_false.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AI有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 2. 继续分配剩余的AI有源通道（如果第一轮没有分配完）
+        let remaining_ai_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AI) && self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(remaining_ai_powered_true_channels.len(), global_test_channel_pools.ao_powered_false.len());
+        for i in 0..allocated_count {
+            let def = remaining_ai_powered_true_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.ao_powered_false.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AI有源[{}]: {} → {}", i + allocated_count + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 3. AI无源 → AO有源
+        let ai_powered_false_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AI) && !self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(ai_powered_false_channels.len(), global_test_channel_pools.ao_powered_true.len());
+        for i in 0..allocated_count {
+            let def = ai_powered_false_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.ao_powered_true.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AI无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 4. AO无源 → AI有源
+        let ao_powered_false_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AO) && !self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(ao_powered_false_channels.len(), global_test_channel_pools.ai_powered_true.len());
+        for i in 0..allocated_count {
+            let def = ao_powered_false_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.ai_powered_true.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AO无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 5. AO有源 → AI无源
+        let ao_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::AO) && self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(ao_powered_true_channels.len(), global_test_channel_pools.ai_powered_false.len());
+        for i in 0..allocated_count {
+            let def = ao_powered_true_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.ai_powered_false.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  AO有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 6. 继续分配剩余的DI有源通道
+        let remaining_di_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::DI) && self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(remaining_di_powered_true_channels.len(), global_test_channel_pools.do_powered_false.len());
+        for i in 0..allocated_count {
+            let def = remaining_di_powered_true_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.do_powered_false.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  DI有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 7. DI无源 → DO有源
+        let di_powered_false_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::DI) && !self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(di_powered_false_channels.len(), global_test_channel_pools.do_powered_true.len());
+        for i in 0..allocated_count {
+            let def = di_powered_false_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.do_powered_true.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  DI无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 8. 继续分配剩余的DO有源通道
+        let remaining_do_powered_true_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::DO) && self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(remaining_do_powered_true_channels.len(), global_test_channel_pools.di_powered_false.len());
+        for i in 0..allocated_count {
+            let def = remaining_do_powered_true_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.di_powered_false.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            log::info!("  DO有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+            batch_instances.push(instance);
+            used_channel_ids.push(def.id.clone());
+        }
+
+        // 9. DO无源 → DI有源
+        let do_powered_false_channels: Vec<_> = remaining_channels.iter()
+            .filter(|def| matches!(def.module_type, ModuleType::DO) && !self.is_powered_channel(def))
+            .filter(|def| !used_channel_ids.contains(&def.id))
+            .collect();
+
+        let allocated_count = std::cmp::min(do_powered_false_channels.len(), global_test_channel_pools.di_powered_true.len());
+        for i in 0..allocated_count {
+            let def = do_powered_false_channels[i];
+            // 从全局通道池中取出一个通道（消耗）
+            let test_channel = global_test_channel_pools.di_powered_true.remove(0);
+
+            let instance = self.create_test_instance(
+                def,
+                &batch_id,
+                batch_number,
+                &test_channel,
                 product_model.clone(),
                 serial_number.clone(),
             )?;
@@ -684,9 +1407,14 @@ impl ChannelAllocationService {
     }
 
     /// 判断通道是否为有源
-    /// 根据真实数据规则：variable_description中没有"无源"字样就是有源通道
+    /// 根据真实数据规则：power_supply_type字段中包含"无源"就是无源通道，否则为有源
     fn is_powered_channel(&self, definition: &ChannelPointDefinition) -> bool {
-        // 检查变量描述中是否包含"无源"，如果不包含则为有源
+        // 首先检查power_supply_type字段
+        if !definition.power_supply_type.is_empty() {
+            return !definition.power_supply_type.contains("无源");
+        }
+
+        // 如果power_supply_type为空，则检查variable_description字段作为备用
         !definition.variable_description.contains("无源")
     }
 

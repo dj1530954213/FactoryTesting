@@ -11,7 +11,7 @@ use crate::error::AppError;
 use log::{info, warn, error};
 
 /// 数据导入结果
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ImportResult {
     pub total_rows: usize,
     pub successful_imports: usize,
@@ -69,7 +69,7 @@ impl DataImportService {
     ///
     /// # 参数
     /// * `file_path` - Excel文件路径
-    /// * `replace_existing` - 是否替换已存在的数据
+    /// * `replace_existing` - 是否替换已存在的数据（如果为true，会先清空所有数据）
     ///
     /// # 返回
     /// * `Result<ImportResult, AppError>` - 导入结果
@@ -82,7 +82,21 @@ impl DataImportService {
 
         let mut result = ImportResult::new();
 
-        // 1. 解析Excel文件
+        // 1. 如果需要替换现有数据，先清空数据库
+        if replace_existing {
+            info!("清空现有通道定义数据...");
+            match self.clear_all_data().await {
+                Ok(deleted_count) => {
+                    info!("成功清空{}条现有数据", deleted_count);
+                }
+                Err(e) => {
+                    error!("清空现有数据失败: {:?}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 2. 解析Excel文件
         let definitions = match ExcelImporter::parse_excel_file(file_path).await {
             Ok(defs) => defs,
             Err(e) => {
@@ -94,11 +108,11 @@ impl DataImportService {
         result.total_rows = definitions.len();
         info!("从Excel文件解析出{}个通道定义", definitions.len());
 
-        // 2. 验证数据
+        // 3. 验证数据
         let validated_definitions = self.validate_definitions(definitions, &mut result).await?;
 
-        // 3. 导入到数据库
-        self.import_to_database(validated_definitions, replace_existing, &mut result).await?;
+        // 4. 导入到数据库
+        self.import_to_database(validated_definitions, false, &mut result).await?; // 由于已经清空，这里不需要再检查重复
 
         info!(
             "数据导入完成: 总计{}行，成功{}行，失败{}行，成功率{:.1}%",

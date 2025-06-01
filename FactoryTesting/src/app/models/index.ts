@@ -337,6 +337,7 @@ export interface AllocationSummaryDetailed {
   total_definitions: number;
   allocated_instances: number;
   skipped_definitions: number;
+  total_channels: number;
   by_module_type: { [key in ModuleType]?: ModuleTypeStats };
 }
 
@@ -350,6 +351,34 @@ export interface ValidationResult {
   is_valid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+export interface ImportResult {
+  successful_imports: number;
+  failed_imports: number;
+  total_processed: number;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface AllocationResult {
+  success: boolean;
+  message: string;
+  batch_id: string;
+  allocated_count: number;
+  conflict_count: number;
+  total_count: number;
+  total_batches: number;
+  batches: TestBatchInfo[];
+  allocated_instances: ChannelTestInstance[];
+  allocation_summary: AllocationSummaryDetailed;
+}
+
+export interface ImportExcelAndCreateBatchResponse {
+  success: boolean;
+  message: string;
+  import_result: ImportResult;
+  allocation_result: AllocationResult;
 }
 
 // 导入Excel并分配通道的请求

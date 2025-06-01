@@ -9,7 +9,7 @@ use crate::models::entities::{channel_point_definition, channel_test_instance, t
 use crate::models::structs::{ChannelPointDefinition, ChannelTestInstance, TestBatchInfo};
 use crate::models::enums::ModuleType;
 use crate::error::AppError;
-use log::{info, warn};
+use log::{info, warn, error};
 
 /// 分配策略
 #[derive(Debug, Clone)]
@@ -114,12 +114,19 @@ impl BatchAllocationService {
         strategy: AllocationStrategy,
         filter_criteria: Option<HashMap<String, String>>,
     ) -> Result<AllocationResult, AppError> {
-        info!("开始创建测试批次: {}", batch_name);
+        info!("🔥 [BATCH_ALLOCATION] 开始创建测试批次: {}", batch_name);
+        info!("🔥 [BATCH_ALLOCATION] 产品型号: {:?}", product_model);
+        info!("🔥 [BATCH_ALLOCATION] 操作员: {:?}", operator_name);
+        info!("🔥 [BATCH_ALLOCATION] 分配策略: {:?}", strategy);
+        info!("🔥 [BATCH_ALLOCATION] 过滤条件: {:?}", filter_criteria);
 
         // 1. 获取可用的通道定义
+        info!("🔥 [BATCH_ALLOCATION] 步骤1: 获取可用的通道定义");
         let available_definitions = self.get_available_definitions(filter_criteria).await?;
+        info!("🔥 [BATCH_ALLOCATION] 从数据库查询到{}个通道定义", available_definitions.len());
 
         if available_definitions.is_empty() {
+            error!("🔥 [BATCH_ALLOCATION] 错误: 没有可用的通道定义");
             return Err(AppError::validation_error("没有可用的通道定义"));
         }
 

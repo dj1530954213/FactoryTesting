@@ -5,6 +5,9 @@ use tauri::State;
 use crate::tauri_commands::AppState;
 use crate::models::test_plc_config::*;
 use crate::utils::error::AppResult;
+use crate::models::entities::test_plc_channel_config;
+use chrono::Utc;
+use uuid;
 use log::{info, debug};
 
 /// 获取测试PLC通道配置
@@ -186,7 +189,7 @@ pub async fn initialize_default_test_plc_channels_cmd(
     state: State<'_, AppState>
 ) -> Result<(), String> {
     debug!("初始化默认测试PLC通道配置命令");
-    
+
     match state.test_plc_config_service.initialize_default_test_plc_channels().await {
         Ok(_) => {
             info!("成功初始化默认测试PLC通道配置");
@@ -197,4 +200,151 @@ pub async fn initialize_default_test_plc_channels_cmd(
             Err(format!("初始化默认测试PLC通道配置失败: {}", e))
         }
     }
-} 
+}
+
+/// 恢复88个默认测试PLC通道配置
+#[tauri::command]
+pub async fn restore_default_test_plc_channels_cmd(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("开始恢复88个默认测试PLC通道配置");
+
+    // 创建88个测试PLC通道配置
+    let configs = create_88_test_plc_channels();
+
+    info!("创建了 {} 个测试PLC通道配置", configs.len());
+
+    // 批量保存新配置
+    let mut saved_count = 0;
+    for config in configs {
+        match state.test_plc_config_service.save_test_plc_channel(config.clone()).await {
+            Ok(_) => {
+                saved_count += 1;
+                debug!("已保存通道配置: {}", config.channel_address);
+            }
+            Err(e) => {
+                log::error!("保存通道配置失败 {}: {}", config.channel_address, e);
+                return Err(format!("保存通道配置失败 {}: {}", config.channel_address, e));
+            }
+        }
+    }
+
+    let result_msg = format!("成功恢复 {} 个测试PLC通道配置", saved_count);
+    info!("{}", result_msg);
+
+    Ok(result_msg)
+}
+
+/// 创建88个测试PLC通道配置（基于重构前的真实数据）
+fn create_88_test_plc_channels() -> Vec<TestPlcChannelConfig> {
+    let mut configs = Vec::new();
+    let now = Utc::now();
+
+    // AI通道 (8个有源)
+    for i in 1..=8 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("AI1_{}", i),
+            channel_type: TestPlcChannelType::AI,
+            communication_address: format!("{}", 40100 + i * 2 - 1),
+            power_supply_type: "24V DC".to_string(),
+            description: Some(format!("模拟量输入通道 {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // AO通道 (8个有源)
+    for i in 1..=8 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("AO1_{}", i),
+            channel_type: TestPlcChannelType::AO,
+            communication_address: format!("{}", 40200 + i * 2 - 1),
+            power_supply_type: "24V DC".to_string(),
+            description: Some(format!("模拟量输出通道 {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // AO2通道 (8个无源)
+    for i in 1..=8 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("AO2_{}", i),
+            channel_type: TestPlcChannelType::AONone,
+            communication_address: format!("{}", 40300 + i * 2 - 1),
+            power_supply_type: "无源".to_string(),
+            description: Some(format!("模拟量输出通道(无源) {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // DI1通道 (16个有源)
+    for i in 1..=16 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("DI1_{}", i),
+            channel_type: TestPlcChannelType::DI,
+            communication_address: format!("{:05}", 100 + i),
+            power_supply_type: "24V DC".to_string(),
+            description: Some(format!("数字量输入通道 {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // DI2通道 (16个无源)
+    for i in 1..=16 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("DI2_{}", i),
+            channel_type: TestPlcChannelType::DINone,
+            communication_address: format!("{:05}", 200 + i),
+            power_supply_type: "无源".to_string(),
+            description: Some(format!("数字量输入通道(无源) {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // DO1通道 (16个有源)
+    for i in 1..=16 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("DO1_{}", i),
+            channel_type: TestPlcChannelType::DO,
+            communication_address: format!("{:05}", 300 + i),
+            power_supply_type: "24V DC".to_string(),
+            description: Some(format!("数字量输出通道 {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    // DO2通道 (16个无源)
+    for i in 1..=16 {
+        configs.push(TestPlcChannelConfig {
+            id: Some(uuid::Uuid::new_v4().to_string()),
+            channel_address: format!("DO2_{}", i),
+            channel_type: TestPlcChannelType::DONone,
+            communication_address: format!("{:05}", 400 + i),
+            power_supply_type: "无源".to_string(),
+            description: Some(format!("数字量输出通道(无源) {}", i)),
+            is_enabled: true,
+            created_at: Some(now),
+            updated_at: Some(now),
+        });
+    }
+
+    info!("创建了 {} 个测试PLC通道配置", configs.len());
+    configs
+}

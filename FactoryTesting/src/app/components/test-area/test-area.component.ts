@@ -96,19 +96,28 @@ export class TestAreaComponent implements OnInit {
   }
 
   async loadAvailableBatches(): Promise<void> {
+    console.log('📋 [TEST_AREA] 开始加载可用批次列表');
     this.isLoadingBatches = true;
     try {
       // 调用真实的后端API获取批次列表
+      console.log('📋 [TEST_AREA] 调用后端API: getBatchList()');
       const batches = await this.tauriApiService.getBatchList().toPromise();
       this.availableBatches = batches || [];
-      
-      console.log('从后端获取到批次列表:', this.availableBatches);
-      
-      if (this.availableBatches.length === 0) {
+
+      console.log('✅ [TEST_AREA] 成功从后端获取批次列表');
+      console.log('✅ [TEST_AREA] 批次数量:', this.availableBatches.length);
+
+      if (this.availableBatches.length > 0) {
+        console.log('✅ [TEST_AREA] 批次详情:');
+        this.availableBatches.forEach((batch, index) => {
+          console.log(`  批次${index + 1}: ID=${batch.batch_id}, 名称=${batch.batch_name}, 点位数=${batch.total_points}`);
+        });
+      } else {
+        console.log('⚠️ [TEST_AREA] 没有找到任何批次，可能需要先导入点表');
         this.message.info('暂无可用的测试批次，请先导入Excel文件创建批次');
       }
     } catch (error) {
-      console.error('加载批次列表失败:', error);
+      console.error('❌ [TEST_AREA] 加载批次列表失败:', error);
       this.message.error('加载批次列表失败: ' + error);
       this.availableBatches = [];
     } finally {
@@ -155,15 +164,21 @@ export class TestAreaComponent implements OnInit {
 
   async loadBatchDetails(): Promise<void> {
     if (!this.selectedBatch) {
+      console.log('⚠️ [TEST_AREA] 没有选择批次，无法加载详情');
       this.message.warning('请先选择一个测试批次');
       return;
     }
 
+    console.log('📊 [TEST_AREA] 开始加载批次详情');
+    console.log('📊 [TEST_AREA] 选中的批次ID:', this.selectedBatch.batch_id);
     this.isLoadingDetails = true;
     try {
       // 调用真实的后端API获取批次详情
+      console.log('📊 [TEST_AREA] 调用后端API: getBatchDetails()');
       const details = await this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id).toPromise();
-      
+
+      console.log('📊 [TEST_AREA] 后端返回的详情数据:', details);
+
       if (details) {
         // 使用后端返回的真实数据
         this.batchDetails = {
@@ -177,13 +192,19 @@ export class TestAreaComponent implements OnInit {
             allocation_errors: []
           }
         };
+
+        console.log('✅ [TEST_AREA] 批次详情加载成功');
+        console.log('✅ [TEST_AREA] 实例数量:', this.batchDetails.instances.length);
+        console.log('✅ [TEST_AREA] 定义数量:', this.batchDetails.definitions.length);
+
         this.message.success('批次详情加载成功');
         this.updateModuleTypeStats();
       } else {
+        console.error('❌ [TEST_AREA] 后端返回空的详情数据');
         throw new Error('未找到批次详情数据');
       }
     } catch (error) {
-      console.error('加载批次详情失败:', error);
+      console.error('❌ [TEST_AREA] 加载批次详情失败:', error);
       this.message.error('加载批次详情失败: ' + error);
       this.batchDetails = null;
     } finally {
@@ -370,35 +391,26 @@ export class TestAreaComponent implements OnInit {
 
   /**
    * 检查是否有未持久化的数据
+   *
+   * ⚠️ 重要修改：测试区域不再创建批次，只获取已存在的数据
+   * 批次创建应该在点表导入时完成
    */
   private checkForUnpersistedData(): void {
+    console.log('🔍 [TEST_AREA] 检查是否有未持久化的数据');
     const testData = this.dataStateService.getTestData();
-    
+
     if (testData.isDataAvailable && testData.parsedDefinitions.length > 0) {
-      console.log('检测到未持久化的测试数据，准备自动持久化...');
-      this.message.info('检测到未保存的Excel数据，正在自动保存...');
-      
-      // 自动持久化数据
-      this.tauriApiService.createBatchAndPersistData(
-        testData.suggestedBatchInfo,
-        testData.parsedDefinitions
-      ).subscribe({
-        next: (result) => {
-          if (result.success) {
-            this.message.success(`数据已自动保存：${result.message}`);
-            // 清理内存中的数据，因为已经持久化了
-            this.dataStateService.clearTestData();
-            // 重新加载批次列表
-            this.loadAvailableBatches();
-          } else {
-            this.message.warning(`数据保存失败：${result.message}`);
-          }
-        },
-        error: (error) => {
-          console.error('自动持久化数据失败:', error);
-          this.message.warning('自动保存数据失败，请手动保存或重新导入');
-        }
-      });
+      console.log('⚠️ [TEST_AREA] 检测到未持久化的测试数据');
+      console.log('⚠️ [TEST_AREA] 这表明点表导入流程可能没有正确完成批次分配');
+
+      // 清理内存中的数据，因为批次应该已经在导入时创建
+      this.dataStateService.clearTestData();
+      this.message.warning('检测到未完成的导入流程，请重新导入点表以创建批次');
+
+      // 重新加载批次列表，查看是否有新创建的批次
+      this.loadAvailableBatches();
+    } else {
+      console.log('✅ [TEST_AREA] 没有未持久化的数据，正常加载批次列表');
     }
   }
 } 

@@ -7,7 +7,7 @@ use calamine::{Reader, Xlsx, open_workbook};
 use crate::models::structs::ChannelPointDefinition;
 use crate::models::enums::{ModuleType, PointDataType};
 use crate::error::AppError;
-use log::info;
+use log::{info, error};
 
 type AppResult<T> = Result<T, AppError>;
 
@@ -61,13 +61,32 @@ impl ExcelImporter {
             }
 
             row_count += 1;
+            let actual_row_number = row_idx + 1; // Excel中的实际行号
+
+            info!("🔍 [EXCEL_PARSE] 正在解析第{}行，列数: {}", actual_row_number, row.len());
 
             // 解析数据行
-            match Self::parse_data_row(row, row_idx + 1) {
-                Ok(definition) => definitions.push(definition),
+            match Self::parse_data_row(row, actual_row_number) {
+                Ok(definition) => {
+                    info!("✅ [EXCEL_PARSE] 第{}行解析成功: 位号={}, 变量名={}, 模块类型={:?}",
+                          actual_row_number, definition.tag, definition.variable_name, definition.module_type);
+                    definitions.push(definition);
+                },
                 Err(e) => {
-                    // 记录错误但继续处理其他行
-                    log::warn!("第{}行解析失败: {}", row_idx + 1, e);
+                    // 记录详细错误信息
+                    log::error!("❌ [EXCEL_PARSE] 第{}行解析失败: {}", actual_row_number, e);
+
+                    // 显示该行的关键字段内容用于调试
+                    if row.len() >= 12 {
+                        let tag = if row.len() > 6 { row[6].to_string() } else { "N/A".to_string() };
+                        let var_name = if row.len() > 8 { row[8].to_string() } else { "N/A".to_string() };
+                        let module_type = if row.len() > 2 { row[2].to_string() } else { "N/A".to_string() };
+                        let data_type = if row.len() > 10 { row[10].to_string() } else { "N/A".to_string() };
+                        let plc_addr = if row.len() > 50 { row[50].to_string() } else { "N/A".to_string() };
+
+                        log::error!("🔍 [EXCEL_PARSE] 第{}行详细信息: 位号='{}', 变量名='{}', 模块类型='{}', 数据类型='{}', PLC地址='{}'",
+                                   actual_row_number, tag, var_name, module_type, data_type, plc_addr);
+                    }
                 }
             }
         }
@@ -123,9 +142,12 @@ impl ExcelImporter {
 
     /// 解析Excel数据行为ChannelPointDefinition
     fn parse_data_row(row: &[calamine::DataType], row_number: usize) -> AppResult<ChannelPointDefinition> {
-        if row.len() < 53 {  // 根据真实Excel文件，至少需要53列
+        info!("🔍 [PARSE_ROW] 解析第{}行，列数: {}", row_number, row.len());
+
+        if row.len() < 52 {  // 根据真实Excel文件，至少需要52列（从序号到上位机通讯地址）
+            error!("❌ [PARSE_ROW] 第{}行数据列数不足，期望52列，实际{}列", row_number, row.len());
             return Err(AppError::validation_error(format!(
-                "第{}行数据列数不足，期望53列，实际{}列",
+                "第{}行数据列数不足，期望52列，实际{}列",
                 row_number,
                 row.len()
             )));
@@ -145,7 +167,8 @@ impl ExcelImporter {
         // 第9列：变量描述
         // 第10列：数据类型
         // 第11列：读写属性
-        // 第51列：PLC绝对地址
+        // 第50列：PLC绝对地址（索引50）
+        // 第51列：上位机通讯地址（索引51）
 
         let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第6列：位号
         let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第8列：变量名称（HMI）
@@ -158,7 +181,10 @@ impl ExcelImporter {
         let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第5列：通道位号
         let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第10列：数据类型
         let access_property = Self::get_optional_string_value(&row[11], "读写属性");  // 第11列：读写属性
-        let plc_address = Self::get_string_value(&row[51], row_number, "PLC绝对地址")?;  // 第51列：PLC绝对地址
+        let plc_address = Self::get_string_value(&row[50], row_number, "PLC绝对地址")?;  // 第50列：PLC绝对地址（索引50）
+
+        info!("✅ [PARSE_ROW] 第{}行关键字段: 位号='{}', 变量名='{}', 模块类型='{}', PLC地址='{}'",
+              row_number, tag, variable_name, module_type_str, plc_address);
 
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -206,10 +232,8 @@ impl ExcelImporter {
         // 例如：量程信息、报警设定值等
         // 如果Excel文件中有这些列，可以在这里解析
 
-        // 设置默认值
-        if definition.power_supply_type.is_empty() {
-            definition.power_supply_type = "有源".to_string();
-        }
+        // 注意：不要设置默认的供电类型，保持从Excel读取的原始值
+        // 如果Excel中没有明确指定，则保持为空，让业务逻辑自行判断
 
         if definition.wire_system.is_empty() {
             definition.wire_system = match definition.module_type {

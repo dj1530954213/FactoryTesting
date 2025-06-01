@@ -24,7 +24,8 @@ use commands::data_management::{
     import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
     parse_excel_and_create_batch_cmd, prepare_test_instances_for_batch_cmd,
     import_excel_and_allocate_channels_cmd, clear_session_data,
-    parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd
+    parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd,
+    import_excel_and_create_batch_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
@@ -32,7 +33,8 @@ use commands::manual_testing::{
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
-    get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd
+    get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd,
+    restore_default_test_plc_channels_cmd
 };
 
 /// 应用程序主要运行函数
@@ -128,6 +130,7 @@ pub fn run() {
                 clear_session_data,
                 parse_excel_without_persistence_cmd,
                 create_batch_and_persist_data_cmd,
+                import_excel_and_create_batch_cmd,
                 // 手动测试命令
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
@@ -141,7 +144,8 @@ pub fn run() {
                 test_plc_connection_cmd,
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
-                initialize_default_test_plc_channels_cmd
+                initialize_default_test_plc_channels_cmd,
+                restore_default_test_plc_channels_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

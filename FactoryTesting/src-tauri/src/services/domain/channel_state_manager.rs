@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::Utc;
-use log::info;
+use log::{info, error};
 
 /// 通道状态管理器接口
 #[async_trait]
@@ -75,6 +75,12 @@ pub trait IChannelStateManager: Send + Sync {
         &self,
         instance_id: &str,
         status: OverallTestStatus,
+    ) -> AppResult<()>;
+
+    /// 存储批次分配结果到状态管理器
+    async fn store_batch_allocation_result(
+        &self,
+        allocation_result: crate::commands::data_management::AllocationResult,
     ) -> AppResult<()>;
 }
 
@@ -404,4 +410,35 @@ impl IChannelStateManager for ChannelStateManager {
         // TODO: 实现具体的状态更新逻辑
         Ok(())
     }
-} 
+
+    /// 存储批次分配结果到状态管理器
+    async fn store_batch_allocation_result(
+        &self,
+        allocation_result: crate::commands::data_management::AllocationResult,
+    ) -> AppResult<()> {
+        info!("🔥 [STATE_MANAGER] 存储批次分配结果到状态管理器");
+        info!("🔥 [STATE_MANAGER] 批次数量: {}", allocation_result.batches.len());
+        info!("🔥 [STATE_MANAGER] 分配实例数量: {}", allocation_result.allocated_instances.len());
+
+        // 将批次信息保存到持久化服务
+        for batch in &allocation_result.batches {
+            if let Err(e) = self.persistence_service.save_batch_info(batch).await {
+                error!("🔥 [STATE_MANAGER] 保存批次信息失败: {} - {}", batch.batch_id, e);
+            } else {
+                info!("🔥 [STATE_MANAGER] 成功保存批次信息: {}", batch.batch_id);
+            }
+        }
+
+        // 将测试实例保存到持久化服务
+        for instance in &allocation_result.allocated_instances {
+            if let Err(e) = self.persistence_service.save_test_instance(instance).await {
+                error!("🔥 [STATE_MANAGER] 保存测试实例失败: {} - {}", instance.instance_id, e);
+            } else {
+                info!("🔥 [STATE_MANAGER] 成功保存测试实例: {}", instance.instance_id);
+            }
+        }
+
+        info!("🔥 [STATE_MANAGER] 批次分配结果存储完成");
+        Ok(())
+    }
+}

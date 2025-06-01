@@ -218,43 +218,54 @@ export class DataImportComponent implements OnInit, OnDestroy {
       console.log('开始解析Excel文件:', filePath);
       console.log('Tauri环境检测:', this.tauriApi.isTauriEnvironment());
       
-      // 强制尝试使用Tauri API，即使在开发环境中
-      const forceUseTauriApi = true;
-      
-      if (this.tauriApi.isTauriEnvironment() || forceUseTauriApi) {
-        // 尝试调用后端API解析文件
+      // 使用正确的架构：一次性完成导入和批次分配
+      if (this.tauriApi.isTauriEnvironment()) {
         try {
-          console.log('尝试调用Tauri API解析Excel文件:', filePath);
-          const parseResponse = await this.tauriApi.parseExcelFile(filePath).toPromise();
-          
-          console.log('Tauri API返回结果:', parseResponse);
-          
-          if (!parseResponse?.success || !parseResponse.data || parseResponse.data.length === 0) {
-            throw new Error(`Excel文件解析失败: ${parseResponse?.message || '未知错误'}`);
-          }
-          
-          const definitions = parseResponse.data;
-          
-          if (definitions && definitions.length > 0) {
-            // 转换数据格式为前端预览格式
-            this.previewData = definitions.map(def => ({
-              tag: def.tag,
-              description: def.description || '',
-              moduleType: def.module_type,
-              channelNumber: def.channel_number,
-              plcAddress: def.plc_communication_address,
-              variableName: def.variable_name,
-              stationName: def.station_name,
-              moduleName: def.module_name,
-              dataType: def.point_data_type,
-              analogRangeMin: def.analog_range_min,
-              analogRangeMax: def.analog_range_max
-            }));
-            
-            console.log(`成功解析Excel文件，共${definitions.length}个通道定义`);
-            console.log('转换后的预览数据:', this.previewData.slice(0, 3)); // 只显示前3个
-            this.loadingMessage = `成功解析${definitions.length}个通道定义，正在自动分配批次...`;
-            
+          console.log('开始一键导入Excel并创建批次:', filePath);
+          this.loadingMessage = '正在导入Excel文件并自动分配批次...';
+
+          // 使用统一的导入和批次创建方法
+          const result = await this.tauriApi.importExcelAndCreateBatch(
+            filePath,
+            '自动导入批次', // 批次名称
+            '自动导入产品', // 产品型号
+            '系统操作员' // 操作员
+          ).toPromise();
+
+          console.log('导入和批次创建结果:', result);
+
+          if (result && result.success && result.import_result && result.allocation_result) {
+            const importResult = result.import_result;
+            const allocationResult = result.allocation_result;
+
+            console.log(`导入成功: ${importResult.successful_imports}个通道定义`);
+            console.log(`批次分配完成: 生成${allocationResult.batches.length}个批次，${allocationResult.allocated_instances.length}个测试实例`);
+
+            // 从导入结果中获取通道定义，用于前端预览
+            if (importResult.imported_definitions && importResult.imported_definitions.length > 0) {
+              this.previewData = importResult.imported_definitions.map(def => ({
+                tag: def.tag,
+                description: def.description || '',
+                moduleType: def.module_type,
+                channelNumber: def.channel_number,
+                plcAddress: def.plc_communication_address,
+                variableName: def.variable_name,
+                stationName: def.station_name,
+                moduleName: def.module_name,
+                dataType: def.point_data_type,
+                analogRangeMin: def.analog_range_min,
+                analogRangeMax: def.analog_range_max
+              }));
+
+              console.log('转换后的预览数据:', this.previewData.slice(0, 3)); // 只显示前3个
+            }
+
+            // 保存分配结果到组件状态，供后续使用
+            this.allocationResult = allocationResult;
+
+            // 更新加载消息显示分配结果
+            this.loadingMessage = `成功导入${importResult.successful_imports}个通道定义并自动分配${allocationResult.batches.length}个测试批次`;
+
             // 显示统计信息
             const aiCount = this.getModuleTypeCount('AI');
             const aoCount = this.getModuleTypeCount('AO');
@@ -262,62 +273,23 @@ export class DataImportComponent implements OnInit, OnDestroy {
             const doCount = this.getModuleTypeCount('DO');
             console.log(`模块类型统计: AI:${aiCount}, AO:${aoCount}, DI:${diCount}, DO:${doCount}`);
 
-            // ===== 新增：自动调用批次分配服务 =====
-            try {
-              console.log('开始自动分配通道批次...');
-              
-              // 调用后端的导入Excel并自动分配通道命令
-              // 这个命令会解析Excel、创建通道定义、然后自动分配测试批次
-              const allocationResult = await this.tauriApi.importExcelAndAllocateChannels(
-                filePath,
-                '自动导入产品', // 默认产品型号
-                undefined // 序列号留空，后端会自动生成
-              ).toPromise();
-              
-              console.log('通道分配结果:', allocationResult);
-              
-              if (allocationResult && allocationResult.batches && allocationResult.allocated_instances) {
-                console.log(`自动分配完成: 生成${allocationResult.batches.length}个批次，${allocationResult.allocated_instances.length}个测试实例`);
-                
-                // 更新加载消息显示分配结果
-                this.loadingMessage = `成功解析${definitions.length}个通道定义并自动分配${allocationResult.batches.length}个测试批次`;
-                
-                // 可以在这里保存分配结果到组件状态，供后续使用
-                this.allocationResult = allocationResult;
-                
-                // 显示分配统计信息
-                if (allocationResult.allocation_summary) {
-                  const summary = allocationResult.allocation_summary;
-                  console.log(`分配统计: 总定义数=${summary.total_definitions}, 已分配实例数=${summary.allocated_instances}, 跳过数=${summary.skipped_definitions}`);
-                  
-                  if (summary.allocation_errors && summary.allocation_errors.length > 0) {
-                    console.warn('分配过程中的错误:', summary.allocation_errors);
-                  }
-                }
-              } else {
-                console.warn('通道分配返回了空结果');
-                this.loadingMessage = `成功解析${definitions.length}个通道定义，但自动分配失败`;
+            // 显示分配统计信息
+            if (allocationResult.allocation_summary) {
+              const summary = allocationResult.allocation_summary;
+              console.log(`分配统计: 总定义数=${summary.total_definitions}, 已分配实例数=${summary.allocated_instances}, 跳过数=${summary.skipped_definitions}`);
+
+              if (summary.allocation_errors && summary.allocation_errors.length > 0) {
+                console.warn('分配过程中的错误:', summary.allocation_errors);
               }
-              
-            } catch (allocationError) {
-              console.error('自动分配通道批次失败:', allocationError);
-              // 分配失败不影响预览数据的显示，只是没有自动分配而已
-              this.loadingMessage = `成功解析${definitions.length}个通道定义，但自动分配失败: ${allocationError}`;
             }
-            
+
           } else {
-            throw new Error('Excel文件中没有找到有效的通道定义');
+            throw new Error(`导入和批次创建失败: ${result?.message || '未知错误'}`);
           }
+
         } catch (error) {
-          console.error('调用Tauri API失败:', error);
-          
-          // 如果是在开发环境且API调用失败，抛出错误而不是使用模拟数据
-          if (!this.tauriApi.isTauriEnvironment()) {
-            console.log('Tauri API调用失败，开发环境中无法获取真实数据');
-            throw new Error('无法连接到后端服务，请确保使用正确的启动命令：npm run tauri:dev');
-          } else {
-            throw error;
-          }
+          console.error('导入和批次创建失败:', error);
+          throw error;
         }
       } else {
         // 在开发环境中，提示用户使用正确的启动方式
@@ -557,31 +529,32 @@ export class DataImportComponent implements OnInit, OnDestroy {
             updated_at: new Date().toISOString()
           }));
           
-          // 调用后端API，让后端自动分配批次信息
-          const createBatchRequest = {
-            file_name: this.selectedFileName,
-            file_path: this.selectedFilePath,
-            preview_data: channelDefinitions,
-            batch_info: {
-              product_model: '', // 后端会自动生成或使用默认值
-              serial_number: '', // 后端会自动生成
-              customer_name: '',
-              operator_name: ''
-            }
-          };
-          
-          const response = await this.tauriApi.createTestBatch(createBatchRequest).toPromise();
-          
-          if (response && response.success && response.batch_id) {
-            console.log('批次创建成功:', response.batch_id);
+          // 🚀 使用正确的导入Excel并准备批次的方法
+          console.log('🚀 [FRONTEND] 调用导入Excel并准备批次API');
+          console.log('🚀 [FRONTEND] 文件路径:', this.selectedFilePath);
+          console.log('🚀 [FRONTEND] 文件名:', this.selectedFileName);
+
+          const response = await this.tauriApi.autoAllocateBatch({
+            filePath: this.selectedFilePath,
+            productModel: '', // 使用默认值
+            serialNumber: ''  // 使用默认值
+          }).toPromise();
+
+          console.log('🚀 [FRONTEND] 后端响应:', response);
+
+          if (response && response.batch_info) {
+            console.log('✅ [FRONTEND] 批次创建成功:', response.batch_info.batch_id);
+            console.log('✅ [FRONTEND] 创建的实例数量:', response.instances?.length || 0);
             this.loadingMessage = '批次创建成功，正在跳转...';
-            
+
             // 导航到测试执行页面，传递批次ID
             setTimeout(() => {
-              this.router.navigate(['/test-execution'], { queryParams: { batchId: response.batch_id } });
+              this.router.navigate(['/test-execution'], {
+                queryParams: { batchId: response.batch_info.batch_id }
+              });
             }, 1000);
           } else {
-            throw new Error(response?.message || '创建批次失败：未返回有效响应');
+            throw new Error('创建批次失败：后端未返回有效的批次信息');
           }
         }
       } else {

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, from, BehaviorSubject, interval } from 'rxjs';
-import { map, catchError, switchMap } from 'rxjs/operators';
+import { map, catchError, switchMap, tap } from 'rxjs/operators';
 import { invoke } from '@tauri-apps/api/core';
 import {
   ChannelPointDefinition,
@@ -17,7 +17,8 @@ import {
   CreateBatchResponse,
   PrepareTestInstancesRequest,
   PrepareTestInstancesResponse,
-  BatchDetailsPayload
+  BatchDetailsPayload,
+  ImportExcelAndCreateBatchResponse
 } from '../models';
 
 @Injectable({
@@ -222,17 +223,34 @@ export class TauriApiService {
   }
 
   /**
-   * 创建测试批次
+   * @deprecated 已废弃 - 请使用 autoAllocateBatch 替代
+   * 这个方法已经不再使用，批次创建应该在点表导入时自动完成
    */
   createTestBatch(batchData: CreateBatchRequest): Observable<CreateBatchResponse> {
-    return from(invoke<CreateBatchResponse>('create_test_batch', { batch_data: batchData }));
+    console.error('❌ [TAURI_API] createTestBatch 已废弃，请使用 autoAllocateBatch 进行完整的导入和批次创建流程');
+    throw new Error('createTestBatch 已废弃，请使用 autoAllocateBatch 方法');
   }
 
   /**
-   * 获取批次列表
+   * 获取批次列表 - 从状态管理器获取已分配的批次
    */
   getBatchList(): Observable<TestBatchInfo[]> {
-    return from(invoke<TestBatchInfo[]>('get_batch_list'));
+    console.log('📋 [TAURI_API] 调用获取批次列表API');
+    return from(invoke<TestBatchInfo[]>('get_batch_list')).pipe(
+      tap(batches => {
+        console.log('✅ [TAURI_API] 成功获取批次列表');
+        console.log('✅ [TAURI_API] 批次数量:', batches.length);
+        if (batches.length > 0) {
+          batches.forEach((batch, index) => {
+            console.log(`  批次${index + 1}: ID=${batch.batch_id}, 名称=${batch.batch_name}, 点位数=${batch.total_points}`);
+          });
+        }
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 获取批次列表失败:', error);
+        throw error;
+      })
+    );
   }
 
   /**
@@ -463,15 +481,32 @@ export class TauriApiService {
 
   /**
    * 自动分配批次 - 根据导入的通道定义自动创建测试批次和实例
+   *
+   * 这是主要的点表导入和批次分配入口，会：
+   * 1. 解析Excel文件
+   * 2. 执行自动批次分配
+   * 3. 将结果存储到状态管理器
    */
   autoAllocateBatch(batchData: any): Observable<any> {
+    console.log('🚀 [TAURI_API] 调用自动分配批次API');
+    console.log('🚀 [TAURI_API] 参数:', batchData);
+
     return from(invoke('import_excel_and_prepare_batch_cmd', {
       args: {
         file_path_str: batchData.filePath,
         product_model: batchData.productModel,
         serial_number: batchData.serialNumber
       }
-    }));
+    })).pipe(
+      tap(response => {
+        console.log('✅ [TAURI_API] 自动分配批次成功');
+        console.log('✅ [TAURI_API] 响应数据:', response);
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 自动分配批次失败:', error);
+        throw error;
+      })
+    );
   }
 
   /**
@@ -487,15 +522,12 @@ export class TauriApiService {
   }
 
   /**
-   * 创建批次并持久化数据（在开始测试时调用）
+   * @deprecated 已废弃 - 测试区域不应该创建批次
+   * 批次创建应该在点表导入时自动完成，测试区域只获取已存在的数据
    */
   createBatchAndPersistData(batchInfo: any, definitions: any[]): Observable<any> {
-    return from(invoke('create_batch_and_persist_data_cmd', {
-      request: {
-        batch_info: batchInfo,
-        definitions: definitions
-      }
-    }));
+    console.error('❌ [TAURI_API] createBatchAndPersistData 已废弃，测试区域不应该创建批次');
+    throw new Error('createBatchAndPersistData 已废弃，批次应该在点表导入时创建');
   }
 
   /**
@@ -511,9 +543,40 @@ export class TauriApiService {
   }
 
   /**
+   * 🔧 新的统一导入和分配流程 - 符合架构设计
+   *
+   * 第一步：导入Excel到数据库（清空旧数据）
+   * 第二步：创建批次（仅内存操作）
+   */
+  importExcelAndCreateBatch(filePath: string, batchName: string, productModel?: string, operatorName?: string): Observable<any> {
+    console.log('🚀 [TAURI_API] 调用导入Excel并准备批次API (修复版)');
+    console.log('🚀 [TAURI_API] 文件路径:', filePath);
+    console.log('🚀 [TAURI_API] 产品型号:', productModel);
+
+    return from(invoke('import_excel_and_prepare_batch_cmd', {
+      args: {
+        file_path_str: filePath,
+        product_model: productModel,
+        serial_number: operatorName // 使用操作员名称作为序列号
+      }
+    })).pipe(
+      tap(result => {
+        console.log('✅ [TAURI_API] 导入Excel并准备批次成功');
+        console.log('✅ [TAURI_API] 结果:', result);
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 导入Excel并准备批次失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * @deprecated 使用 importExcelAndCreateBatch 替代
    * 导入Excel文件并分配通道 - 完整的导入和分配流程
    */
   importExcelAndAllocateChannels(filePath: string, productModel?: string, serialNumber?: string): Observable<any> {
+    console.warn('importExcelAndAllocateChannels 已废弃，请使用 importExcelAndCreateBatch');
     return from(invoke('import_excel_and_prepare_batch_cmd', {
       args: {
         file_path_str: filePath,
@@ -524,10 +587,23 @@ export class TauriApiService {
   }
 
   /**
-   * 获取批次详情和状态
+   * 获取批次详情和状态 - 从状态管理器获取批次的详细信息
    */
   getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
-    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { batch_id: batchId }));
+    console.log('📊 [TAURI_API] 调用获取批次详情API');
+    console.log('📊 [TAURI_API] 批次ID:', batchId);
+    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { batch_id: batchId })).pipe(
+      tap(details => {
+        console.log('✅ [TAURI_API] 成功获取批次详情');
+        console.log('✅ [TAURI_API] 批次信息:', details.batch_info);
+        console.log('✅ [TAURI_API] 实例数量:', details.instances?.length || 0);
+        console.log('✅ [TAURI_API] 定义数量:', details.definitions?.length || 0);
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 获取批次详情失败:', error);
+        throw error;
+      })
+    );
   }
 
   /**

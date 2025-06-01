@@ -295,120 +295,110 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     }
   }
 
-  // 完成导入
+  // 完成导入 - 使用新的一键导入和创建批次方法
   completeImport(): void {
     if (!this.selectedFile) {
       this.message.error('没有选择文件');
       return;
     }
 
-    // 调用新的不持久化Excel解析服务
-    console.log('调用后端Excel解析服务（不持久化）:', this.selectedFile.name);
-    
+    // 🚀 使用新的一键导入Excel并创建批次服务
+    console.log('🚀 调用新的一键导入Excel并创建批次服务:', this.selectedFile.name);
+
     // 使用完整的文件路径（如果有的话）或文件名
     const filePath = this.selectedFilePath || this.selectedFile.name;
-    
-    console.log('使用文件路径:', filePath);
-    
-    this.tauriApiService.parseExcelWithoutPersistence(filePath, this.selectedFile.name)
-      .subscribe({
-        next: (result) => {
-          console.log('后端Excel解析结果（不持久化）:', result);
-          
-          if (result.success) {
-            // 将解析的数据保存到内存中
-            this.dataStateService.setTestData(result.definitions, result.suggested_batch_info);
-            
-            // 创建导入结果对象（用于显示）
-            const importResult = {
-              success: true,
-              totalChannels: result.definitions_count,
-              successChannels: result.definitions_count,
-              failedChannels: 0,
-              message: result.message,
-              timestamp: new Date().toISOString(),
-              batchInfo: result.suggested_batch_info,
-              // 标记这是不持久化的结果
-              isPersisted: false,
-              definitions: result.definitions
-            };
-            
-            this.dataStateService.updateImportState({
-              isImporting: false,
-              currentStep: 2,
-              importResult: importResult
-            });
-            
-            this.message.success(`数据解析完成：${result.message}。数据将在开始测试时保存。`);
-          } else {
-            throw new Error(result.message);
-          }
-        },
-        error: (error) => {
-          console.error('后端Excel解析失败:', error);
-          
-          // 只有在后端服务不可用时才显示错误
-          if (this.tauriApiService.isTauriEnvironment()) {
-            this.message.error(`Excel解析失败: ${error.message || error}`);
-            this.dataStateService.updateImportState({
-              isImporting: false,
-              currentStep: 0
-            });
-          } else {
-            // 开发环境：提示用户需要启动后端服务
-            this.message.warning('开发环境：需要启动Tauri后端服务才能解析Excel文件');
-            this.dataStateService.updateImportState({
-              isImporting: false,
-              currentStep: 0
-            });
-          }
-        }
-      });
-  }
 
-  // 立即持久化数据
-  persistDataNow(): void {
-    const testData = this.dataStateService.getTestData();
-    
-    if (!testData.isDataAvailable || !testData.parsedDefinitions.length) {
-      this.message.error('没有可持久化的数据');
-      return;
-    }
+    console.log('🚀 使用文件路径:', filePath);
 
-    console.log('开始立即持久化数据...');
-    
-    this.tauriApiService.createBatchAndPersistData(
-      testData.suggestedBatchInfo,
-      testData.parsedDefinitions
+    this.tauriApiService.importExcelAndCreateBatch(
+      filePath,
+      '自动导入批次',
+      this.extractProductModel(),
+      '系统操作员'
     ).subscribe({
       next: (result) => {
-        console.log('数据持久化结果:', result);
-        
-        if (result.success) {
-          // 更新导入结果，标记为已持久化
-          const updatedResult = {
-            ...this.importResult,
-            isPersisted: true,
+        console.log('🚀 后端一键导入和创建批次结果:', result);
+
+        // 修复版：result 是 AllocationResult 结构，没有 success 字段
+        if (result && result.batches && result.batches.length > 0) {
+          // 创建导入结果对象（用于显示）
+          const importResult = {
+            success: true,
+            totalChannels: result.allocation_summary.total_channels,
+            successChannels: result.allocation_summary.total_channels,
+            failedChannels: 0,
+            message: `成功分配 ${result.allocation_summary.total_channels} 个通道到 ${result.batches.length} 个批次`,
+            timestamp: new Date().toISOString(),
             batchInfo: {
-              ...this.importResult.batchInfo,
-              batch_id: result.batch_id
+              batch_id: result.batches[0]?.batch_id || 'unknown',
+              product_model: this.extractProductModel(),
+              serial_number: this.generateSerialNumber(),
+              creation_time: new Date().toISOString(),
+              total_points: result.allocation_summary.total_channels,
+              tested_points: 0,
+              passed_points: 0,
+              failed_points: 0,
+              status_summary: '已创建，等待测试'
+            },
+            // 标记这是已持久化的结果
+            isPersisted: true,
+            definitions: result.allocated_instances,
+            allocationResult: {
+              success: true,
+              allocated_count: result.allocation_summary.total_channels,
+              conflict_count: 0,
+              total_count: result.allocation_summary.total_channels,
+              total_batches: result.batches.length,
+              message: '一键导入和分配完成',
+              allocation_details: {
+                source: 'backend_service',
+                excel_file_name: this.selectedFile!.name,
+                allocation_algorithm: '后端一键导入Excel并创建批次服务',
+                backend_result: result
+              }
             }
           };
-          
+
           this.dataStateService.updateImportState({
-            importResult: updatedResult
+            isImporting: false,
+            currentStep: 2,
+            importResult: importResult
           });
-          
-          this.message.success(`数据已成功保存：${result.message}`);
+
+          this.message.success(`一键导入完成：成功分配 ${result.allocation_summary.total_channels} 个通道到 ${result.batches.length} 个批次`);
         } else {
-          throw new Error(result.message);
+          throw new Error('后端返回的分配结果无效');
         }
       },
       error: (error) => {
-        console.error('数据持久化失败:', error);
-        this.message.error(`数据保存失败: ${error.message || error}`);
+        console.error('🚀 后端一键导入失败:', error);
+
+        // 只有在后端服务不可用时才显示错误
+        if (this.tauriApiService.isTauriEnvironment()) {
+          this.message.error(`一键导入失败: ${error.message || error}`);
+          this.dataStateService.updateImportState({
+            isImporting: false,
+            currentStep: 0
+          });
+        } else {
+          // 开发环境：提示用户需要启动后端服务
+          this.message.warning('开发环境：需要启动Tauri后端服务才能解析Excel文件');
+          this.dataStateService.updateImportState({
+            isImporting: false,
+            currentStep: 0
+          });
+        }
       }
     });
+  }
+
+  // 立即持久化数据 - 已废弃，使用新的一键导入方法
+  persistDataNow(): void {
+    this.message.warning('此功能已废弃，请使用新的一键导入功能');
+    console.warn('persistDataNow() 方法已废弃，请使用 importExcelAndCreateBatch() 方法');
+
+    // 如果用户真的需要持久化，引导他们重新导入
+    this.message.info('请重新选择Excel文件并使用"开始导入"功能');
   }
 
   // 自动分配逻辑
@@ -431,11 +421,18 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       const productModel = this.importResult.batchInfo.product_model;
       const serialNumber = this.importResult.batchInfo.serial_number;
       
-      const allocationResult = await this.tauriApiService.importExcelAndAllocateChannels(
+      const result = await this.tauriApiService.importExcelAndCreateBatch(
         filePath,
+        '自动导入批次',
         productModel,
-        serialNumber
+        '系统操作员'
       ).toPromise();
+
+      if (!result) {
+        throw new Error('后端服务返回空结果');
+      }
+
+      const allocationResult = result.allocation_result; // 提取分配结果
       
       console.log('后端自动分配结果:', allocationResult);
       
@@ -485,12 +482,19 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       const productModel = this.importResult.batchInfo.product_model;
       const serialNumber = this.importResult.batchInfo.serial_number;
       
-      console.log('调用后端importExcelAndAllocateChannels服务...');
-      const allocationResult = await this.tauriApiService.importExcelAndAllocateChannels(
+      console.log('调用后端importExcelAndCreateBatch服务...');
+      const result = await this.tauriApiService.importExcelAndCreateBatch(
         filePath,
+        '自动导入批次',
         productModel,
-        serialNumber
+        '系统操作员'
       ).toPromise();
+
+      if (!result) {
+        throw new Error('后端服务返回空结果');
+      }
+
+      const allocationResult = result.allocation_result; // 提取分配结果
       
       console.log('后端分配结果:', allocationResult);
       

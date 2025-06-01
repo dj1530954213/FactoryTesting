@@ -2,7 +2,7 @@
 // 详细注释：使用SeaORM和SQLite实现数据持久化服务
 
 use async_trait::async_trait;
-use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait};
+use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex}; // 使用 Mutex
 use chrono::Utc;
@@ -205,11 +205,35 @@ impl BaseService for SqliteOrmPersistenceService {
 impl PersistenceService for SqliteOrmPersistenceService {
     // --- ChannelPointDefinition ---
     async fn save_channel_definition(&self, definition: &ChannelPointDefinition) -> AppResult<()> {
-        let active_model: entities::channel_point_definition::ActiveModel = definition.into();
-        entities::channel_point_definition::Entity::insert(active_model)
-            .exec(self.db_conn.as_ref())
+        // 检查是否已存在相同ID的记录
+        let existing = entities::channel_point_definition::Entity::find_by_id(definition.id.clone())
+            .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("保存通道点位定义失败: {}", e)))?;
+            .map_err(|e| AppError::persistence_error(format!("查询通道点位定义失败: {}", e)))?;
+
+        if existing.is_some() {
+            // 记录已存在，执行更新操作
+            let mut active_model: entities::channel_point_definition::ActiveModel = definition.into();
+            // 确保ID不变
+            active_model.id = Set(definition.id.clone());
+            active_model.updated_time = Set(chrono::Utc::now());
+
+            active_model.update(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("更新通道点位定义失败: {}", e)))?;
+
+            log::debug!("更新通道点位定义: {}", definition.tag);
+        } else {
+            // 记录不存在，执行插入操作
+            let active_model: entities::channel_point_definition::ActiveModel = definition.into();
+            entities::channel_point_definition::Entity::insert(active_model)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("插入通道点位定义失败: {}", e)))?;
+
+            log::debug!("插入新通道点位定义: {}", definition.tag);
+        }
+
         Ok(())
     }
 
@@ -243,11 +267,35 @@ impl PersistenceService for SqliteOrmPersistenceService {
 
     // --- TestBatchInfo ---
     async fn save_batch_info(&self, batch: &TestBatchInfo) -> AppResult<()> {
-        let active_model: entities::test_batch_info::ActiveModel = batch.into();
-        entities::test_batch_info::Entity::insert(active_model)
-            .exec(self.db_conn.as_ref())
+        // 检查是否已存在相同ID的记录
+        let existing = entities::test_batch_info::Entity::find_by_id(batch.batch_id.clone())
+            .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("保存测试批次信息失败: {}", e)))?;
+            .map_err(|e| AppError::persistence_error(format!("查询测试批次失败: {}", e)))?;
+
+        if existing.is_some() {
+            // 记录已存在，执行更新操作
+            let mut active_model: entities::test_batch_info::ActiveModel = batch.into();
+            // 确保ID不变
+            active_model.batch_id = Set(batch.batch_id.clone());
+            active_model.updated_time = Set(chrono::Utc::now());
+
+            active_model.update(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("更新测试批次失败: {}", e)))?;
+
+            log::debug!("更新测试批次: {}", batch.batch_id);
+        } else {
+            // 记录不存在，执行插入操作
+            let active_model: entities::test_batch_info::ActiveModel = batch.into();
+            entities::test_batch_info::Entity::insert(active_model)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("插入测试批次失败: {}", e)))?;
+
+            log::debug!("插入新测试批次: {}", batch.batch_id);
+        }
+
         Ok(())
     }
 
@@ -281,11 +329,35 @@ impl PersistenceService for SqliteOrmPersistenceService {
 
     // --- ChannelTestInstance ---
     async fn save_test_instance(&self, instance: &ChannelTestInstance) -> AppResult<()> {
-        let active_model: entities::channel_test_instance::ActiveModel = instance.into();
-        entities::channel_test_instance::Entity::insert(active_model)
-            .exec(self.db_conn.as_ref())
+        // 检查是否已存在相同ID的记录
+        let existing = entities::channel_test_instance::Entity::find_by_id(instance.instance_id.clone())
+            .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("保存测试实例失败: {}", e)))?;
+            .map_err(|e| AppError::persistence_error(format!("查询测试实例失败: {}", e)))?;
+
+        if existing.is_some() {
+            // 记录已存在，执行更新操作
+            let mut active_model: entities::channel_test_instance::ActiveModel = instance.into();
+            // 确保ID不变
+            active_model.instance_id = Set(instance.instance_id.clone());
+            active_model.updated_time = Set(chrono::Utc::now());
+
+            active_model.update(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("更新测试实例失败: {}", e)))?;
+
+            log::debug!("更新测试实例: {}", instance.instance_id);
+        } else {
+            // 记录不存在，执行插入操作
+            let active_model: entities::channel_test_instance::ActiveModel = instance.into();
+            entities::channel_test_instance::Entity::insert(active_model)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("插入测试实例失败: {}", e)))?;
+
+            log::debug!("插入新测试实例: {}", instance.instance_id);
+        }
+
         Ok(())
     }
 
@@ -621,17 +693,10 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
 
         log::info!("开始批量保存 {} 个测试实例", instances.len());
 
-        // 将实例转换为ActiveModel
-        let active_models: Vec<entities::channel_test_instance::ActiveModel> = instances
-            .iter()
-            .map(|instance| instance.into())
-            .collect();
-
-        // 批量插入
-        entities::channel_test_instance::Entity::insert_many(active_models)
-            .exec(self.db_conn.as_ref())
-            .await
-            .map_err(|e| AppError::persistence_error(format!("批量保存测试实例失败: {}", e)))?;
+        // 逐个保存，使用 save_test_instance 的 upsert 逻辑
+        for instance in instances {
+            self.save_test_instance(instance).await?;
+        }
 
         log::info!("成功批量保存 {} 个测试实例", instances.len());
         Ok(())
