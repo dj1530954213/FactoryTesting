@@ -63,6 +63,7 @@ export interface TestBatchInfo {
   product_model?: string;
   serial_number?: string;
   customer_name?: string;
+  station_name?: string;  // 添加站场信息
   operator_name?: string;
   total_points: number;
   tested_points?: number;

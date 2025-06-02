@@ -20,7 +20,8 @@ pub use data_management::{
     parse_excel_and_create_batch_cmd,
     clear_session_data,
     parse_excel_without_persistence_cmd,
-    create_batch_and_persist_data_cmd
+    create_batch_and_persist_data_cmd,
+    delete_batch_cmd
 };
 
 pub use test_plc_config::{

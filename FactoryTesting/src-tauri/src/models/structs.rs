@@ -513,6 +513,8 @@ pub struct TestBatchInfo {
     pub serial_number: Option<String>,
     /// 客户名称
     pub customer_name: Option<String>,
+    /// 站场名称
+    pub station_name: Option<String>,
     /// 创建时间
     pub creation_time: DateTime<Utc>,
     pub last_updated_time: DateTime<Utc>,
@@ -544,6 +546,7 @@ impl TestBatchInfo {
             product_model,
             serial_number,
             customer_name: None,
+            station_name: None,
             creation_time: now,
             last_updated_time: now,
             operator_name: None,

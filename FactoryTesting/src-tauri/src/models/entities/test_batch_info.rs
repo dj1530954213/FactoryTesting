@@ -164,6 +164,7 @@ impl From<&Model> for crate::models::structs::TestBatchInfo {
             product_model: model.product_model.clone(),
             serial_number: model.serial_number.clone(),
             customer_name: model.customer_name.clone(),
+            station_name: model.station_name.clone(),
             creation_time: model.created_time,
             last_updated_time: model.updated_time,
             operator_name: model.operator_name.clone(),

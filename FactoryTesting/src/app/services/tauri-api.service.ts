@@ -640,4 +640,13 @@ export class TauriApiService {
   clearSessionData(): Observable<string> {
     return from(invoke<string>('clear_session_data'));
   }
+
+  /**
+   * 删除单个批次及其相关数据
+   */
+  deleteBatch(batchId: string): Observable<any> {
+    return from(invoke('delete_batch_cmd', {
+      request: { batch_id: batchId }
+    }));
+  }
 }

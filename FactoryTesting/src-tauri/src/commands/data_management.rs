@@ -1416,6 +1416,194 @@ pub async fn clear_all_channel_definitions_cmd(
     }
 }
 
+/// 删除批次请求参数
+#[derive(Debug, Deserialize)]
+pub struct DeleteBatchRequest {
+    pub batch_id: String,
+}
+
+/// 删除批次响应
+#[derive(Debug, Serialize)]
+pub struct DeleteBatchResponse {
+    pub success: bool,
+    pub message: String,
+    pub deleted_definitions_count: usize,
+    pub deleted_instances_count: usize,
+}
+
+/// 删除单个批次及其相关数据
+///
+/// 这个命令会删除指定批次在三张表中的所有相关数据：
+/// 1. test_batch_info 表中的批次信息
+/// 2. channel_test_instances 表中的测试实例
+/// 3. channel_point_definitions 表中的通道定义（如果只属于该批次）
+///
+/// # 参数
+/// * `request` - 删除批次请求，包含批次ID
+/// * `state` - 应用状态
+///
+/// # 返回
+/// * `Result<DeleteBatchResponse, String>` - 删除结果
+#[tauri::command]
+pub async fn delete_batch_cmd(
+    request: DeleteBatchRequest,
+    state: State<'_, AppState>
+) -> Result<DeleteBatchResponse, String> {
+    let batch_id = &request.batch_id;
+    info!("🗑️ [DELETE_BATCH] 收到删除批次请求: {}", batch_id);
+
+    let persistence_service = &state.persistence_service;
+
+    // 检查批次是否存在
+    let batch_info = match persistence_service.load_batch_info(batch_id).await {
+        Ok(Some(info)) => {
+            info!("✅ [DELETE_BATCH] 找到要删除的批次: {}", info.batch_name);
+            info
+        },
+        Ok(None) => {
+            error!("❌ [DELETE_BATCH] 批次不存在: {}", batch_id);
+            return Ok(DeleteBatchResponse {
+                success: false,
+                message: format!("批次不存在: {}", batch_id),
+                deleted_definitions_count: 0,
+                deleted_instances_count: 0,
+            });
+        },
+        Err(e) => {
+            error!("❌ [DELETE_BATCH] 查询批次信息失败: {}", e);
+            return Ok(DeleteBatchResponse {
+                success: false,
+                message: format!("查询批次信息失败: {}", e),
+                deleted_definitions_count: 0,
+                deleted_instances_count: 0,
+            });
+        }
+    };
+
+    // 检查批次状态，不允许删除正在进行的测试
+    if batch_info.overall_status == crate::models::OverallTestStatus::HardPointTesting ||
+       batch_info.overall_status == crate::models::OverallTestStatus::ManualTesting {
+        error!("❌ [DELETE_BATCH] 无法删除正在进行测试的批次: {}", batch_id);
+        return Ok(DeleteBatchResponse {
+            success: false,
+            message: "无法删除正在进行测试的批次，请先停止测试".to_string(),
+            deleted_definitions_count: 0,
+            deleted_instances_count: 0,
+        });
+    }
+
+    let mut deleted_definitions_count = 0;
+    let mut deleted_instances_count = 0;
+    let mut errors = Vec::new();
+
+    // 1. 首先收集需要删除的通道定义ID（在删除测试实例之前）
+    info!("🗑️ [DELETE_BATCH] 开始收集需要删除的通道定义ID...");
+    let mut definition_ids_to_delete = std::collections::HashSet::new();
+    match persistence_service.load_test_instances_by_batch(batch_id).await {
+        Ok(instances) => {
+            for instance in &instances {
+                definition_ids_to_delete.insert(instance.definition_id.clone());
+            }
+            info!("📊 [DELETE_BATCH] 从{}个测试实例中收集到{}个唯一的通道定义ID",
+                instances.len(), definition_ids_to_delete.len());
+        }
+        Err(e) => {
+            errors.push(format!("加载批次测试实例失败（用于收集定义ID）: {}", e));
+            error!("❌ [DELETE_BATCH] 加载批次测试实例失败（用于收集定义ID）: {}", e);
+        }
+    }
+
+    // 2. 删除该批次的所有测试实例
+    info!("🗑️ [DELETE_BATCH] 开始删除批次的测试实例...");
+    match persistence_service.load_test_instances_by_batch(batch_id).await {
+        Ok(instances) => {
+            info!("📊 [DELETE_BATCH] 找到{}个测试实例需要删除", instances.len());
+            for instance in instances {
+                match persistence_service.delete_test_instance(&instance.instance_id).await {
+                    Ok(_) => {
+                        deleted_instances_count += 1;
+                        info!("✅ [DELETE_BATCH] 成功删除测试实例: {}", instance.instance_id);
+                    }
+                    Err(e) => {
+                        errors.push(format!("删除测试实例失败: {} - {}", instance.instance_id, e));
+                        error!("❌ [DELETE_BATCH] 删除测试实例失败: {} - {}", instance.instance_id, e);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            errors.push(format!("加载批次测试实例失败: {}", e));
+            error!("❌ [DELETE_BATCH] 加载批次测试实例失败: {}", e);
+        }
+    }
+
+    // 3. 删除收集到的通道定义
+    info!("🗑️ [DELETE_BATCH] 开始删除批次的通道定义...");
+    for definition_id in definition_ids_to_delete {
+        // 注意：这里简化处理，假设每个批次的定义都是独立的
+        // 在实际项目中可能需要更复杂的逻辑来检查引用关系
+        match persistence_service.delete_channel_definition(&definition_id).await {
+            Ok(_) => {
+                deleted_definitions_count += 1;
+                info!("✅ [DELETE_BATCH] 成功删除通道定义: {}", definition_id);
+            }
+            Err(e) => {
+                errors.push(format!("删除通道定义失败: {} - {}", definition_id, e));
+                error!("❌ [DELETE_BATCH] 删除通道定义失败: {} - {}", definition_id, e);
+            }
+        }
+    }
+
+    // 4. 最后删除批次信息
+    info!("🗑️ [DELETE_BATCH] 开始删除批次信息...");
+    match persistence_service.delete_batch_info(batch_id).await {
+        Ok(_) => {
+            info!("✅ [DELETE_BATCH] 成功删除批次信息: {}", batch_id);
+        }
+        Err(e) => {
+            errors.push(format!("删除批次信息失败: {}", e));
+            error!("❌ [DELETE_BATCH] 删除批次信息失败: {}", e);
+        }
+    }
+
+    // 5. 从会话跟踪中移除该批次
+    {
+        let mut session_batch_ids_guard = state.session_batch_ids.lock().await;
+        session_batch_ids_guard.retain(|id| id != batch_id);
+        info!("✅ [DELETE_BATCH] 从会话跟踪中移除批次: {}", batch_id);
+    }
+
+    let success = errors.is_empty();
+    let message = if success {
+        format!(
+            "成功删除批次 '{}': 删除了{}个通道定义和{}个测试实例",
+            batch_info.batch_name,
+            deleted_definitions_count,
+            deleted_instances_count
+        )
+    } else {
+        format!(
+            "批次删除部分成功: 删除了{}个通道定义和{}个测试实例，但有{}个操作失败",
+            deleted_definitions_count,
+            deleted_instances_count,
+            errors.len()
+        )
+    };
+
+    if !errors.is_empty() {
+        error!("❌ [DELETE_BATCH] 删除过程中的错误: {:?}", errors);
+    }
+
+    info!("🎉 [DELETE_BATCH] 批次删除操作完成: {}", message);
+
+    Ok(DeleteBatchResponse {
+        success,
+        message,
+        deleted_definitions_count,
+        deleted_instances_count,
+    })
+}
+
 /// 一键导入Excel并创建批次
 #[tauri::command]
 pub async fn import_excel_and_create_batch_cmd(

@@ -158,7 +158,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // 并行加载所有数据
       const [systemStatus, allBatches, allChannels] = await Promise.all([
         this.tauriApi.getSystemStatus().toPromise(),
-        this.tauriApi.getAllBatchInfo().toPromise(),
+        this.tauriApi.getBatchList().toPromise(), // 使用当前会话的批次列表
         this.tauriApi.getAllChannelDefinitions().toPromise()
       ]);
 
@@ -184,7 +184,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // 获取最近的批次
       this.recentBatches = (allBatches || [])
-        .sort((a: TestBatchInfo, b: TestBatchInfo) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a: TestBatchInfo, b: TestBatchInfo) => {
+          // 使用 creation_time 字段进行排序
+          const timeA = a.creation_time ? new Date(a.creation_time).getTime() : 0;
+          const timeB = b.creation_time ? new Date(b.creation_time).getTime() : 0;
+          return timeB - timeA; // 最新的在前
+        })
         .slice(0, 5);
 
       // 检查是否有导入的数据
@@ -377,7 +382,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   formatTime(dateString: string): string {
+    if (!dateString) {
+      return '未知时间';
+    }
+
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return '无效时间';
+    }
+
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -459,8 +472,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  exportBatchReport(batch: TestBatchInfo) {
-    console.log('导出批次报告:', batch.batch_id);
+
+
+  // 删除批次
+  async deleteBatch(batch: TestBatchInfo) {
+    // 显示确认对话框
+    const confirmed = confirm(`确定要删除批次 "${batch.product_model || '未知产品'} - ${batch.serial_number || '未知序列号'}" 吗？\n\n此操作将删除批次及其所有相关数据，且无法撤销。`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      this.loading = true;
+      this.loadingMessage = '正在删除批次...';
+
+      // 调用删除API
+      await this.tauriApi.deleteBatch(batch.batch_id).toPromise();
+
+      // 删除成功，刷新数据
+      console.log('批次删除成功:', batch.batch_id);
+      await this.loadDashboardData();
+
+      // 显示成功消息
+      alert('批次删除成功！');
+
+    } catch (error) {
+      console.error('删除批次失败:', error);
+      this.error = '删除批次失败: ' + (error as Error).message;
+      alert('删除批次失败: ' + (error as Error).message);
+    } finally {
+      this.loading = false;
+      this.loadingMessage = '';
+    }
   }
 
   // 刷新数据

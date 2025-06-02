@@ -147,6 +147,9 @@
           <ng-template #titleTemplate>
             <a (click)="viewBatchDetails(batch)">
               {{ batch.product_model || '未知产品' }} - {{ batch.serial_number || '未知序列号' }}
+              <span *ngIf="batch.station_name" class="station-tag">
+                <nz-tag nzColor="blue">{{ batch.station_name }}</nz-tag>
+              </span>
             </a>
           </ng-template>
 
@@ -158,7 +161,7 @@
                 </nz-tag>
                 <span *nzSpaceItem>总点位: {{ batch.total_points }}</span>
                 <span *nzSpaceItem>通过率: {{ calculatePassRate(batch) }}%</span>
-                <span *nzSpaceItem>{{ formatTime(batch.created_at) }}</span>
+                <span *nzSpaceItem>{{ formatTime(batch.creation_time || '') }}</span>
               </nz-space>
             </div>
           </ng-template>
@@ -171,10 +174,11 @@
               查看详情
             </button>
           </nz-list-item-action>
+
           <nz-list-item-action>
-            <button nz-button nzType="link" (click)="exportBatchReport(batch)">
-              <span nz-icon nzType="download" nzTheme="outline"></span>
-              导出报告
+            <button nz-button nzType="link" nzDanger (click)="deleteBatch(batch)">
+              <span nz-icon nzType="delete" nzTheme="outline"></span>
+              删除
             </button>
           </nz-list-item-action>
         </ul>
