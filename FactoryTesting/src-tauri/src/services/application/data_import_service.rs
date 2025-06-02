@@ -223,14 +223,18 @@ impl DataImportService {
 
                 // 更新字段
                 active_model.variable_name = Set(definition.variable_name.clone());
-                active_model.variable_description = Set(definition.variable_description.clone());
-                active_model.station_name = Set(definition.station_name.clone());
-                active_model.module_name = Set(definition.module_name.clone());
+                active_model.variable_description = Set(Some(definition.variable_description.clone()));
+                active_model.station_name = Set(Some(definition.station_name.clone()));
+                active_model.module_name = Set(Some(definition.module_name.clone()));
                 active_model.module_type = Set(definition.module_type.to_string());
                 active_model.channel_tag_in_module = Set(definition.channel_tag_in_module.clone());
-                active_model.data_type = Set(definition.data_type.to_string());
-                active_model.power_supply_type = Set(definition.power_supply_type.clone());
-                active_model.wire_system = Set(definition.wire_system.clone());
+                active_model.data_type = Set(Some(definition.data_type.to_string()));
+                active_model.power_supply_type = Set(match definition.power_supply_type.as_str() {
+                    "有源" => 1,
+                    "无源" => 0,
+                    _ => 1,
+                });
+                active_model.wire_system = Set(Some(definition.wire_system.clone()));
                 active_model.plc_communication_address = Set(definition.plc_communication_address.clone());
 
                 // 更新可选字段
@@ -238,7 +242,7 @@ impl DataImportService {
                     active_model.plc_absolute_address = Set(Some(addr.clone()));
                 }
                 if let Some(ref prop) = definition.access_property {
-                    active_model.access_property = Set(Some(prop.clone()));
+                    active_model.read_write_property = Set(Some(prop.clone()));
                 }
 
                 active_model.update(&*self.db).await

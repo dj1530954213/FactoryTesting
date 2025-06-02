@@ -201,18 +201,22 @@ fn load_real_channel_definitions_from_file() -> Result<Vec<ChannelPointDefinitio
             _ => PointDataType::Float,
         };
 
-        let definition = ChannelPointDefinition {
-            id: format!("real_{}_{}", module_type_str.to_lowercase(), line_num),
-            tag: variable_name.to_string(),
-            variable_name: variable_name.to_string(),
-            variable_description: format!("{} {}", variable_desc, power_type_str),
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            variable_name.to_string(),
+            variable_name.to_string(),
+            format!("{} {}", variable_desc, power_type_str),
+            "樟洋电厂".to_string(),
+            "测试模块".to_string(),
             module_type,
+            format!("CH_{}", line_num),
             data_type,
-            plc_communication_address: plc_address.to_string(),
-            power_supply_type: power_type_str.to_string(),
-            wire_system: fields.get(4).unwrap_or(&"").to_string(),
-            ..Default::default()
-        };
+            plc_address.to_string(),
+            power_type_str.to_string(),
+        );
+
+        // 设置ID和其他字段
+        definition.id = format!("real_{}_{}", module_type_str.to_lowercase(), line_num);
+        definition.wire_system = fields.get(4).unwrap_or(&"").to_string();
 
         definitions.push(definition);
     }

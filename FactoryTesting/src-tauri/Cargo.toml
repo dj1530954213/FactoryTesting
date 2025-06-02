@@ -24,6 +24,10 @@ path = "src/main.rs"
 name = "create_db"
 path = "src/bin/create_db.rs"
 
+[[bin]]
+name = "initialize_database_complete"
+path = "src/bin/initialize_database_complete.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.2.0", features = [] }
 

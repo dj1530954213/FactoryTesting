@@ -163,130 +163,154 @@ fn create_large_channel_definitions() -> Vec<ChannelPointDefinition> {
 
     // 创建AI有源通道 (20个)
     for i in 1..=20 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("ai_powered_{}", i),
-            tag: format!("AI_PWR_{:03}", i),
-            variable_name: format!("AI_Powered_{}", i),
-            variable_description: format!("模拟量输入通道{}", i),
-            module_type: ModuleType::AI,
-            data_type: PointDataType::Float,
-            plc_communication_address: format!("DB1.DBD{}", i * 4),
-            power_supply_type: "有源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("AI_PWR_{:03}", i),
+            format!("AI_Powered_{}", i),
+            format!("模拟量输入通道{}", i),
+            "测试站点".to_string(),
+            "AI模块".to_string(),
+            ModuleType::AI,
+            format!("CH_{}", i),
+            PointDataType::Float,
+            format!("DB1.DBD{}", i * 4),
+            "有源".to_string(),
+        );
+        definition.id = format!("ai_powered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建AI无源通道 (15个)
     for i in 1..=15 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("ai_unpowered_{}", i),
-            tag: format!("AI_UNPWR_{:03}", i),
-            variable_name: format!("AI_Unpowered_{}", i),
-            variable_description: format!("模拟量输入通道(无源){}", i),
-            module_type: ModuleType::AI,
-            data_type: PointDataType::Float,
-            plc_communication_address: format!("DB2.DBD{}", i * 4),
-            power_supply_type: "无源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("AI_UNPWR_{:03}", i),
+            format!("AI_Unpowered_{}", i),
+            format!("模拟量输入通道(无源){}", i),
+            "测试站点".to_string(),
+            "AI模块".to_string(),
+            ModuleType::AI,
+            format!("CH_{}", i),
+            PointDataType::Float,
+            format!("DB2.DBD{}", i * 4),
+            "无源".to_string(),
+        );
+        definition.id = format!("ai_unpowered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建AO有源通道 (15个)
     for i in 1..=15 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("ao_powered_{}", i),
-            tag: format!("AO_PWR_{:03}", i),
-            variable_name: format!("AO_Powered_{}", i),
-            variable_description: format!("模拟量输出通道{}", i),
-            module_type: ModuleType::AO,
-            data_type: PointDataType::Float,
-            plc_communication_address: format!("DB3.DBD{}", i * 4),
-            power_supply_type: "有源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("AO_PWR_{:03}", i),
+            format!("AO_Powered_{}", i),
+            format!("模拟量输出通道{}", i),
+            "测试站点".to_string(),
+            "AO模块".to_string(),
+            ModuleType::AO,
+            format!("CH_{}", i),
+            PointDataType::Float,
+            format!("DB3.DBD{}", i * 4),
+            "有源".to_string(),
+        );
+        definition.id = format!("ao_powered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建AO无源通道 (20个)
     for i in 1..=20 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("ao_unpowered_{}", i),
-            tag: format!("AO_UNPWR_{:03}", i),
-            variable_name: format!("AO_Unpowered_{}", i),
-            variable_description: format!("模拟量输出通道(无源){}", i),
-            module_type: ModuleType::AO,
-            data_type: PointDataType::Float,
-            plc_communication_address: format!("DB4.DBD{}", i * 4),
-            power_supply_type: "无源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("AO_UNPWR_{:03}", i),
+            format!("AO_Unpowered_{}", i),
+            format!("模拟量输出通道(无源){}", i),
+            "测试站点".to_string(),
+            "AO模块".to_string(),
+            ModuleType::AO,
+            format!("CH_{}", i),
+            PointDataType::Float,
+            format!("DB4.DBD{}", i * 4),
+            "无源".to_string(),
+        );
+        definition.id = format!("ao_unpowered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建DI有源通道 (30个)
     for i in 1..=30 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("di_powered_{}", i),
-            tag: format!("DI_PWR_{:03}", i),
-            variable_name: format!("DI_Powered_{}", i),
-            variable_description: format!("数字量输入通道{}", i),
-            module_type: ModuleType::DI,
-            data_type: PointDataType::Bool,
-            plc_communication_address: format!("M{}", i),
-            power_supply_type: "有源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("DI_PWR_{:03}", i),
+            format!("DI_Powered_{}", i),
+            format!("数字量输入通道{}", i),
+            "测试站点".to_string(),
+            "DI模块".to_string(),
+            ModuleType::DI,
+            format!("CH_{}", i),
+            PointDataType::Bool,
+            format!("M{}", i),
+            "有源".to_string(),
+        );
+        definition.id = format!("di_powered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建DI无源通道 (25个)
     for i in 1..=25 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("di_unpowered_{}", i),
-            tag: format!("DI_UNPWR_{:03}", i),
-            variable_name: format!("DI_Unpowered_{}", i),
-            variable_description: format!("数字量输入通道(无源){}", i),
-            module_type: ModuleType::DI,
-            data_type: PointDataType::Bool,
-            plc_communication_address: format!("M{}", i + 100),
-            power_supply_type: "无源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("DI_UNPWR_{:03}", i),
+            format!("DI_Unpowered_{}", i),
+            format!("数字量输入通道(无源){}", i),
+            "测试站点".to_string(),
+            "DI模块".to_string(),
+            ModuleType::DI,
+            format!("CH_{}", i),
+            PointDataType::Bool,
+            format!("M{}", i + 100),
+            "无源".to_string(),
+        );
+        definition.id = format!("di_unpowered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建DO有源通道 (25个)
     for i in 1..=25 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("do_powered_{}", i),
-            tag: format!("DO_PWR_{:03}", i),
-            variable_name: format!("DO_Powered_{}", i),
-            variable_description: format!("数字量输出通道{}", i),
-            module_type: ModuleType::DO,
-            data_type: PointDataType::Bool,
-            plc_communication_address: format!("Q{}", i),
-            power_supply_type: "有源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("DO_PWR_{:03}", i),
+            format!("DO_Powered_{}", i),
+            format!("数字量输出通道{}", i),
+            "测试站点".to_string(),
+            "DO模块".to_string(),
+            ModuleType::DO,
+            format!("CH_{}", i),
+            PointDataType::Bool,
+            format!("Q{}", i),
+            "有源".to_string(),
+        );
+        definition.id = format!("do_powered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     // 创建DO无源通道 (30个)
     for i in 1..=30 {
-        definitions.push(ChannelPointDefinition {
-            id: format!("do_unpowered_{}", i),
-            tag: format!("DO_UNPWR_{:03}", i),
-            variable_name: format!("DO_Unpowered_{}", i),
-            variable_description: format!("数字量输出通道(无源){}", i),
-            module_type: ModuleType::DO,
-            data_type: PointDataType::Bool,
-            plc_communication_address: format!("Q{}", i + 100),
-            power_supply_type: "无源".to_string(),
-            wire_system: "二线制".to_string(),
-            ..Default::default()
-        });
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("DO_UNPWR_{:03}", i),
+            format!("DO_Unpowered_{}", i),
+            format!("数字量输出通道(无源){}", i),
+            "测试站点".to_string(),
+            "DO模块".to_string(),
+            ModuleType::DO,
+            format!("CH_{}", i),
+            PointDataType::Bool,
+            format!("Q{}", i + 100),
+            "无源".to_string(),
+        );
+        definition.id = format!("do_unpowered_{}", i);
+        definition.wire_system = "二线制".to_string();
+        definitions.push(definition);
     }
 
     definitions

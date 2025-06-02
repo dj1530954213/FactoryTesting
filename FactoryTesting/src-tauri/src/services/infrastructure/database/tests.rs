@@ -30,42 +30,27 @@ mod tests {
 
     /// 创建测试用的通道点位定义
     fn create_test_channel_definition(id: &str) -> ChannelPointDefinition {
-        ChannelPointDefinition {
-            id: id.to_string(),
-            tag: format!("TEST_TAG_{}", id),
-            variable_name: format!("test_var_{}", id),
-            variable_description: format!("测试通道 {}", id),
-            station_name: "TEST_STATION".to_string(),
-            module_name: "TEST_MODULE".to_string(),
-            module_type: ModuleType::AI,
-            channel_tag_in_module: format!("AI_{}", id),
-            data_type: PointDataType::Float,
-            power_supply_type: "有源".to_string(),
-            wire_system: "4线制".to_string(),
-            plc_absolute_address: None,
-            plc_communication_address: format!("DB1.DBD{}", id.parse::<u32>().unwrap_or(0) * 4),
-            range_lower_limit: Some(4.0),
-            range_upper_limit: Some(20.0),
-            engineering_unit: Some("mA".to_string()),
-            sll_set_value: None,
-            sll_set_point_address: None,
-            sll_feedback_address: None,
-            sl_set_value: None,
-            sl_set_point_address: None,
-            sl_feedback_address: None,
-            sh_set_value: None,
-            sh_set_point_address: None,
-            sh_feedback_address: None,
-            shh_set_value: None,
-            shh_set_point_address: None,
-            shh_feedback_address: None,
-            maintenance_value_set_point_address: None,
-            maintenance_enable_switch_point_address: None,
-            access_property: None,
-            save_history: None,
-            power_failure_protection: None,
-            test_rig_plc_address: None,
-        }
+        let mut definition = ChannelPointDefinition::new_with_power_type(
+            format!("TEST_TAG_{}", id),
+            format!("test_var_{}", id),
+            format!("测试通道 {}", id),
+            "TEST_STATION".to_string(),
+            "TEST_MODULE".to_string(),
+            ModuleType::AI,
+            format!("AI_{}", id),
+            PointDataType::Float,
+            format!("DB1.DBD{}", id.parse::<u32>().unwrap_or(0) * 4),
+            "有源".to_string(),
+        );
+
+        // 设置额外字段
+        definition.id = id.to_string();
+        definition.wire_system = "4线制".to_string();
+        definition.range_lower_limit = Some(4.0);
+        definition.range_upper_limit = Some(20.0);
+        definition.engineering_unit = Some("mA".to_string());
+
+        definition
     }
 
     /// 创建测试用的测试实例

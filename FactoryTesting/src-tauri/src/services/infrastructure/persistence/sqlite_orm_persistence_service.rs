@@ -205,51 +205,113 @@ impl BaseService for SqliteOrmPersistenceService {
 impl PersistenceService for SqliteOrmPersistenceService {
     // --- ChannelPointDefinition ---
     async fn save_channel_definition(&self, definition: &ChannelPointDefinition) -> AppResult<()> {
+        log::debug!("🔍 [SAVE_DEFINITION] 开始保存通道定义: ID={}, Tag={}", definition.id, definition.tag);
+
+        // 验证UUID格式
+        if definition.id.is_empty() || definition.id.len() < 36 {
+            let error_msg = format!("无效的UUID格式: '{}'", definition.id);
+            log::error!("❌ [SAVE_DEFINITION] {}", error_msg);
+            return Err(AppError::validation_error(error_msg));
+        }
+
         // 检查是否已存在相同ID的记录
         let existing = entities::channel_point_definition::Entity::find_by_id(definition.id.clone())
             .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("查询通道点位定义失败: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("查询通道点位定义失败: {}", e);
+                log::error!("❌ [SAVE_DEFINITION] {}", error_msg);
+                AppError::persistence_error(error_msg)
+            })?;
 
         if existing.is_some() {
+            log::debug!("🔄 [SAVE_DEFINITION] 记录已存在，执行更新操作: {}", definition.tag);
             // 记录已存在，执行更新操作
             let mut active_model: entities::channel_point_definition::ActiveModel = definition.into();
             // 确保ID不变
             active_model.id = Set(definition.id.clone());
-            active_model.updated_time = Set(chrono::Utc::now());
+            active_model.updated_at = Set(chrono::Utc::now().to_rfc3339());
 
-            active_model.update(self.db_conn.as_ref())
+            let update_result = active_model.update(self.db_conn.as_ref())
                 .await
-                .map_err(|e| AppError::persistence_error(format!("更新通道点位定义失败: {}", e)))?;
+                .map_err(|e| {
+                    let error_msg = format!("更新通道点位定义失败: {} - {}", definition.tag, e);
+                    log::error!("❌ [SAVE_DEFINITION] {}", error_msg);
+                    AppError::persistence_error(error_msg)
+                })?;
 
-            log::debug!("更新通道点位定义: {}", definition.tag);
+            log::info!("✅ [SAVE_DEFINITION] 成功更新通道点位定义: {}", definition.tag);
+            log::debug!("🔍 [SAVE_DEFINITION] 更新结果: {:?}", update_result.id);
         } else {
+            log::debug!("➕ [SAVE_DEFINITION] 记录不存在，执行插入操作: {}", definition.tag);
             // 记录不存在，执行插入操作
             let active_model: entities::channel_point_definition::ActiveModel = definition.into();
-            entities::channel_point_definition::Entity::insert(active_model)
+
+            // 详细记录要插入的数据
+            log::debug!("🔍 [SAVE_DEFINITION] 插入数据详情: ID={}, Tag={}, ModuleType={}, PowerType={}",
+                definition.id, definition.tag, definition.module_type, definition.power_supply_type);
+
+            let insert_result = entities::channel_point_definition::Entity::insert(active_model)
                 .exec(self.db_conn.as_ref())
                 .await
-                .map_err(|e| AppError::persistence_error(format!("插入通道点位定义失败: {}", e)))?;
+                .map_err(|e| {
+                    let error_msg = format!("插入通道点位定义失败: {} - 详细错误: {}", definition.tag, e);
+                    log::error!("❌ [SAVE_DEFINITION] {}", error_msg);
+                    log::error!("❌ [SAVE_DEFINITION] 失败的定义详情: ID={}, Tag={}, ModuleType={:?}",
+                        definition.id, definition.tag, definition.module_type);
+                    AppError::persistence_error(error_msg)
+                })?;
 
-            log::debug!("插入新通道点位定义: {}", definition.tag);
+            log::info!("✅ [SAVE_DEFINITION] 成功插入新通道点位定义: {}", definition.tag);
+            log::debug!("🔍 [SAVE_DEFINITION] 插入结果: {:?}", insert_result.last_insert_id);
         }
 
+        log::debug!("✅ [SAVE_DEFINITION] 保存通道定义完成: {}", definition.tag);
         Ok(())
     }
 
     async fn load_channel_definition(&self, id: &str) -> AppResult<Option<ChannelPointDefinition>> {
+        log::debug!("🔍 [LOAD_DEFINITION] 查询通道定义: ID={}", id);
+
         let model = entities::channel_point_definition::Entity::find_by_id(id.to_string())
             .one(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("加载通道点位定义失败: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("加载通道点位定义失败: ID={} - {}", id, e);
+                log::error!("❌ [LOAD_DEFINITION] {}", error_msg);
+                AppError::persistence_error(error_msg)
+            })?;
+
+        if let Some(ref model) = model {
+            log::debug!("✅ [LOAD_DEFINITION] 找到通道定义: ID={}, Tag={}", model.id, model.tag);
+        } else {
+            log::warn!("⚠️ [LOAD_DEFINITION] 未找到通道定义: ID={}", id);
+        }
+
         Ok(model.map(|m| (&m).into())) // 使用 From trait 转换
     }
 
     async fn load_all_channel_definitions(&self) -> AppResult<Vec<ChannelPointDefinition>> {
+        log::debug!("🔍 [LOAD_ALL_DEFINITIONS] 查询所有通道定义");
+
         let models = entities::channel_point_definition::Entity::find()
             .all(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("加载所有通道点位定义失败: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("加载所有通道点位定义失败: {}", e);
+                log::error!("❌ [LOAD_ALL_DEFINITIONS] {}", error_msg);
+                AppError::persistence_error(error_msg)
+            })?;
+
+        log::info!("✅ [LOAD_ALL_DEFINITIONS] 从数据库加载了 {} 个通道定义", models.len());
+
+        if models.is_empty() {
+            log::warn!("⚠️ [LOAD_ALL_DEFINITIONS] 数据库中没有通道定义数据");
+        } else {
+            log::debug!("🔍 [LOAD_ALL_DEFINITIONS] 前3个定义: {:?}",
+                models.iter().take(3).map(|m| format!("ID={}, Tag={}", m.id, m.tag)).collect::<Vec<_>>());
+        }
+
         Ok(models.iter().map(|m| m.into()).collect()) // 使用 From trait 转换
     }
 

@@ -33,9 +33,11 @@ pub struct ChannelPointDefinition {
     /// 模块类型（AI, DI, etc.）
     pub module_type: ModuleType,
     /// 在模块内的通道号/标签
+    #[serde(rename = "channel_number")]
     pub channel_tag_in_module: String,
 
     /// 数据类型（Bool, Float）
+    #[serde(rename = "point_data_type")]
     pub data_type: PointDataType,
     /// 供电类型（例如："有源", "无源"）
     pub power_supply_type: String,
@@ -62,38 +64,78 @@ pub struct ChannelPointDefinition {
     pub sll_set_value: Option<f32>,
     /// 低低报设定值写入地址
     pub sll_set_point_address: Option<String>,
+    /// 低低报设定值写入PLC地址
+    pub sll_set_point_plc_address: Option<String>,
+    /// 低低报设定值写入通讯地址
+    pub sll_set_point_communication_address: Option<String>,
     /// 低低报状态读取地址
     pub sll_feedback_address: Option<String>,
+    /// 低低报状态读取PLC地址
+    pub sll_feedback_plc_address: Option<String>,
+    /// 低低报状态读取通讯地址
+    pub sll_feedback_communication_address: Option<String>,
 
     // 低报
     /// 低报设定值
     pub sl_set_value: Option<f32>,
     /// 低报设定值写入地址
     pub sl_set_point_address: Option<String>,
+    /// 低报设定值写入PLC地址
+    pub sl_set_point_plc_address: Option<String>,
+    /// 低报设定值写入通讯地址
+    pub sl_set_point_communication_address: Option<String>,
     /// 低报状态读取地址
     pub sl_feedback_address: Option<String>,
+    /// 低报状态读取PLC地址
+    pub sl_feedback_plc_address: Option<String>,
+    /// 低报状态读取通讯地址
+    pub sl_feedback_communication_address: Option<String>,
 
     // 高报
     /// 高报设定值
     pub sh_set_value: Option<f32>,
     /// 高报设定值写入地址
     pub sh_set_point_address: Option<String>,
+    /// 高报设定值写入PLC地址
+    pub sh_set_point_plc_address: Option<String>,
+    /// 高报设定值写入通讯地址
+    pub sh_set_point_communication_address: Option<String>,
     /// 高报状态读取地址
     pub sh_feedback_address: Option<String>,
+    /// 高报状态读取PLC地址
+    pub sh_feedback_plc_address: Option<String>,
+    /// 高报状态读取通讯地址
+    pub sh_feedback_communication_address: Option<String>,
 
     // 高高报
     /// 高高报设定值
     pub shh_set_value: Option<f32>,
     /// 高高报设定值写入地址
     pub shh_set_point_address: Option<String>,
+    /// 高高报设定值写入PLC地址
+    pub shh_set_point_plc_address: Option<String>,
+    /// 高高报设定值写入通讯地址
+    pub shh_set_point_communication_address: Option<String>,
     /// 高高报状态读取地址
     pub shh_feedback_address: Option<String>,
+    /// 高高报状态读取PLC地址
+    pub shh_feedback_plc_address: Option<String>,
+    /// 高高报状态读取通讯地址
+    pub shh_feedback_communication_address: Option<String>,
 
     // 维护模式相关（主要用于AI）
     /// 维护值设定点地址
     pub maintenance_value_set_point_address: Option<String>,
+    /// 维护值设定点PLC地址
+    pub maintenance_value_set_point_plc_address: Option<String>,
+    /// 维护值设定点通讯地址
+    pub maintenance_value_set_point_communication_address: Option<String>,
     /// 维护使能开关点地址
     pub maintenance_enable_switch_point_address: Option<String>,
+    /// 维护使能开关点PLC地址
+    pub maintenance_enable_switch_point_plc_address: Option<String>,
+    /// 维护使能开关点通讯地址
+    pub maintenance_enable_switch_point_communication_address: Option<String>,
 
     // 其他配置信息
     /// 读写属性
@@ -140,18 +182,38 @@ impl ChannelPointDefinition {
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
+            sll_set_point_plc_address: None,
+            sll_set_point_communication_address: None,
             sll_feedback_address: None,
+            sll_feedback_plc_address: None,
+            sll_feedback_communication_address: None,
             sl_set_value: None,
             sl_set_point_address: None,
+            sl_set_point_plc_address: None,
+            sl_set_point_communication_address: None,
             sl_feedback_address: None,
+            sl_feedback_plc_address: None,
+            sl_feedback_communication_address: None,
             sh_set_value: None,
             sh_set_point_address: None,
+            sh_set_point_plc_address: None,
+            sh_set_point_communication_address: None,
             sh_feedback_address: None,
+            sh_feedback_plc_address: None,
+            sh_feedback_communication_address: None,
             shh_set_value: None,
             shh_set_point_address: None,
+            shh_set_point_plc_address: None,
+            shh_set_point_communication_address: None,
             shh_feedback_address: None,
+            shh_feedback_plc_address: None,
+            shh_feedback_communication_address: None,
             maintenance_value_set_point_address: None,
+            maintenance_value_set_point_plc_address: None,
+            maintenance_value_set_point_communication_address: None,
             maintenance_enable_switch_point_address: None,
+            maintenance_enable_switch_point_plc_address: None,
+            maintenance_enable_switch_point_communication_address: None,
             access_property: None,
             save_history: None,
             power_failure_protection: None,
@@ -191,18 +253,38 @@ impl ChannelPointDefinition {
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
+            sll_set_point_plc_address: None,
+            sll_set_point_communication_address: None,
             sll_feedback_address: None,
+            sll_feedback_plc_address: None,
+            sll_feedback_communication_address: None,
             sl_set_value: None,
             sl_set_point_address: None,
+            sl_set_point_plc_address: None,
+            sl_set_point_communication_address: None,
             sl_feedback_address: None,
+            sl_feedback_plc_address: None,
+            sl_feedback_communication_address: None,
             sh_set_value: None,
             sh_set_point_address: None,
+            sh_set_point_plc_address: None,
+            sh_set_point_communication_address: None,
             sh_feedback_address: None,
+            sh_feedback_plc_address: None,
+            sh_feedback_communication_address: None,
             shh_set_value: None,
             shh_set_point_address: None,
+            shh_set_point_plc_address: None,
+            shh_set_point_communication_address: None,
             shh_feedback_address: None,
+            shh_feedback_plc_address: None,
+            shh_feedback_communication_address: None,
             maintenance_value_set_point_address: None,
+            maintenance_value_set_point_plc_address: None,
+            maintenance_value_set_point_communication_address: None,
             maintenance_enable_switch_point_address: None,
+            maintenance_enable_switch_point_plc_address: None,
+            maintenance_enable_switch_point_communication_address: None,
             access_property: None,
             save_history: None,
             power_failure_protection: None,
@@ -232,18 +314,38 @@ impl Default for ChannelPointDefinition {
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
+            sll_set_point_plc_address: None,
+            sll_set_point_communication_address: None,
             sll_feedback_address: None,
+            sll_feedback_plc_address: None,
+            sll_feedback_communication_address: None,
             sl_set_value: None,
             sl_set_point_address: None,
+            sl_set_point_plc_address: None,
+            sl_set_point_communication_address: None,
             sl_feedback_address: None,
+            sl_feedback_plc_address: None,
+            sl_feedback_communication_address: None,
             sh_set_value: None,
             sh_set_point_address: None,
+            sh_set_point_plc_address: None,
+            sh_set_point_communication_address: None,
             sh_feedback_address: None,
+            sh_feedback_plc_address: None,
+            sh_feedback_communication_address: None,
             shh_set_value: None,
             shh_set_point_address: None,
+            shh_set_point_plc_address: None,
+            shh_set_point_communication_address: None,
             shh_feedback_address: None,
+            shh_feedback_plc_address: None,
+            shh_feedback_communication_address: None,
             maintenance_value_set_point_address: None,
+            maintenance_value_set_point_plc_address: None,
+            maintenance_value_set_point_communication_address: None,
             maintenance_enable_switch_point_address: None,
+            maintenance_enable_switch_point_plc_address: None,
+            maintenance_enable_switch_point_communication_address: None,
             access_property: None,
             save_history: None,
             power_failure_protection: None,

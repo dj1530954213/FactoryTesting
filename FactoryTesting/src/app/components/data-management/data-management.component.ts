@@ -319,22 +319,22 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       next: (result) => {
         console.log('🚀 后端一键导入和创建批次结果:', result);
 
-        // 修复版：result 是 AllocationResult 结构，没有 success 字段
-        if (result && result.batches && result.batches.length > 0) {
+        // 修复版：result 是 ImportAndPrepareBatchResponse 结构
+        if (result && result.batch_info && result.instances) {
           // 创建导入结果对象（用于显示）
           const importResult = {
             success: true,
-            totalChannels: result.allocation_summary.total_channels,
-            successChannels: result.allocation_summary.total_channels,
+            totalChannels: result.instances.length,
+            successChannels: result.instances.length,
             failedChannels: 0,
-            message: `成功分配 ${result.allocation_summary.total_channels} 个通道到 ${result.batches.length} 个批次`,
+            message: `成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`,
             timestamp: new Date().toISOString(),
             batchInfo: {
-              batch_id: result.batches[0]?.batch_id || 'unknown',
-              product_model: this.extractProductModel(),
-              serial_number: this.generateSerialNumber(),
-              creation_time: new Date().toISOString(),
-              total_points: result.allocation_summary.total_channels,
+              batch_id: result.batch_info.batch_id,
+              product_model: result.batch_info.product_model || this.extractProductModel(),
+              serial_number: result.batch_info.serial_number || this.generateSerialNumber(),
+              creation_time: result.batch_info.creation_time || new Date().toISOString(),
+              total_points: result.instances.length,
               tested_points: 0,
               passed_points: 0,
               failed_points: 0,
@@ -342,13 +342,13 @@ export class DataManagementComponent implements OnInit, OnDestroy {
             },
             // 标记这是已持久化的结果
             isPersisted: true,
-            definitions: result.allocated_instances,
+            definitions: result.instances,
             allocationResult: {
               success: true,
-              allocated_count: result.allocation_summary.total_channels,
+              allocated_count: result.instances.length,
               conflict_count: 0,
-              total_count: result.allocation_summary.total_channels,
-              total_batches: result.batches.length,
+              total_count: result.instances.length,
+              total_batches: 1,
               message: '一键导入和分配完成',
               allocation_details: {
                 source: 'backend_service',
@@ -365,7 +365,7 @@ export class DataManagementComponent implements OnInit, OnDestroy {
             importResult: importResult
           });
 
-          this.message.success(`一键导入完成：成功分配 ${result.allocation_summary.total_channels} 个通道到 ${result.batches.length} 个批次`);
+          this.message.success(`一键导入完成：成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`);
         } else {
           throw new Error('后端返回的分配结果无效');
         }

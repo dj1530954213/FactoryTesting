@@ -592,7 +592,9 @@ export class TauriApiService {
   getBatchDetails(batchId: string): Observable<BatchDetailsPayload> {
     console.log('📊 [TAURI_API] 调用获取批次详情API');
     console.log('📊 [TAURI_API] 批次ID:', batchId);
-    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', { batch_id: batchId })).pipe(
+    return from(invoke<BatchDetailsPayload>('get_batch_status_cmd', {
+      args: { batch_id: batchId }
+    })).pipe(
       tap(details => {
         console.log('✅ [TAURI_API] 成功获取批次详情');
         console.log('✅ [TAURI_API] 批次信息:', details.batch_info);

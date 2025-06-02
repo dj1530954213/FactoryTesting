@@ -20,6 +20,8 @@ pub struct AllocationResult {
     pub batches: Vec<TestBatchInfo>,
     pub allocated_instances: Vec<crate::models::structs::ChannelTestInstance>,
     pub allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary,
+    /// 🔧 修复：添加通道定义字段，用于保存到数据库
+    pub channel_definitions: Option<Vec<ChannelPointDefinition>>,
 }
 
 /// Excel文件解析请求
@@ -385,9 +387,10 @@ pub async fn start_tests_for_batch_cmd(
 /// 获取批次状态
 #[tauri::command]
 pub async fn get_batch_status_cmd(
-    batch_id: String,
+    args: GetBatchStatusCmdArgs,
     state: State<'_, AppState>
 ) -> Result<BatchDetailsPayload, String> {
+    let batch_id = args.batch_id;
     info!("📊 [GET_BATCH_STATUS] 获取批次状态: {}", batch_id);
 
     // 获取批次信息
@@ -410,6 +413,15 @@ pub async fn get_batch_status_cmd(
     let instances = match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
         Ok(instances) => {
             info!("✅ [GET_BATCH_STATUS] 成功获取测试实例: {} 个", instances.len());
+            // 详细记录前几个实例
+            for (index, instance) in instances.iter().take(5).enumerate() {
+                info!("✅ [GET_BATCH_STATUS] 实例 {}: ID={}, 定义ID={}, 分配PLC通道={:?}, 状态={:?}",
+                    index + 1, instance.instance_id, instance.definition_id,
+                    instance.test_plc_channel_tag, instance.overall_status);
+            }
+            if instances.len() > 5 {
+                info!("✅ [GET_BATCH_STATUS] ... 还有 {} 个实例", instances.len() - 5);
+            }
             instances
         },
         Err(e) => {
@@ -418,30 +430,28 @@ pub async fn get_batch_status_cmd(
         }
     };
 
-    // 获取通道定义
-    let all_definitions = match state.persistence_service.load_all_channel_definitions().await {
-        Ok(definitions) => {
-            info!("✅ [GET_BATCH_STATUS] 成功获取通道定义: {} 个", definitions.len());
-            definitions
-        },
-        Err(e) => {
-            warn!("⚠️ [GET_BATCH_STATUS] 获取通道定义失败: {}, 使用空列表", e);
-            Vec::new()
+    // 从状态管理器获取通道定义
+    info!("🔍 [GET_BATCH_STATUS] 从状态管理器获取通道定义");
+    let definitions = {
+        let state_manager = &state.channel_state_manager;
+        let instance_definition_ids: std::collections::HashSet<String> = instances
+            .iter()
+            .map(|instance| instance.definition_id.clone())
+            .collect();
+
+        let mut definitions = Vec::new();
+        for definition_id in &instance_definition_ids {
+            if let Some(definition) = state_manager.get_channel_definition(definition_id).await {
+                info!("✅ [GET_BATCH_STATUS] 从状态管理器获取定义: ID={}, Tag={}", definition_id, definition.tag);
+                definitions.push(definition);
+            } else {
+                warn!("⚠️ [GET_BATCH_STATUS] 状态管理器中未找到定义: {}", definition_id);
+            }
         }
+
+        info!("✅ [GET_BATCH_STATUS] 从状态管理器获取通道定义: {} 个", definitions.len());
+        definitions
     };
-
-    // 根据实例的definition_id筛选相关的定义
-    let instance_definition_ids: std::collections::HashSet<String> = instances
-        .iter()
-        .map(|instance| instance.definition_id.clone())
-        .collect();
-
-    let definitions: Vec<ChannelPointDefinition> = all_definitions
-        .into_iter()
-        .filter(|def| instance_definition_ids.contains(&def.id))
-        .collect();
-
-    info!("✅ [GET_BATCH_STATUS] 筛选后的定义数量: {}", definitions.len());
 
     // 计算进度信息
     let total_points = instances.len() as u32;
@@ -703,6 +713,7 @@ pub async fn import_excel_and_allocate_channels_cmd(
         batches: vec![result.batch_info],
         allocated_instances: result.test_instances,
         allocation_summary: result.allocation_summary,
+        channel_definitions: Some(definitions),
     })
 }
 
@@ -1211,6 +1222,7 @@ pub async fn create_batch_and_persist_data_cmd(
                 batches: vec![result.batch_info],
                 allocated_instances: result.test_instances,
                 allocation_summary: result.allocation_summary,
+                channel_definitions: None, // 这里没有通道定义数据
             }
         }
         Err(e) => {
@@ -1349,6 +1361,7 @@ pub async fn create_test_batch_with_allocation_cmd(
                 batches: vec![result.batch_info],
                 allocated_instances: result.test_instances,
                 allocation_summary: result.allocation_summary,
+                channel_definitions: None, // 这里没有通道定义数据
             })
         }
         Err(e) => {
@@ -1463,6 +1476,7 @@ pub async fn import_excel_and_create_batch_cmd(
                 batches: vec![result.batch_info.clone()],
                 allocated_instances: result.test_instances.clone(),
                 allocation_summary: result.allocation_summary.clone(),
+                channel_definitions: None, // 这里没有通道定义数据
             };
 
             // 🚀 重要：将分配结果存储到状态管理器中
@@ -1510,7 +1524,37 @@ async fn execute_batch_allocation(
     info!("🔄 [EXECUTE_BATCH_ALLOCATION] 开始执行批次分配");
     info!("🔄 [EXECUTE_BATCH_ALLOCATION] 输入通道定义数量: {}", definitions.len());
 
-    // 1. 获取测试PLC配置
+    // 1. 首先保存通道定义到数据库 - 这是关键步骤！
+    info!("💾 [EXECUTE_BATCH_ALLOCATION] 步骤1: 保存通道定义到数据库");
+    info!("💾 [EXECUTE_BATCH_ALLOCATION] 总定义数量: {}", definitions.len());
+
+    let mut saved_definitions_count = 0;
+    let mut failed_definitions_count = 0;
+
+    for (index, definition) in definitions.iter().enumerate() {
+        info!("💾 [EXECUTE_BATCH_ALLOCATION] 保存定义 {}/{}: ID={}, Tag={}, 通道标识={}",
+            index + 1, definitions.len(), definition.id, definition.tag, definition.channel_tag_in_module);
+
+        match state.persistence_service.save_channel_definition(definition).await {
+            Ok(_) => {
+                saved_definitions_count += 1;
+                info!("✅ [EXECUTE_BATCH_ALLOCATION] 成功保存定义: {}", definition.tag);
+            }
+            Err(e) => {
+                failed_definitions_count += 1;
+                warn!("⚠️ [EXECUTE_BATCH_ALLOCATION] 保存通道定义失败: {} - {}", definition.tag, e);
+                // 详细记录失败的定义信息
+                warn!("⚠️ [EXECUTE_BATCH_ALLOCATION] 失败定义详情: ID={}, 通道标识={}, 模块类型={:?}, 变量名={}",
+                    definition.id, definition.channel_tag_in_module, definition.module_type, definition.variable_name);
+                // 继续处理其他定义，不因为单个定义失败而中断整个流程
+            }
+        }
+    }
+
+    info!("✅ [EXECUTE_BATCH_ALLOCATION] 数据库保存完成: 成功={}, 失败={}", saved_definitions_count, failed_definitions_count);
+
+    // 2. 获取测试PLC配置
+    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤2: 获取测试PLC配置");
     let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
         Ok(config) => {
             info!("✅ [EXECUTE_BATCH_ALLOCATION] 成功获取测试PLC配置: {} 个通道映射",
@@ -1529,11 +1573,12 @@ async fn execute_batch_allocation(
         }
     };
 
-    // 2. 使用已验证的通道分配服务
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 调用通道分配服务");
+    // 3. 使用已验证的通道分配服务
+    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤3: 调用通道分配服务");
     let allocation_service = ChannelAllocationService::new();
 
-    // 3. 执行分配
+    // 4. 执行分配
+    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤4: 执行通道分配");
     let batch_allocation_result = allocation_service
         .allocate_channels(
             definitions.to_vec(),
@@ -1551,13 +1596,13 @@ async fn execute_batch_allocation(
     info!("✅ [EXECUTE_BATCH_ALLOCATION] 生成批次数量: {}", batch_allocation_result.batches.len());
     info!("✅ [EXECUTE_BATCH_ALLOCATION] 分配实例数量: {}", batch_allocation_result.allocated_instances.len());
 
-    // 4. 记录详细的分配结果
+    // 5. 记录详细的分配结果
     for (i, batch) in batch_allocation_result.batches.iter().enumerate() {
         info!("📊 [EXECUTE_BATCH_ALLOCATION] 批次{}: ID={}, 名称={}, 点位数={}",
               i + 1, batch.batch_id, batch.batch_name, batch.total_points);
     }
 
-    // 5. 转换为期望的AllocationResult格式
+    // 6. 转换为期望的AllocationResult格式
     let allocation_result = AllocationResult {
         batches: batch_allocation_result.batches,
         allocated_instances: batch_allocation_result.allocated_instances,
@@ -1582,6 +1627,8 @@ async fn execute_batch_allocation(
             stations: Vec::new(), // 可以根据需要填充
             estimated_test_duration_minutes: 30, // 默认估计时间
         },
+        /// 🔧 修复：包含通道定义，用于保存到数据库
+        channel_definitions: Some(definitions.to_vec()),
     };
 
     Ok(allocation_result)

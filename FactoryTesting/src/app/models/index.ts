@@ -375,10 +375,8 @@ export interface AllocationResult {
 }
 
 export interface ImportExcelAndCreateBatchResponse {
-  success: boolean;
-  message: string;
-  import_result: ImportResult;
-  allocation_result: AllocationResult;
+  batch_info: TestBatchInfo;
+  instances: ChannelTestInstance[];
 }
 
 // 导入Excel并分配通道的请求

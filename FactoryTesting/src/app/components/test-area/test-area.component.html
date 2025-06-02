@@ -158,7 +158,6 @@
             <thead>
               <tr>
                 <th nzWidth="120px">点位名称</th>
-                <th nzWidth="150px">通道位号</th>
                 <th nzWidth="120px">测试PLC通道号</th>
                 <th nzWidth="120px">被测PLC通道号</th>
                 <th nzWidth="100px">通道类型</th>
@@ -175,16 +174,13 @@
                   <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
                 </td>
                 <td>
-                  {{ getDefinitionByInstanceId(instance.instance_id)?.variable_name || 'N/A' }}
-                </td>
-                <td>
                   <nz-tag nzColor="blue">
                     {{ instance.test_plc_channel_tag || 'AO1_1' }}
                   </nz-tag>
                 </td>
                 <td>
                   <nz-tag nzColor="green">
-                    {{ getDefinitionByInstanceId(instance.instance_id)?.plc_communication_address || 'N/A' }}
+                    {{ getDefinitionByInstanceId(instance.instance_id)?.channel_number || 'N/A' }}
                   </nz-tag>
                 </td>
                 <td>

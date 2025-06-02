@@ -167,8 +167,9 @@ impl ExcelImporter {
         // 第9列：变量描述
         // 第10列：数据类型
         // 第11列：读写属性
-        // 第50列：PLC绝对地址（索引50）
-        // 第51列：上位机通讯地址（索引51）
+        // 🔥 修复关键字段映射：
+        // 第51列（索引50）：PLC绝对地址（如%MD100）
+        // 第52列（索引51）：上位机通讯地址（如40001）
 
         let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第6列：位号
         let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第8列：变量名称（HMI）
@@ -181,10 +182,13 @@ impl ExcelImporter {
         let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第5列：通道位号
         let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第10列：数据类型
         let access_property = Self::get_optional_string_value(&row[11], "读写属性");  // 第11列：读写属性
-        let plc_address = Self::get_string_value(&row[50], row_number, "PLC绝对地址")?;  // 第50列：PLC绝对地址（索引50）
 
-        info!("✅ [PARSE_ROW] 第{}行关键字段: 位号='{}', 变量名='{}', 模块类型='{}', PLC地址='{}'",
-              row_number, tag, variable_name, module_type_str, plc_address);
+        // 🔥 修复字段映射：正确读取PLC地址信息
+        let plc_absolute_address = Self::get_optional_string_value(&row[50], "PLC绝对地址");  // 第51列（索引50）：PLC绝对地址（如%MD100）
+        let plc_communication_address = Self::get_string_value(&row[51], row_number, "上位机通讯地址")?;  // 第52列（索引51）：Modbus TCP通讯地址（如40001）
+
+        info!("✅ [PARSE_ROW] 第{}行关键字段: 位号='{}', 变量名='{}', 模块类型='{}', PLC绝对地址='{}', Modbus通讯地址='{}'",
+              row_number, tag, variable_name, module_type_str, plc_absolute_address, plc_communication_address);
 
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -192,7 +196,7 @@ impl ExcelImporter {
         // 解析数据类型
         let data_type = Self::parse_data_type(&data_type_str, row_number)?;
 
-        // 创建通道定义（使用新的构造函数）
+        // 创建通道定义（使用正确的上位机通讯地址）
         let mut definition = ChannelPointDefinition::new(
             tag,
             variable_name,
@@ -202,17 +206,17 @@ impl ExcelImporter {
             module_type,
             channel_number,
             data_type,
-            plc_address,
+            plc_communication_address,  // 这里是上位机通讯地址（被测PLC通道号，如40001）
         );
+
+        // 设置PLC绝对地址（如%MD100）
+        if !plc_absolute_address.is_empty() && plc_absolute_address != "/" {
+            definition.plc_absolute_address = Some(plc_absolute_address);
+        }
 
         // 设置额外字段
         definition.power_supply_type = power_supply_type;
         definition.wire_system = wire_system;
-
-        // 设置其他可选字段
-        if !access_property.is_empty() {
-            definition.access_property = Some(access_property);
-        }
 
         // 从Excel中提取更多字段（如果存在）
         Self::extract_additional_fields(&mut definition, row, row_number)?;
@@ -224,17 +228,261 @@ impl ExcelImporter {
     fn extract_additional_fields(
         definition: &mut ChannelPointDefinition,
         row: &[calamine::DataType],
-        _row_number: usize
+        row_number: usize
     ) -> AppResult<()> {
-        // 根据Excel文件的实际列结构提取更多字段
-        // 这里可以根据实际的Excel文件结构添加更多字段的解析
+        info!("🔍 [EXTRACT_FIELDS] 第{}行：开始提取额外字段", row_number);
 
-        // 例如：量程信息、报警设定值等
-        // 如果Excel文件中有这些列，可以在这里解析
+        // 辅助函数：安全获取字符串值
+        let get_string = |index: usize| -> String {
+            if index < row.len() {
+                match &row[index] {
+                    calamine::DataType::String(s) => s.trim().to_string(),
+                    calamine::DataType::Float(f) => f.to_string(),
+                    calamine::DataType::Int(i) => i.to_string(),
+                    calamine::DataType::Bool(b) => b.to_string(),
+                    _ => String::new(),
+                }
+            } else {
+                String::new()
+            }
+        };
 
-        // 注意：不要设置默认的供电类型，保持从Excel读取的原始值
-        // 如果Excel中没有明确指定，则保持为空，让业务逻辑自行判断
+        // 辅助函数：安全获取浮点数值（返回f32）
+        let get_float = |index: usize| -> Option<f32> {
+            if index < row.len() {
+                match &row[index] {
+                    calamine::DataType::Float(f) => Some(*f as f32),
+                    calamine::DataType::Int(i) => Some(*i as f32),
+                    calamine::DataType::String(s) => {
+                        if s.trim().is_empty() || s.trim() == "/" {
+                            None
+                        } else {
+                            s.trim().parse::<f32>().ok()
+                        }
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        };
 
+        // 根据Excel文件的实际列结构提取字段
+        // 列索引映射（基于测试IO.txt文件的标题行）：
+        // 第12列：保存历史
+        // 第13列：掉电保护
+        // 第14列：量程低限
+        // 第15列：量程高限
+        // 第16列：SLL设定值
+        // 第17列：SLL设定点位
+        // 第18列：SLL设定点位_PLC地址
+        // 第19列：SLL设定点位_通讯地址
+        // 第20列：SL设定值
+        // 第21列：SL设定点位
+        // 第22列：SL设定点位_PLC地址
+        // 第23列：SL设定点位_通讯地址
+        // 第24列：SH设定值
+        // 第25列：SH设定点位
+        // 第26列：SH设定点位_PLC地址
+        // 第27列：SH设定点位_通讯地址
+        // 第28列：SHH设定值
+        // 第29列：SHH设定点位
+        // 第30列：SHH设定点位_PLC地址
+        // 第31列：SHH设定点位_通讯地址
+
+        // 提取保存历史和掉电保护
+        let save_history = get_string(12);
+        let power_failure_protection = get_string(13);
+
+        if !save_history.is_empty() && save_history != "/" {
+            definition.save_history = Some(save_history == "是");
+        }
+
+        if !power_failure_protection.is_empty() && power_failure_protection != "/" {
+            definition.power_failure_protection = Some(power_failure_protection == "是");
+        }
+
+        // 提取量程信息（仅对模拟量有效）
+        if matches!(definition.module_type, ModuleType::AI | ModuleType::AO) {
+            definition.range_lower_limit = get_float(14);
+            definition.range_upper_limit = get_float(15);
+
+            info!("🔍 [EXTRACT_FIELDS] 第{}行：量程 [{:?}, {:?}]",
+                row_number, definition.range_lower_limit, definition.range_upper_limit);
+        }
+
+        // 提取SLL（超低低）报警设定
+        definition.sll_set_value = get_float(16);
+        let sll_set_point = get_string(17);
+        let sll_set_point_plc = get_string(18);
+        let _sll_set_point_comm = get_string(19);
+
+        if !sll_set_point.is_empty() && sll_set_point != "/" {
+            definition.sll_set_point_address = Some(sll_set_point);
+        }
+        if !sll_set_point_plc.is_empty() && sll_set_point_plc != "/" {
+            definition.sll_set_point_plc_address = Some(sll_set_point_plc);
+        }
+        if !_sll_set_point_comm.is_empty() && _sll_set_point_comm != "/" {
+            definition.sll_set_point_communication_address = Some(_sll_set_point_comm);
+        }
+
+        // 提取SL（低）报警设定
+        definition.sl_set_value = get_float(20);
+        let sl_set_point = get_string(21);
+        let sl_set_point_plc = get_string(22);
+        let _sl_set_point_comm = get_string(23);
+
+        if !sl_set_point.is_empty() && sl_set_point != "/" {
+            definition.sl_set_point_address = Some(sl_set_point);
+        }
+        if !sl_set_point_plc.is_empty() && sl_set_point_plc != "/" {
+            definition.sl_set_point_plc_address = Some(sl_set_point_plc);
+        }
+        if !_sl_set_point_comm.is_empty() && _sl_set_point_comm != "/" {
+            definition.sl_set_point_communication_address = Some(_sl_set_point_comm);
+        }
+
+        // 提取SH（高）报警设定
+        definition.sh_set_value = get_float(24);
+        let sh_set_point = get_string(25);
+        let sh_set_point_plc = get_string(26);
+        let _sh_set_point_comm = get_string(27);
+
+        if !sh_set_point.is_empty() && sh_set_point != "/" {
+            definition.sh_set_point_address = Some(sh_set_point);
+        }
+        if !sh_set_point_plc.is_empty() && sh_set_point_plc != "/" {
+            definition.sh_set_point_plc_address = Some(sh_set_point_plc);
+        }
+        if !_sh_set_point_comm.is_empty() && _sh_set_point_comm != "/" {
+            definition.sh_set_point_communication_address = Some(_sh_set_point_comm);
+        }
+
+        // 提取SHH（超高高）报警设定
+        definition.shh_set_value = get_float(28);
+        let shh_set_point = get_string(29);
+        let shh_set_point_plc = get_string(30);
+        let _shh_set_point_comm = get_string(31);
+
+        if !shh_set_point.is_empty() && shh_set_point != "/" {
+            definition.shh_set_point_address = Some(shh_set_point);
+        }
+        if !shh_set_point_plc.is_empty() && shh_set_point_plc != "/" {
+            definition.shh_set_point_plc_address = Some(shh_set_point_plc);
+        }
+        if !_shh_set_point_comm.is_empty() && _shh_set_point_comm != "/" {
+            definition.shh_set_point_communication_address = Some(_shh_set_point_comm);
+        }
+
+        // 继续提取更多字段
+        // 第32-43列：LL/L/H/HH报警反馈地址
+        // 第44列：维护值设定
+        // 第45列：维护值设定点位
+        // 第46列：维护值设定点位_PLC地址
+        // 第47列：维护值设定点位_通讯地址
+        // 第48列：维护使能开关点位
+        // 第49列：维护使能开关点位_PLC地址
+        // 第50列：维护使能开关点位_通讯地址
+
+        // 提取LL报警反馈地址
+        let ll_feedback = get_string(32);
+        let ll_feedback_plc = get_string(33);
+        let _ll_feedback_comm = get_string(34);
+
+        if !ll_feedback.is_empty() && ll_feedback != "/" {
+            definition.sll_feedback_address = Some(ll_feedback);
+        }
+        if !ll_feedback_plc.is_empty() && ll_feedback_plc != "/" {
+            definition.sll_feedback_plc_address = Some(ll_feedback_plc);
+        }
+        if !_ll_feedback_comm.is_empty() && _ll_feedback_comm != "/" {
+            definition.sll_feedback_communication_address = Some(_ll_feedback_comm);
+        }
+
+        // 提取L报警反馈地址
+        let l_feedback = get_string(35);
+        let l_feedback_plc = get_string(36);
+        let _l_feedback_comm = get_string(37);
+
+        if !l_feedback.is_empty() && l_feedback != "/" {
+            definition.sl_feedback_address = Some(l_feedback);
+        }
+        if !l_feedback_plc.is_empty() && l_feedback_plc != "/" {
+            definition.sl_feedback_plc_address = Some(l_feedback_plc);
+        }
+        if !_l_feedback_comm.is_empty() && _l_feedback_comm != "/" {
+            definition.sl_feedback_communication_address = Some(_l_feedback_comm);
+        }
+
+        // 提取H报警反馈地址
+        let h_feedback = get_string(38);
+        let h_feedback_plc = get_string(39);
+        let _h_feedback_comm = get_string(40);
+
+        if !h_feedback.is_empty() && h_feedback != "/" {
+            definition.sh_feedback_address = Some(h_feedback);
+        }
+        if !h_feedback_plc.is_empty() && h_feedback_plc != "/" {
+            definition.sh_feedback_plc_address = Some(h_feedback_plc);
+        }
+        if !_h_feedback_comm.is_empty() && _h_feedback_comm != "/" {
+            definition.sh_feedback_communication_address = Some(_h_feedback_comm);
+        }
+
+        // 提取HH报警反馈地址
+        let hh_feedback = get_string(41);
+        let hh_feedback_plc = get_string(42);
+        let _hh_feedback_comm = get_string(43);
+
+        if !hh_feedback.is_empty() && hh_feedback != "/" {
+            definition.shh_feedback_address = Some(hh_feedback);
+        }
+        if !hh_feedback_plc.is_empty() && hh_feedback_plc != "/" {
+            definition.shh_feedback_plc_address = Some(hh_feedback_plc);
+        }
+        if !_hh_feedback_comm.is_empty() && _hh_feedback_comm != "/" {
+            definition.shh_feedback_communication_address = Some(_hh_feedback_comm);
+        }
+
+        // 提取维护相关字段
+        let _maintenance_value = get_string(44);
+        let maintenance_point = get_string(45);
+        let maintenance_point_plc = get_string(46);
+        let _maintenance_point_comm = get_string(47);
+        let maintenance_enable = get_string(48);
+        let maintenance_enable_plc = get_string(49);
+        let _maintenance_enable_comm = get_string(50);
+
+        if !maintenance_point.is_empty() && maintenance_point != "/" {
+            definition.maintenance_value_set_point_address = Some(maintenance_point);
+        }
+        if !maintenance_point_plc.is_empty() && maintenance_point_plc != "/" {
+            definition.maintenance_value_set_point_plc_address = Some(maintenance_point_plc);
+        }
+        if !_maintenance_point_comm.is_empty() && _maintenance_point_comm != "/" {
+            definition.maintenance_value_set_point_communication_address = Some(_maintenance_point_comm);
+        }
+        if !maintenance_enable.is_empty() && maintenance_enable != "/" {
+            definition.maintenance_enable_switch_point_address = Some(maintenance_enable);
+        }
+        if !maintenance_enable_plc.is_empty() && maintenance_enable_plc != "/" {
+            definition.maintenance_enable_switch_point_plc_address = Some(maintenance_enable_plc);
+        }
+        if !_maintenance_enable_comm.is_empty() && _maintenance_enable_comm != "/" {
+            definition.maintenance_enable_switch_point_communication_address = Some(_maintenance_enable_comm);
+        }
+
+        // 注意：PLC绝对地址和上位机通讯地址已经在基础解析中正确设置了
+        // 这里不需要重复处理，避免混淆
+
+        // 提取读写属性（第12列）
+        let access_property = get_string(11);
+        if !access_property.is_empty() && access_property != "/" {
+            definition.access_property = Some(access_property);
+        }
+
+        // 修复线制字段的默认值设置
         if definition.wire_system.is_empty() {
             definition.wire_system = match definition.module_type {
                 ModuleType::AI => "四线制".to_string(),
@@ -244,6 +492,14 @@ impl ExcelImporter {
                 _ => "未知".to_string(),
             };
         }
+
+        info!("🔍 [EXTRACT_FIELDS] 第{}行：报警设定值 SLL={:?}, SL={:?}, SH={:?}, SHH={:?}",
+            row_number, definition.sll_set_value, definition.sl_set_value,
+            definition.sh_set_value, definition.shh_set_value);
+
+        info!("🔍 [EXTRACT_FIELDS] 第{}行：维护字段 维护点位={:?}, 维护使能={:?}",
+            row_number, definition.maintenance_value_set_point_address,
+            definition.maintenance_enable_switch_point_address);
 
         Ok(())
     }
