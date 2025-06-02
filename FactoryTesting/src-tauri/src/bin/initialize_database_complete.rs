@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             module_name TEXT,
             power_type_description TEXT,
             wire_system TEXT,
-            channel_position TEXT,
+            channel_tag_in_module TEXT NOT NULL,
             station_name TEXT,
             variable_description TEXT,
             data_type TEXT,

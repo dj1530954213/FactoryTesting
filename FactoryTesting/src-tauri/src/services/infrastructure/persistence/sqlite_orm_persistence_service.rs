@@ -230,7 +230,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             let mut active_model: entities::channel_point_definition::ActiveModel = definition.into();
             // 确保ID不变
             active_model.id = Set(definition.id.clone());
-            active_model.updated_at = Set(chrono::Utc::now().to_rfc3339());
+            active_model.updated_time = Set(chrono::Utc::now().to_rfc3339());
 
             let update_result = active_model.update(self.db_conn.as_ref())
                 .await
@@ -285,7 +285,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
         if let Some(ref model) = model {
             log::debug!("✅ [LOAD_DEFINITION] 找到通道定义: ID={}, Tag={}", model.id, model.tag);
         } else {
-            log::warn!("⚠️ [LOAD_DEFINITION] 未找到通道定义: ID={}", id);
+            log::debug!("⚠️ [LOAD_DEFINITION] 未找到通道定义: ID={}", id);
         }
 
         Ok(model.map(|m| (&m).into())) // 使用 From trait 转换

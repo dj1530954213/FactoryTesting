@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::Utc;
-use log::{info, error, warn};
+use log::{info, error, warn, debug};
 
 /// 通道状态管理器接口
 #[async_trait]
@@ -436,15 +436,10 @@ impl IChannelStateManager for ChannelStateManager {
             let mut saved_count = 0;
             let mut failed_count = 0;
 
-            for (index, definition) in channel_definitions.iter().enumerate() {
-                info!("💾 [STATE_MANAGER] 保存定义 {}/{}: ID={}, Tag={}",
-                    index + 1, channel_definitions.len(), definition.id, definition.tag);
-
+            for definition in channel_definitions.iter() {
                 match self.persistence_service.save_channel_definition(definition).await {
                     Ok(_) => {
                         saved_count += 1;
-                        info!("✅ [STATE_MANAGER] 成功保存通道定义到数据库: ID={}, Tag={}",
-                            definition.id, definition.tag);
                     }
                     Err(e) => {
                         failed_count += 1;
@@ -477,20 +472,29 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 从数据库加载这些通道定义并存储到缓存中
         let mut loaded_definitions = Vec::new();
+        let mut loaded_count = 0;
+        let mut not_found_count = 0;
+        let mut error_count = 0;
+
         for definition_id in &definition_ids {
             match self.persistence_service.load_channel_definition(definition_id).await {
                 Ok(Some(definition)) => {
-                    info!("🔥 [STATE_MANAGER] 成功加载通道定义: ID={}, Tag={}", definition_id, definition.tag);
+                    loaded_count += 1;
                     loaded_definitions.push((definition_id.clone(), definition));
                 }
                 Ok(None) => {
+                    not_found_count += 1;
                     warn!("⚠️ [STATE_MANAGER] 数据库中未找到通道定义: {}", definition_id);
                 }
                 Err(e) => {
+                    error_count += 1;
                     error!("❌ [STATE_MANAGER] 加载通道定义失败: {} - {}", definition_id, e);
                 }
             }
         }
+
+        info!("🔥 [STATE_MANAGER] 通道定义加载完成: 成功={}, 未找到={}, 错误={}",
+            loaded_count, not_found_count, error_count);
 
         // 将加载的定义存储到缓存中（避免跨await持有锁）
         {
@@ -501,38 +505,37 @@ impl IChannelStateManager for ChannelStateManager {
             info!("🔥 [STATE_MANAGER] 内存缓存完成，缓存中共有{}个通道定义", cache.len());
         }
 
-        // 详细记录批次信息
-        for (index, batch) in allocation_result.batches.iter().enumerate() {
-            info!("🔥 [STATE_MANAGER] 批次 {}/{}: ID={}, 名称={}, 总点位={}",
-                index + 1, allocation_result.batches.len(),
-                batch.batch_id, batch.batch_name, batch.total_points);
-        }
-
-        // 详细记录测试实例信息
-        for (index, instance) in allocation_result.allocated_instances.iter().enumerate() {
-            info!("🔥 [STATE_MANAGER] 实例 {}/{}: ID={}, 定义ID={}, 批次ID={}, 分配PLC通道={:?}",
-                index + 1, allocation_result.allocated_instances.len(),
-                instance.instance_id, instance.definition_id, instance.test_batch_id,
-                instance.test_plc_channel_tag);
-        }
-
         // 将批次信息保存到持久化服务
+        info!("🔥 [STATE_MANAGER] 步骤3: 保存{}个批次信息到数据库", allocation_result.batches.len());
+        let mut batch_saved_count = 0;
+        let mut batch_failed_count = 0;
+
         for batch in &allocation_result.batches {
             if let Err(e) = self.persistence_service.save_batch_info(batch).await {
+                batch_failed_count += 1;
                 error!("🔥 [STATE_MANAGER] 保存批次信息失败: {} - {}", batch.batch_id, e);
             } else {
-                info!("🔥 [STATE_MANAGER] 成功保存批次信息: {}", batch.batch_id);
+                batch_saved_count += 1;
             }
         }
 
+        info!("🔥 [STATE_MANAGER] 批次信息保存完成: 成功={}, 失败={}", batch_saved_count, batch_failed_count);
+
         // 将测试实例保存到持久化服务
+        info!("🔥 [STATE_MANAGER] 步骤4: 保存{}个测试实例到数据库", allocation_result.allocated_instances.len());
+        let mut instance_saved_count = 0;
+        let mut instance_failed_count = 0;
+
         for instance in &allocation_result.allocated_instances {
             if let Err(e) = self.persistence_service.save_test_instance(instance).await {
+                instance_failed_count += 1;
                 error!("🔥 [STATE_MANAGER] 保存测试实例失败: {} - {}", instance.instance_id, e);
             } else {
-                info!("🔥 [STATE_MANAGER] 成功保存测试实例: {}", instance.instance_id);
+                instance_saved_count += 1;
             }
         }
+
+        info!("🔥 [STATE_MANAGER] 测试实例保存完成: 成功={}, 失败={}", instance_saved_count, instance_failed_count);
 
         info!("🔥 [STATE_MANAGER] 批次分配结果存储完成");
         Ok(())
@@ -544,7 +547,7 @@ impl IChannelStateManager for ChannelStateManager {
         {
             let cache = self.channel_definitions_cache.read().unwrap();
             if let Some(definition) = cache.get(definition_id) {
-                info!("✅ [STATE_MANAGER] 从内存缓存获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
+                debug!("✅ [STATE_MANAGER] 从内存缓存获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
                 return Some(definition.clone());
             }
         }
@@ -552,7 +555,7 @@ impl IChannelStateManager for ChannelStateManager {
         // 如果缓存中没有，则从数据库获取并缓存
         match self.persistence_service.load_channel_definition(definition_id).await {
             Ok(Some(definition)) => {
-                info!("✅ [STATE_MANAGER] 从数据库获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
+                debug!("✅ [STATE_MANAGER] 从数据库获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
 
                 // 将定义存储到缓存中
                 {
@@ -563,7 +566,7 @@ impl IChannelStateManager for ChannelStateManager {
                 Some(definition)
             }
             Ok(None) => {
-                warn!("⚠️ [STATE_MANAGER] 通道定义不存在: {}", definition_id);
+                debug!("⚠️ [STATE_MANAGER] 通道定义不存在: {}", definition_id);
                 None
             }
             Err(e) => {

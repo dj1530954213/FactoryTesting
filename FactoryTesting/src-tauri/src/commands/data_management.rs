@@ -327,6 +327,12 @@ pub async fn import_excel_and_prepare_batch_cmd(
     let allocation_result = match execute_batch_allocation(&definitions, &args, &state).await {
         Ok(result) => {
             info!("✅ [IMPORT_EXCEL] 批次分配成功，生成{}个批次", result.batches.len());
+            // 🔍 调试：检查分配结果中的通道定义
+            if let Some(ref channel_definitions) = result.channel_definitions {
+                info!("🔍 [IMPORT_EXCEL] 分配结果包含{}个通道定义", channel_definitions.len());
+            } else {
+                warn!("⚠️ [IMPORT_EXCEL] 分配结果中没有通道定义数据！");
+            }
             result
         },
         Err(e) => {
@@ -1539,6 +1545,22 @@ async fn execute_batch_allocation(
             Ok(_) => {
                 saved_definitions_count += 1;
                 info!("✅ [EXECUTE_BATCH_ALLOCATION] 成功保存定义: {}", definition.tag);
+
+                // 🔧 立即验证保存是否成功
+                match state.persistence_service.load_channel_definition(&definition.id).await {
+                    Ok(Some(loaded_def)) => {
+                        info!("✅ [EXECUTE_BATCH_ALLOCATION] 立即验证成功: ID={}, Tag={}",
+                            loaded_def.id, loaded_def.tag);
+                    }
+                    Ok(None) => {
+                        error!("❌ [EXECUTE_BATCH_ALLOCATION] 立即验证失败: 保存后立即查询找不到定义 ID={}",
+                            definition.id);
+                    }
+                    Err(e) => {
+                        error!("❌ [EXECUTE_BATCH_ALLOCATION] 立即验证出错: ID={} - {}",
+                            definition.id, e);
+                    }
+                }
             }
             Err(e) => {
                 failed_definitions_count += 1;
@@ -1603,6 +1625,7 @@ async fn execute_batch_allocation(
     }
 
     // 6. 转换为期望的AllocationResult格式
+    info!("🔧 [EXECUTE_BATCH_ALLOCATION] 创建AllocationResult，包含{}个通道定义", definitions.len());
     let allocation_result = AllocationResult {
         batches: batch_allocation_result.batches,
         allocated_instances: batch_allocation_result.allocated_instances,
@@ -1631,6 +1654,13 @@ async fn execute_batch_allocation(
         channel_definitions: Some(definitions.to_vec()),
     };
 
+    // 🔍 验证AllocationResult中的通道定义
+    if let Some(ref channel_definitions) = allocation_result.channel_definitions {
+        info!("✅ [EXECUTE_BATCH_ALLOCATION] AllocationResult包含{}个通道定义", channel_definitions.len());
+    } else {
+        error!("❌ [EXECUTE_BATCH_ALLOCATION] AllocationResult中没有通道定义！");
+    }
+
     Ok(allocation_result)
 }
 
@@ -1644,6 +1674,37 @@ async fn store_allocation_to_state_manager(
     info!("💾 [STORE_TO_STATE_MANAGER] 开始存储分配结果到状态管理器");
     info!("💾 [STORE_TO_STATE_MANAGER] 批次数量: {}", allocation_result.batches.len());
     info!("💾 [STORE_TO_STATE_MANAGER] 实例数量: {}", allocation_result.allocated_instances.len());
+
+    // 🔍 调试：检查通道定义字段状态
+    if let Some(ref channel_definitions) = allocation_result.channel_definitions {
+        info!("🔍 [STORE_TO_STATE_MANAGER] 分配结果包含{}个通道定义", channel_definitions.len());
+
+        // 🔧 直接在这里保存通道定义到数据库，避免clone问题
+        info!("💾 [STORE_TO_STATE_MANAGER] 开始保存{}个通道定义到数据库", channel_definitions.len());
+        let mut saved_count = 0;
+        let mut failed_count = 0;
+
+        for definition in channel_definitions.iter() {
+            match state.persistence_service.save_channel_definition(definition).await {
+                Ok(_) => {
+                    saved_count += 1;
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    error!("❌ [STORE_TO_STATE_MANAGER] 保存通道定义失败: ID={}, Tag={} - {}",
+                        definition.id, definition.tag, e);
+                }
+            }
+        }
+
+        if failed_count == 0 {
+            info!("✅ [STORE_TO_STATE_MANAGER] 通道定义保存完成: 成功保存{}个", saved_count);
+        } else {
+            error!("⚠️ [STORE_TO_STATE_MANAGER] 通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
+        }
+    } else {
+        warn!("⚠️ [STORE_TO_STATE_MANAGER] 分配结果中没有通道定义数据！");
+    }
 
     // 1. 存储批次分配结果到状态管理器
     match state.channel_state_manager.store_batch_allocation_result(allocation_result.clone()).await {

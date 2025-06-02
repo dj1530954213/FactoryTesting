@@ -59,8 +59,8 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
         println!("上位机通讯地址: {:?}", definition.plc_communication_address);
         println!("SLL设定点位_PLC地址: {:?}", definition.sll_set_point_plc_address);
         println!("SLL设定点位_通讯地址: {:?}", definition.sll_set_point_communication_address);
-        println!("维护值设定点位_PLC地址: {:?}", definition.maintenance_value_plc_address);
-        println!("维护值设定点位_通讯地址: {:?}", definition.maintenance_value_communication_address);
+        println!("维护值设定点位_PLC地址: {:?}", definition.maintenance_value_set_point_plc_address);
+        println!("维护值设定点位_通讯地址: {:?}", definition.maintenance_value_set_point_communication_address);
     }
     
     // 统计所有定义
@@ -77,10 +77,10 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
         if definition.sll_set_point_communication_address.is_some() {
             sll_communication_address_count += 1;
         }
-        if definition.maintenance_value_plc_address.is_some() {
+        if definition.maintenance_value_set_point_plc_address.is_some() {
             maintenance_plc_address_count += 1;
         }
-        if definition.maintenance_value_communication_address.is_some() {
+        if definition.maintenance_value_set_point_communication_address.is_some() {
             maintenance_communication_address_count += 1;
         }
     }

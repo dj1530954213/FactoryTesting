@@ -168,8 +168,8 @@ impl ExcelImporter {
         // 第10列：数据类型
         // 第11列：读写属性
         // 🔥 修复关键字段映射：
-        // 第51列（索引50）：PLC绝对地址（如%MD100）
-        // 第52列（索引51）：上位机通讯地址（如40001）
+        // 第52列（索引51）：PLC绝对地址（如%MD100）
+        // 第53列（索引52）：上位机通讯地址（如40001）
 
         let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第6列：位号
         let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第8列：变量名称（HMI）
@@ -184,11 +184,11 @@ impl ExcelImporter {
         let access_property = Self::get_optional_string_value(&row[11], "读写属性");  // 第11列：读写属性
 
         // 🔥 修复字段映射：正确读取PLC地址信息
-        let plc_absolute_address = Self::get_optional_string_value(&row[50], "PLC绝对地址");  // 第51列（索引50）：PLC绝对地址（如%MD100）
-        let plc_communication_address = Self::get_string_value(&row[51], row_number, "上位机通讯地址")?;  // 第52列（索引51）：Modbus TCP通讯地址（如40001）
+        let plc_absolute_address = Self::get_optional_string_value(&row[51], "PLC绝对地址");  // 第52列（索引51）：PLC绝对地址（如%MD100）
+        let modbus_communication_address = Self::get_string_value(&row[52], row_number, "上位机通讯地址")?;  // 第53列（索引52）：Modbus TCP通讯地址（如40001）
 
         info!("✅ [PARSE_ROW] 第{}行关键字段: 位号='{}', 变量名='{}', 模块类型='{}', PLC绝对地址='{}', Modbus通讯地址='{}'",
-              row_number, tag, variable_name, module_type_str, plc_absolute_address, plc_communication_address);
+              row_number, tag, variable_name, module_type_str, plc_absolute_address, modbus_communication_address);
 
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -206,7 +206,7 @@ impl ExcelImporter {
             module_type,
             channel_number,
             data_type,
-            plc_communication_address,  // 这里是上位机通讯地址（被测PLC通道号，如40001）
+            modbus_communication_address,  // 这里是上位机通讯地址（被测PLC通道号，如40001）
         );
 
         // 设置PLC绝对地址（如%MD100）

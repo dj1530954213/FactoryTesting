@@ -31,16 +31,9 @@ impl DatabaseMigration {
     async fn migrate_channel_point_definitions(db: &DatabaseConnection) -> Result<(), AppError> {
         log::info!("开始迁移channel_point_definitions表...");
 
-        // 检查表是否存在
-        let table_exists = Self::check_table_exists(db, "channel_point_definitions").await?;
-
-        if !table_exists {
-            // 创建新表
-            Self::create_channel_point_definitions_table(db).await?;
-        } else {
-            // 添加新字段
-            Self::add_channel_point_definition_columns(db).await?;
-        }
+        // 强制重建表以确保字段结构正确
+        log::info!("强制重建channel_point_definitions表以确保字段结构正确");
+        Self::create_channel_point_definitions_table(db).await?;
 
         log::info!("channel_point_definitions表迁移完成");
         Ok(())
@@ -118,52 +111,97 @@ impl DatabaseMigration {
     async fn create_channel_point_definitions_table(db: &DatabaseConnection) -> Result<(), AppError> {
         log::info!("创建channel_point_definitions表");
 
+        // 首先删除旧表（如果存在）
+        let drop_sql = "DROP TABLE IF EXISTS channel_point_definitions";
+        db.execute(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            drop_sql.to_string()
+        )).await.map_err(|e| AppError::persistence_error(format!("删除旧表失败: {}", e)))?;
+
+        log::info!("✅ 已删除旧的channel_point_definitions表");
+
         let sql = r#"
-            CREATE TABLE IF NOT EXISTS channel_point_definitions (
+            CREATE TABLE channel_point_definitions (
                 id TEXT PRIMARY KEY NOT NULL,
-                tag TEXT NOT NULL,
-                variable_name TEXT NOT NULL,
-                variable_description TEXT NOT NULL,
-                station_name TEXT NOT NULL,
-                module_name TEXT NOT NULL,
+
+                -- === 基础信息字段（14个）===
+                sequence_number INTEGER,
+                module_name TEXT,
                 module_type TEXT NOT NULL,
-                channel_tag_in_module TEXT NOT NULL,
-                data_type TEXT NOT NULL,
                 power_supply_type TEXT NOT NULL,
-                wire_system TEXT NOT NULL,
+                wire_system TEXT,
+                channel_position TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                station_name TEXT,
+                variable_name TEXT NOT NULL,
+                variable_description TEXT,
+                data_type TEXT,
+                read_write_property TEXT,
+                save_history TEXT,
+                power_off_protection TEXT,
+
+                -- === 量程字段（2个）===
+                range_low_limit REAL,
+                range_high_limit REAL,
+
+                -- === SLL设定字段（4个）===
+                sll_set_value REAL,
+                sll_set_point TEXT,
+                sll_set_point_plc_address TEXT,
+                sll_set_point_communication_address TEXT,
+
+                -- === SL设定字段（4个）===
+                sl_set_value REAL,
+                sl_set_point TEXT,
+                sl_set_point_plc_address TEXT,
+                sl_set_point_communication_address TEXT,
+
+                -- === SH设定字段（4个）===
+                sh_set_value REAL,
+                sh_set_point TEXT,
+                sh_set_point_plc_address TEXT,
+                sh_set_point_communication_address TEXT,
+
+                -- === SHH设定字段（4个）===
+                shh_set_value REAL,
+                shh_set_point TEXT,
+                shh_set_point_plc_address TEXT,
+                shh_set_point_communication_address TEXT,
+
+                -- === LL报警字段（3个）===
+                ll_alarm TEXT,
+                ll_alarm_plc_address TEXT,
+                ll_alarm_communication_address TEXT,
+
+                -- === L报警字段（3个）===
+                l_alarm TEXT,
+                l_alarm_plc_address TEXT,
+                l_alarm_communication_address TEXT,
+
+                -- === H报警字段（3个）===
+                h_alarm TEXT,
+                h_alarm_plc_address TEXT,
+                h_alarm_communication_address TEXT,
+
+                -- === HH报警字段（3个）===
+                hh_alarm TEXT,
+                hh_alarm_plc_address TEXT,
+                hh_alarm_communication_address TEXT,
+
+                -- === 维护字段（6个）===
+                maintenance_value_setting TEXT,
+                maintenance_value_set_point TEXT,
+                maintenance_value_set_point_plc_address TEXT,
+                maintenance_value_set_point_communication_address TEXT,
+                maintenance_enable_switch_point TEXT,
+                maintenance_enable_switch_point_plc_address TEXT,
+                maintenance_enable_switch_point_communication_address TEXT,
+
+                -- === 地址字段（2个）===
                 plc_absolute_address TEXT,
                 plc_communication_address TEXT NOT NULL,
-                range_lower_limit REAL,
-                range_upper_limit REAL,
-                engineering_unit TEXT,
-                sll_set_value REAL,
-                sll_set_point_address TEXT,
-                sll_set_point_plc_address TEXT,
-                sll_feedback_address TEXT,
-                sll_feedback_plc_address TEXT,
-                sl_set_value REAL,
-                sl_set_point_address TEXT,
-                sl_set_point_plc_address TEXT,
-                sl_feedback_address TEXT,
-                sl_feedback_plc_address TEXT,
-                sh_set_value REAL,
-                sh_set_point_address TEXT,
-                sh_set_point_plc_address TEXT,
-                sh_feedback_address TEXT,
-                sh_feedback_plc_address TEXT,
-                shh_set_value REAL,
-                shh_set_point_address TEXT,
-                shh_set_point_plc_address TEXT,
-                shh_feedback_address TEXT,
-                shh_feedback_plc_address TEXT,
-                maintenance_value_set_point_address TEXT,
-                maintenance_value_set_point_plc_address TEXT,
-                maintenance_enable_switch_point_address TEXT,
-                maintenance_enable_switch_point_plc_address TEXT,
-                access_property TEXT,
-                save_history BOOLEAN,
-                power_failure_protection BOOLEAN,
-                test_rig_plc_address TEXT,
+
+                -- === 时间戳字段（2个）===
                 created_time TEXT NOT NULL,
                 updated_time TEXT NOT NULL
             )
