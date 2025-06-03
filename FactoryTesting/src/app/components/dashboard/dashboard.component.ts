@@ -535,42 +535,92 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deleteBatch(batch: DashboardBatchDisplay) {
     console.log('🗑️ [DELETE_BATCH] 准备删除批次:', batch.id, batch.name);
 
-    // 显示确认对话框
-    this.modal.confirm({
-      nzTitle: '确认删除批次',
-      nzContent: `
-        <div>
-          <p>您确定要删除批次 <strong>"${batch.name}"</strong> 吗？</p>
-          <p style="color: #ff4d4f; margin-top: 8px;">
-            <i nz-icon nzType="exclamation-circle" style="margin-right: 4px;"></i>
-            此操作将永久删除以下数据：
-          </p>
-          <ul style="margin: 8px 0; padding-left: 20px; color: #666;">
-            <li>批次信息 (test_batch_info 表)</li>
-            <li>测试实例 (channel_test_instances 表)</li>
-            <li>通道定义 (channel_point_definitions 表)</li>
-          </ul>
-          <p style="color: #ff4d4f; font-weight: bold;">此操作不可撤销！</p>
-        </div>
-      `,
-      nzOkText: '确认删除',
+    // 优化的确认对话框 - 使用更简洁的内容和更好的动画
+    const modal = this.modal.confirm({
+      nzTitle: '⚠️ 确认删除批次',
+      nzContent: this.createDeleteConfirmContent(batch),
+      nzOkText: '🗑️ 确认删除',
       nzOkType: 'primary',
       nzOkDanger: true,
-      nzCancelText: '取消',
-      nzWidth: 500,
-      nzOnOk: () => this.performBatchDeletion(batch)
+      nzCancelText: '✖️ 取消',
+      nzWidth: 480,
+      nzMaskClosable: false,
+      nzKeyboard: true,
+      nzCentered: true,
+      nzMaskStyle: {
+        'backdrop-filter': 'blur(4px)',
+        'background-color': 'rgba(0, 0, 0, 0.45)'
+      },
+      nzBodyStyle: {
+        'padding': '24px',
+        'line-height': '1.6'
+      },
+      nzOnOk: () => {
+        // 立即关闭对话框，提供即时反馈
+        modal.close();
+        return this.performBatchDeletion(batch);
+      },
+      nzOnCancel: () => {
+        console.log('🚫 [DELETE_BATCH] 用户取消删除操作');
+      }
     });
+
+    // 添加对话框打开动画
+    setTimeout(() => {
+      const modalElement = document.querySelector('.ant-modal');
+      if (modalElement) {
+        modalElement.classList.add('modal-fade-in');
+      }
+    }, 10);
   }
 
   /**
-   * 执行批次删除操作
+   * 创建删除确认对话框的内容
+   * @param batch 批次信息
+   * @returns HTML内容字符串
+   */
+  private createDeleteConfirmContent(batch: DashboardBatchDisplay): string {
+    return `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="margin-bottom: 16px;">
+          <p style="font-size: 16px; margin: 0 0 12px 0; color: #262626;">
+            您确定要删除批次 <strong style="color: #1890ff;">"${batch.name}"</strong> 吗？
+          </p>
+          <div style="background: #fff2e8; border: 1px solid #ffbb96; border-radius: 6px; padding: 12px; margin: 12px 0;">
+            <p style="margin: 0 0 8px 0; color: #fa541c; font-weight: 500; display: flex; align-items: center;">
+              <span style="margin-right: 6px;">⚠️</span>
+              此操作将永久删除以下数据：
+            </p>
+            <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #595959; line-height: 1.8;">
+              <li>📊 批次信息 (test_batch_info 表)</li>
+              <li>🧪 测试实例 (channel_test_instances 表)</li>
+              <li>📋 通道定义 (channel_point_definitions 表)</li>
+            </ul>
+          </div>
+          <p style="color: #ff4d4f; font-weight: 600; margin: 16px 0 0 0; text-align: center; font-size: 14px;">
+            🚨 此操作不可撤销！
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * 执行批次删除操作 - 优化版本，提供更流畅的用户体验
    * @param batch 要删除的批次信息
    */
   private async performBatchDeletion(batch: DashboardBatchDisplay): Promise<void> {
-    const loadingMessageId = this.message.loading('正在删除批次，请稍候...', { nzDuration: 0 }).messageId;
+    // 显示优化的加载消息
+    const loadingMessage = this.message.loading(
+      `🗑️ 正在删除批次 "${batch.name}"...`,
+      { nzDuration: 0 }
+    );
 
     try {
       console.log('🗑️ [DELETE_BATCH] 开始执行删除操作:', batch.id);
+
+      // 添加短暂延迟，让用户看到加载状态
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // 调用后端API删除批次
       const result = await this.tauriApi.deleteBatch(batch.id).toPromise();
@@ -578,23 +628,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log('✅ [DELETE_BATCH] 删除操作完成:', result);
 
       // 关闭加载消息
-      this.message.remove(loadingMessageId);
+      this.message.remove(loadingMessage.messageId);
 
       if (result && result.success) {
-        // 删除成功
+        // 删除成功 - 显示优化的成功消息
         this.message.success(
-          `批次 "${batch.name}" 删除成功！删除了 ${result.deleted_definitions_count} 个通道定义和 ${result.deleted_instances_count} 个测试实例`,
-          { nzDuration: 5000 }
+          `🎉 批次 "${batch.name}" 删除成功！已清理 ${result.deleted_definitions_count} 个通道定义和 ${result.deleted_instances_count} 个测试实例`,
+          { nzDuration: 4000 }
         );
 
-        // 刷新仪表盘数据
-        await this.loadDashboardData();
+        // 添加视觉反馈 - 先从列表中移除该项
+        this.recentBatches = this.recentBatches.filter(b => b.id !== batch.id);
+        this.totalBatches = Math.max(0, this.totalBatches - 1);
 
-        console.log('✅ [DELETE_BATCH] 仪表盘数据已刷新');
+        // 延迟刷新数据，让用户看到即时的视觉反馈
+        setTimeout(async () => {
+          await this.loadDashboardData();
+          console.log('✅ [DELETE_BATCH] 仪表盘数据已刷新');
+        }, 500);
+
       } else {
         // 删除失败或结果为空
         const errorMessage = result?.message || '删除操作返回空结果';
-        this.message.error(`删除批次失败: ${errorMessage}`, { nzDuration: 8000 });
+        this.message.error(
+          `❌ 删除批次失败: ${errorMessage}`,
+          { nzDuration: 6000 }
+        );
         console.error('❌ [DELETE_BATCH] 删除失败:', errorMessage);
       }
 
@@ -602,11 +661,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.error('❌ [DELETE_BATCH] 删除批次时发生错误:', error);
 
       // 关闭加载消息
-      this.message.remove(loadingMessageId);
+      this.message.remove(loadingMessage.messageId);
 
-      // 显示错误消息
+      // 显示优化的错误消息
+      const errorMsg = error instanceof Error ? error.message : '未知错误';
       this.message.error(
-        `删除批次时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+        `💥 删除批次时发生错误: ${errorMsg}`,
         { nzDuration: 8000 }
       );
     }

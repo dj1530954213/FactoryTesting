@@ -159,10 +159,29 @@
                 </span>
               </a>
               <div class="batch-tags">
+                <!-- 会话状态标识 -->
+                <nz-tag
+                  *ngIf="batch?.isCurrentSession"
+                  nzColor="processing"
+                  class="session-tag">
+                  <span nz-icon nzType="play-circle" nzTheme="outline"></span>
+                  当前会话
+                </nz-tag>
+                <nz-tag
+                  *ngIf="!batch?.isCurrentSession"
+                  nzColor="default"
+                  class="session-tag">
+                  <span nz-icon nzType="history" nzTheme="outline"></span>
+                  历史批次
+                </nz-tag>
+
+                <!-- 站场信息 -->
                 <nz-tag nzColor="blue">
                   <span nz-icon nzType="environment" nzTheme="outline"></span>
                   {{ (batch?.station_name || batch?.station || '未知站场') }}
                 </nz-tag>
+
+                <!-- 测试状态 -->
                 <nz-tag [nzColor]="getBatchStatusColor(batch?.overall_status || batch?.status)">
                   {{ getBatchStatusText(batch?.overall_status || batch?.status) }}
                 </nz-tag>

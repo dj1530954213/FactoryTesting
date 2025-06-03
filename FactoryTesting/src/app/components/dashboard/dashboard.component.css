@@ -1110,6 +1110,127 @@
   gap: 4px;
 }
 
+/* 会话状态标识样式 */
+.session-tag {
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+
+/* 当前会话标识 */
+.session-tag[nz-color="processing"] {
+  background: linear-gradient(135deg, #1890ff, #40a9ff);
+  color: white;
+  border-color: #1890ff;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+  animation: pulse-session 2s infinite;
+}
+
+.session-tag[nz-color="processing"] .anticon {
+  animation: rotate 2s linear infinite;
+}
+
+/* 历史批次标识 */
+.session-tag[nz-color="default"] {
+  background: #f5f5f5;
+  color: #8c8c8c;
+  border-color: #d9d9d9;
+}
+
+/* 动画效果 */
+@keyframes pulse-session {
+  0%, 100% {
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.4);
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 删除对话框优化动画 */
+.modal-fade-in {
+  animation: modalFadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes modalFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 删除按钮悬停效果优化 */
+.recent-batches-card .ant-list-item-action button[nz-button][nzDanger] {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 6px;
+}
+
+.recent-batches-card .ant-list-item-action button[nz-button][nzDanger]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
+  background-color: #ff4d4f;
+  color: white;
+  border-color: #ff4d4f;
+}
+
+/* 对话框遮罩优化 */
+:global(.ant-modal-mask) {
+  backdrop-filter: blur(4px);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 对话框内容优化 */
+:global(.ant-modal-content) {
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 对话框标题优化 */
+:global(.ant-modal-header) {
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 20px 24px 16px;
+}
+
+/* 对话框按钮优化 */
+:global(.ant-modal-footer) {
+  border-top: 1px solid #f0f0f0;
+  padding: 16px 24px 20px;
+  border-radius: 0 0 12px 12px;
+}
+
+:global(.ant-modal-footer .ant-btn) {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+:global(.ant-modal-footer .ant-btn-primary.ant-btn-dangerous) {
+  background: linear-gradient(135deg, #ff4d4f, #ff7875);
+  border-color: #ff4d4f;
+  box-shadow: 0 2px 8px rgba(255, 77, 79, 0.2);
+}
+
+:global(.ant-modal-footer .ant-btn-primary.ant-btn-dangerous:hover) {
+  background: linear-gradient(135deg, #ff7875, #ff4d4f);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(255, 77, 79, 0.3);
+}
+
 /* 批次描述样式 */
 .batch-description {
   display: flex;
