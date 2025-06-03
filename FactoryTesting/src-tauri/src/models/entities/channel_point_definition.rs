@@ -15,6 +15,10 @@ pub struct Model {
     #[serde(default = "default_id")]
     pub id: String,
 
+    // === 批次关联字段 ===
+    #[sea_orm(nullable)]
+    pub batch_id: Option<String>,                        // 批次ID
+
     // === 基础信息字段（14个）===
     #[sea_orm(nullable)]
     pub sequence_number: Option<i32>,                    // 序号
@@ -158,6 +162,7 @@ impl From<&crate::models::structs::ChannelPointDefinition> for ActiveModel {
 
         Self {
             id: Set(definition.id.clone()),
+            batch_id: Set(definition.batch_id.clone()),
 
             // === 基础信息字段 ===
             sequence_number: Set(None),
@@ -244,6 +249,7 @@ impl From<&Model> for crate::models::structs::ChannelPointDefinition {
 
         crate::models::structs::ChannelPointDefinition {
             id: model.id.clone(),
+            batch_id: model.batch_id.clone(),
             tag: model.tag.clone(),
             variable_name: model.variable_name.clone(),
             variable_description: model.variable_description.clone().unwrap_or_default(),

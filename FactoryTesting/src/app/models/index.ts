@@ -396,8 +396,16 @@ export interface ImportExcelAndAllocateRequest {
 }
 
 // 仪表盘批次信息 - 包含是否为当前会话的标识
-export interface DashboardBatchInfo {
-  batch_info: TestBatchInfo;
+// 注意：后端使用了 #[serde(flatten)]，所以 TestBatchInfo 的字段都在顶层
+export interface DashboardBatchInfo extends TestBatchInfo {
   is_current_session: boolean;  // 是否为当前会话的批次
   has_station_name: boolean;    // 是否有站场名称（用于调试）
+}
+
+// 删除批次响应
+export interface DeleteBatchResponse {
+  success: boolean;
+  message: string;
+  deleted_definitions_count: number;
+  deleted_instances_count: number;
 }

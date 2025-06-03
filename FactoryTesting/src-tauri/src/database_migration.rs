@@ -23,6 +23,9 @@ impl DatabaseMigration {
         // 阶段三：数据完整性检查和修复
         Self::verify_data_integrity(db).await?;
 
+        // 🔥 阶段四：数据恢复 - 为没有batch_id的通道定义恢复批次关联
+        Self::recover_missing_batch_associations(db).await?;
+
         log::info!("数据库迁移完成");
         Ok(())
     }
@@ -577,5 +580,172 @@ impl DatabaseMigration {
 
         log::info!("数据完整性验证通过");
         Ok(())
+    }
+
+    /// 🔥 数据恢复：为没有batch_id的通道定义恢复批次关联
+    ///
+    /// 这个方法会：
+    /// 1. 查找所有没有batch_id的通道定义
+    /// 2. 尝试通过测试实例找到对应的批次ID
+    /// 3. 更新通道定义的batch_id字段
+    async fn recover_missing_batch_associations(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("🔄 开始数据恢复：为缺失batch_id的通道定义恢复批次关联");
+
+        // 1. 查找所有没有batch_id的通道定义
+        let orphaned_definitions_sql = r#"
+            SELECT id, tag, station_name
+            FROM channel_point_definitions
+            WHERE batch_id IS NULL OR batch_id = ''
+        "#;
+
+        let orphaned_definitions = db.query_all(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            orphaned_definitions_sql.to_string()
+        )).await.map_err(|e| AppError::persistence_error(format!("查询孤立通道定义失败: {}", e)))?;
+
+        if orphaned_definitions.is_empty() {
+            log::info!("✅ 没有发现缺失batch_id的通道定义，跳过数据恢复");
+            return Ok(());
+        }
+
+        log::info!("🔍 发现{}个缺失batch_id的通道定义，开始恢复", orphaned_definitions.len());
+
+        let mut recovered_count = 0;
+        let mut failed_count = 0;
+
+        // 2. 为每个孤立的通道定义尝试恢复批次关联
+        for row in orphaned_definitions {
+            let definition_id = row.try_get::<String>("", "id")
+                .map_err(|e| AppError::persistence_error(format!("获取定义ID失败: {}", e)))?;
+            let tag = row.try_get::<String>("", "tag").unwrap_or_default();
+            let station_name = row.try_get::<String>("", "station_name").unwrap_or_default();
+
+            log::info!("🔍 处理通道定义: ID={}, Tag={}, Station={}", definition_id, tag, station_name);
+
+            // 尝试通过测试实例找到对应的批次ID
+            match Self::find_batch_id_for_definition(db, &definition_id).await {
+                Ok(Some(batch_id)) => {
+                    // 找到了批次ID，更新通道定义
+                    match Self::update_definition_batch_id(db, &definition_id, &batch_id).await {
+                        Ok(_) => {
+                            log::info!("✅ 成功恢复通道定义 {} 的批次关联: {}", tag, batch_id);
+                            recovered_count += 1;
+                        }
+                        Err(e) => {
+                            log::warn!("❌ 更新通道定义 {} 的批次ID失败: {}", tag, e);
+                            failed_count += 1;
+                        }
+                    }
+                }
+                Ok(None) => {
+                    // 没有找到对应的批次ID，尝试创建默认批次
+                    match Self::create_default_batch_for_orphaned_definition(db, &definition_id, &tag, &station_name).await {
+                        Ok(batch_id) => {
+                            log::info!("✅ 为孤立通道定义 {} 创建默认批次: {}", tag, batch_id);
+                            recovered_count += 1;
+                        }
+                        Err(e) => {
+                            log::warn!("❌ 为通道定义 {} 创建默认批次失败: {}", tag, e);
+                            failed_count += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("❌ 查找通道定义 {} 的批次ID失败: {}", tag, e);
+                    failed_count += 1;
+                }
+            }
+        }
+
+        log::info!("🎉 数据恢复完成: 成功恢复{}个，失败{}个", recovered_count, failed_count);
+        Ok(())
+    }
+
+    /// 通过测试实例查找通道定义对应的批次ID
+    async fn find_batch_id_for_definition(db: &DatabaseConnection, definition_id: &str) -> Result<Option<String>, AppError> {
+        let sql = r#"
+            SELECT test_batch_id
+            FROM channel_test_instances
+            WHERE definition_id = ?
+            LIMIT 1
+        "#;
+
+        let result = db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql,
+            vec![definition_id.into()]
+        )).await.map_err(|e| AppError::persistence_error(format!("查询测试实例失败: {}", e)))?;
+
+        if let Some(row) = result.first() {
+            let batch_id = row.try_get::<String>("", "test_batch_id")
+                .map_err(|e| AppError::persistence_error(format!("获取批次ID失败: {}", e)))?;
+            Ok(Some(batch_id))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 更新通道定义的批次ID
+    async fn update_definition_batch_id(db: &DatabaseConnection, definition_id: &str, batch_id: &str) -> Result<(), AppError> {
+        let sql = r#"
+            UPDATE channel_point_definitions
+            SET batch_id = ?
+            WHERE id = ?
+        "#;
+
+        db.execute(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql,
+            vec![batch_id.into(), definition_id.into()]
+        )).await.map_err(|e| AppError::persistence_error(format!("更新批次ID失败: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// 为孤立的通道定义创建默认批次
+    async fn create_default_batch_for_orphaned_definition(
+        db: &DatabaseConnection,
+        definition_id: &str,
+        tag: &str,
+        station_name: &str
+    ) -> Result<String, AppError> {
+        use uuid::Uuid;
+        use chrono::Utc;
+
+        let batch_id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        // 创建默认批次名称
+        let batch_name = if !station_name.is_empty() {
+            format!("历史数据恢复-{}", station_name)
+        } else {
+            "历史数据恢复-未知站场".to_string()
+        };
+
+        // 插入默认批次信息
+        let insert_batch_sql = r#"
+            INSERT INTO test_batch_info (
+                batch_id, batch_name, station_name, created_time, updated_time,
+                overall_status, total_points, tested_points, passed_points,
+                failed_points, skipped_points
+            ) VALUES (?, ?, ?, ?, ?, 'NotTested', 1, 0, 0, 0, 1)
+        "#;
+
+        db.execute(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            insert_batch_sql,
+            vec![
+                batch_id.clone().into(),
+                batch_name.into(),
+                station_name.into(),
+                now.clone().into(),
+                now.into(),
+            ]
+        )).await.map_err(|e| AppError::persistence_error(format!("创建默认批次失败: {}", e)))?;
+
+        // 更新通道定义的批次ID
+        Self::update_definition_batch_id(db, definition_id, &batch_id).await?;
+
+        Ok(batch_id)
     }
 }

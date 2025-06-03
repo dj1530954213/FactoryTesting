@@ -19,7 +19,8 @@ import {
   PrepareTestInstancesResponse,
   BatchDetailsPayload,
   ImportExcelAndCreateBatchResponse,
-  DashboardBatchInfo
+  DashboardBatchInfo,
+  DeleteBatchResponse
 } from '../models';
 
 @Injectable({
@@ -270,13 +271,12 @@ export class TauriApiService {
         console.log('✅ [TAURI_API] 当前会话批次:', currentSessionCount);
         console.log('✅ [TAURI_API] 历史批次:', historicalCount);
 
-        // 🔍 调试站场信息
+        // 🔍 调试站场信息 - 修复：由于后端使用了 #[serde(flatten)]，直接访问字段
         dashboardBatches.forEach((dashboardBatch, index) => {
-          const batch = dashboardBatch.batch_info;
-          if (batch.station_name) {
-            console.log(`✅ [TAURI_API] 批次${index + 1} 站场信息: ${batch.station_name}`);
+          if (dashboardBatch.station_name) {
+            console.log(`✅ [TAURI_API] 批次${index + 1} 站场信息: ${dashboardBatch.station_name}`);
           } else {
-            console.warn(`⚠️ [TAURI_API] 批次${index + 1} 缺少站场信息: ${batch.batch_name}`);
+            console.warn(`⚠️ [TAURI_API] 批次${index + 1} 缺少站场信息: ${dashboardBatch.batch_name}`);
           }
         });
       }),
@@ -678,8 +678,8 @@ export class TauriApiService {
   /**
    * 删除单个批次及其相关数据
    */
-  deleteBatch(batchId: string): Observable<any> {
-    return from(invoke('delete_batch_cmd', {
+  deleteBatch(batchId: string): Observable<DeleteBatchResponse> {
+    return from(invoke<DeleteBatchResponse>('delete_batch_cmd', {
       request: { batch_id: batchId }
     }));
   }

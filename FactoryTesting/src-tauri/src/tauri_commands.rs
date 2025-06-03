@@ -472,10 +472,15 @@ pub async fn create_test_batch_with_definitions(
         .await
         .map_err(|e| e.to_string())?;
 
-    // 保存通道定义
-    for definition in definitions {
+    // 🔥 保存通道定义（设置批次ID）
+    let mut updated_definitions = definitions;
+    for definition in &mut updated_definitions {
+        definition.batch_id = Some(batch_info.batch_id.clone());
+    }
+
+    for definition in &updated_definitions {
         state.persistence_service
-            .save_channel_definition(&definition)
+            .save_channel_definition(definition)
             .await
             .map_err(|e| e.to_string())?;
 

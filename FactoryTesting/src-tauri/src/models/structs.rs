@@ -239,6 +239,7 @@ impl ChannelPointDefinition {
     ) -> Self {
         Self {
             id: default_id(),
+            batch_id: None,
             tag,
             variable_name,
             variable_description,

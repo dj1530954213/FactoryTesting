@@ -151,9 +151,17 @@ pub async fn create_test_batch(
                 info!("批次 {} 已添加到当前会话跟踪", test_batch.batch_id);
             }
 
-            // 保存通道定义
+            // 🔥 保存通道定义（设置批次ID）
             let mut saved_count = 0;
-            for definition in &batch_data.preview_data {
+            let mut updated_definitions = batch_data.preview_data.clone();
+
+            // 为每个通道定义设置批次ID
+            for definition in &mut updated_definitions {
+                definition.batch_id = Some(test_batch.batch_id.clone());
+                info!("🔗 为通道定义 {} 设置批次ID: {}", definition.tag, test_batch.batch_id);
+            }
+
+            for definition in &updated_definitions {
                 match persistence_service.save_channel_definition(definition).await {
                     Ok(_) => saved_count += 1,
                     Err(e) => {
@@ -1148,11 +1156,18 @@ pub async fn parse_excel_and_create_batch_cmd(
         }
     }
 
-    // 第四步：保存通道定义
+    // 🔥 第四步：为通道定义设置批次ID并保存
     let mut saved_count = 0;
     let mut errors = Vec::new();
 
-    for definition in &definitions {
+    // 为每个通道定义设置批次ID
+    let mut updated_definitions = definitions.clone();
+    for definition in &mut updated_definitions {
+        definition.batch_id = Some(test_batch.batch_id.clone());
+        info!("🔗 为通道定义 {} 设置批次ID: {}", definition.tag, test_batch.batch_id);
+    }
+
+    for definition in &updated_definitions {
         match persistence_service.save_channel_definition(definition).await {
             Ok(_) => saved_count += 1,
             Err(e) => {

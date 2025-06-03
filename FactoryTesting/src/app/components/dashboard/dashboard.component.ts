@@ -4,7 +4,7 @@ import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Subscription, interval } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
-import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo } from '../../models';
+import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo, DeleteBatchResponse } from '../../models';
 
 // NG-ZORRO 组件导入
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -20,6 +20,8 @@ import { NzListModule } from 'ng-zorro-antd/list';
 import { NzAvatarModule } from 'ng-zorro-antd/avatar';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
+import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
 
 // ECharts 导入
 import { NgxEchartsModule } from 'ngx-echarts';
@@ -110,6 +112,8 @@ interface DashboardBatchDisplay {
     NzAvatarModule,
     NzDividerModule,
     NzSpaceModule,
+    NzModalModule,
+    NzMessageModule,
     // ECharts 模块
     NgxEchartsModule
   ],
@@ -162,7 +166,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   constructor(
     private tauriApi: TauriApiService,
-    private router: Router
+    private router: Router,
+    private modal: NzModalService,
+    private message: NzMessageService
   ) {}
 
   ngOnInit() {
@@ -204,15 +210,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.totalChannels = allChannels?.length || 0;
       this.totalBatches = dashboardBatches?.length || 0;
 
-      // 🔧 从仪表盘批次信息中提取批次数据，确保正确处理数据结构
-      const allBatches = dashboardBatches?.map(db => {
-        // 确保 db 和 db.batch_info 都存在
-        if (!db || !db.batch_info) {
+      // 🔧 修复：由于后端使用了 #[serde(flatten)]，dashboardBatches 本身就是展平的数据
+      // 不需要提取 batch_info，直接使用 dashboardBatches
+      const allBatches = dashboardBatches?.filter(db => {
+        // 确保 db 存在且有必要的字段
+        if (!db || !db.batch_id) {
           console.warn('📊 [DASHBOARD] 发现无效的批次数据:', db);
-          return null;
+          return false;
         }
-        return db.batch_info;
-      }).filter(batch => batch !== null) || [];
+        return true;
+      }) || [];
 
       console.log('📊 [DASHBOARD] 提取的批次数据:', allBatches);
       console.log('📊 [DASHBOARD] 原始仪表盘批次数据:', dashboardBatches);
@@ -244,8 +251,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       console.log('📊 [DASHBOARD] 有效批次数量:', validBatches.length);
 
       this.recentBatches = validBatches
-        .sort((a: TestBatchInfo, b: TestBatchInfo) => {
-          // 使用 creation_time 字段进行排序
+        .sort((a: DashboardBatchInfo, b: DashboardBatchInfo) => {
+          // 🔧 修复：使用正确的类型，因为现在 validBatches 是 DashboardBatchInfo[]
           const timeA = a.creation_time ? new Date(a.creation_time).getTime() : 0;
           const timeB = b.creation_time ? new Date(b.creation_time).getTime() : 0;
           return timeB - timeA; // 最新的在前
@@ -253,13 +260,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         .slice(0, 10)
         .map(batch => {
           try {
-            console.log('📊 [DASHBOARD] 处理批次:', batch.batch_id, '站场:', batch.station_name);
+            console.log('📊 [DASHBOARD] 处理批次:', batch.batch_id, '站场:', batch.station_name, '当前会话:', batch.is_current_session);
 
-            // 🔧 从仪表盘批次信息中查找对应的会话标识
-            const dashboardBatch = dashboardBatches?.find(db =>
-              db && db.batch_info && db.batch_info.batch_id === batch.batch_id
-            );
-            const isCurrentSession = dashboardBatch?.is_current_session || false;
+            // 🔧 修复：直接使用 batch 的会话信息，因为它本身就是 DashboardBatchInfo
+            const isCurrentSession = batch.is_current_session || false;
 
             // 🔧 安全地获取站场信息
             const stationName = batch.station_name || '未知站场';
@@ -524,10 +528,88 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * 删除批次 - 级联删除三张表中的所有关联数据
+   * @param batch 要删除的批次信息
+   */
   deleteBatch(batch: DashboardBatchDisplay) {
-    console.log('删除批次:', batch.id);
-    // TODO: 实现删除批次功能
-    // 这里可以调用后端API删除批次
+    console.log('🗑️ [DELETE_BATCH] 准备删除批次:', batch.id, batch.name);
+
+    // 显示确认对话框
+    this.modal.confirm({
+      nzTitle: '确认删除批次',
+      nzContent: `
+        <div>
+          <p>您确定要删除批次 <strong>"${batch.name}"</strong> 吗？</p>
+          <p style="color: #ff4d4f; margin-top: 8px;">
+            <i nz-icon nzType="exclamation-circle" style="margin-right: 4px;"></i>
+            此操作将永久删除以下数据：
+          </p>
+          <ul style="margin: 8px 0; padding-left: 20px; color: #666;">
+            <li>批次信息 (test_batch_info 表)</li>
+            <li>测试实例 (channel_test_instances 表)</li>
+            <li>通道定义 (channel_point_definitions 表)</li>
+          </ul>
+          <p style="color: #ff4d4f; font-weight: bold;">此操作不可撤销！</p>
+        </div>
+      `,
+      nzOkText: '确认删除',
+      nzOkType: 'primary',
+      nzOkDanger: true,
+      nzCancelText: '取消',
+      nzWidth: 500,
+      nzOnOk: () => this.performBatchDeletion(batch)
+    });
+  }
+
+  /**
+   * 执行批次删除操作
+   * @param batch 要删除的批次信息
+   */
+  private async performBatchDeletion(batch: DashboardBatchDisplay): Promise<void> {
+    const loadingMessageId = this.message.loading('正在删除批次，请稍候...', { nzDuration: 0 }).messageId;
+
+    try {
+      console.log('🗑️ [DELETE_BATCH] 开始执行删除操作:', batch.id);
+
+      // 调用后端API删除批次
+      const result = await this.tauriApi.deleteBatch(batch.id).toPromise();
+
+      console.log('✅ [DELETE_BATCH] 删除操作完成:', result);
+
+      // 关闭加载消息
+      this.message.remove(loadingMessageId);
+
+      if (result && result.success) {
+        // 删除成功
+        this.message.success(
+          `批次 "${batch.name}" 删除成功！删除了 ${result.deleted_definitions_count} 个通道定义和 ${result.deleted_instances_count} 个测试实例`,
+          { nzDuration: 5000 }
+        );
+
+        // 刷新仪表盘数据
+        await this.loadDashboardData();
+
+        console.log('✅ [DELETE_BATCH] 仪表盘数据已刷新');
+      } else {
+        // 删除失败或结果为空
+        const errorMessage = result?.message || '删除操作返回空结果';
+        this.message.error(`删除批次失败: ${errorMessage}`, { nzDuration: 8000 });
+        console.error('❌ [DELETE_BATCH] 删除失败:', errorMessage);
+      }
+
+    } catch (error) {
+      console.error('❌ [DELETE_BATCH] 删除批次时发生错误:', error);
+
+      // 关闭加载消息
+      this.message.remove(loadingMessageId);
+
+      // 显示错误消息
+      this.message.error(
+        `删除批次时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+        { nzDuration: 8000 }
+      );
+    }
   }
 
   // 批次相关方法 - 支持两种类型

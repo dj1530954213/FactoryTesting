@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 创建测试通道定义
     let test_definition = ChannelPointDefinition {
         id: uuid::Uuid::new_v4().to_string(),
+        batch_id: None,
         tag: "TEST_AI_001".to_string(),
         variable_name: "测试模拟量输入".to_string(),
         variable_description: "测试用的模拟量输入通道".to_string(),
