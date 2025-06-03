@@ -126,7 +126,7 @@ impl From<&crate::models::structs::TestBatchInfo> for ActiveModel {
             product_model: Set(original.product_model.clone()),
             serial_number: Set(original.serial_number.clone()),
             customer_name: Set(original.customer_name.clone()),
-            station_name: Set(None), // 新字段，原结构体没有
+            station_name: Set(original.station_name.clone()), // 🔧 修复：正确映射station_name字段
             created_time: Set(original.creation_time),
             updated_time: Set(original.last_updated_time),
             start_time: Set(None), // 新字段，原结构体没有

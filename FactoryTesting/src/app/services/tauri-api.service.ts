@@ -18,7 +18,8 @@ import {
   PrepareTestInstancesRequest,
   PrepareTestInstancesResponse,
   BatchDetailsPayload,
-  ImportExcelAndCreateBatchResponse
+  ImportExcelAndCreateBatchResponse,
+  DashboardBatchInfo
 } from '../models';
 
 @Injectable({
@@ -130,7 +131,7 @@ export class TauriApiService {
    * 创建测试批次并保存通道定义
    */
   createTestBatchWithDefinitions(batchInfo: TestBatchInfo, definitions: ChannelPointDefinition[]): Observable<string> {
-    return from(invoke<string>('create_test_batch_with_definitions', { batchInfo, definitions }));
+    return from(invoke<string>('create_test_batch_with_definitions_cmd', { batch_info: batchInfo, definitions }));
   }
 
   /**
@@ -232,10 +233,10 @@ export class TauriApiService {
   }
 
   /**
-   * 获取批次列表 - 从状态管理器获取已分配的批次
+   * 获取批次列表 - 从状态管理器获取已分配的批次（测试区域专用）
    */
   getBatchList(): Observable<TestBatchInfo[]> {
-    console.log('📋 [TAURI_API] 调用获取批次列表API');
+    console.log('📋 [TAURI_API] 调用获取批次列表API - 测试区域专用');
     return from(invoke<TestBatchInfo[]>('get_batch_list')).pipe(
       tap(batches => {
         console.log('✅ [TAURI_API] 成功获取批次列表');
@@ -248,6 +249,39 @@ export class TauriApiService {
       }),
       catchError(error => {
         console.error('❌ [TAURI_API] 获取批次列表失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * 获取仪表盘批次列表 - 从数据库获取所有批次并标识当前会话批次
+   */
+  getDashboardBatchList(): Observable<DashboardBatchInfo[]> {
+    console.log('📊 [TAURI_API] 调用获取仪表盘批次列表API');
+    return from(invoke<DashboardBatchInfo[]>('get_dashboard_batch_list')).pipe(
+      tap(dashboardBatches => {
+        console.log('✅ [TAURI_API] 成功获取仪表盘批次列表');
+        console.log('✅ [TAURI_API] 总批次数量:', dashboardBatches.length);
+
+        const currentSessionCount = dashboardBatches.filter(b => b.is_current_session).length;
+        const historicalCount = dashboardBatches.length - currentSessionCount;
+
+        console.log('✅ [TAURI_API] 当前会话批次:', currentSessionCount);
+        console.log('✅ [TAURI_API] 历史批次:', historicalCount);
+
+        // 🔍 调试站场信息
+        dashboardBatches.forEach((dashboardBatch, index) => {
+          const batch = dashboardBatch.batch_info;
+          if (batch.station_name) {
+            console.log(`✅ [TAURI_API] 批次${index + 1} 站场信息: ${batch.station_name}`);
+          } else {
+            console.warn(`⚠️ [TAURI_API] 批次${index + 1} 缺少站场信息: ${batch.batch_name}`);
+          }
+        });
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 获取仪表盘批次列表失败:', error);
         throw error;
       })
     );

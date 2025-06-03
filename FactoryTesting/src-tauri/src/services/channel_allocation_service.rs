@@ -237,6 +237,7 @@ impl ChannelAllocationService {
             let batch_info = self.create_batch_info(
                 batch_counter,
                 &batch_instances,
+                &definitions,  // 🔧 传递通道定义以获取站场信息
                 product_model.clone(),
                 serial_number.clone(),
             );
@@ -769,6 +770,7 @@ impl ChannelAllocationService {
         &self,
         batch_number: u32,
         instances: &[ChannelTestInstance],
+        definitions: &[ChannelPointDefinition],  // 🔧 添加通道定义参数
         product_model: Option<String>,
         serial_number: Option<String>,
     ) -> TestBatchInfo {
@@ -783,6 +785,17 @@ impl ChannelAllocationService {
         batch_info.batch_name = format!("批次{}", batch_number);
         batch_info.total_points = instances.len() as u32;
         batch_info.last_updated_time = Utc::now();
+
+        // 🔧 修复：从通道定义中提取站场信息
+        if let Some(first_instance) = instances.first() {
+            // 通过第一个实例的definition_id查找对应的通道定义
+            if let Some(definition) = definitions.iter().find(|d| d.id == first_instance.definition_id) {
+                batch_info.station_name = Some(definition.station_name.clone());
+                log::info!("🔧 [CREATE_BATCH] 批次{}设置站场信息: {}", batch_number, definition.station_name);
+            } else {
+                log::warn!("🔧 [CREATE_BATCH] 批次{}无法找到对应的通道定义，无法设置站场信息", batch_number);
+            }
+        }
 
         batch_info
     }

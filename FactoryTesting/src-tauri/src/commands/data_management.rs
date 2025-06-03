@@ -10,7 +10,8 @@ use crate::services::application::batch_allocation_service::{BatchAllocationServ
 use crate::services::infrastructure::excel::ExcelImporter;
 use crate::services::channel_allocation_service::{ChannelAllocationService, IChannelAllocationService};
 use crate::tauri_commands::AppState;
-use log::{info, error, warn};
+use log::{info, error, warn, debug};
+use sea_orm::ActiveModelTrait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -180,12 +181,12 @@ pub async fn create_test_batch(
     }
 }
 
-/// 获取批次列表
+/// 获取批次列表 - 用于测试区域，只返回当前会话的批次
 #[tauri::command]
 pub async fn get_batch_list(
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
-    info!("获取批次列表");
+    info!("获取批次列表 - 测试区域专用");
 
     let persistence_service = &state.persistence_service;
 
@@ -217,6 +218,152 @@ pub async fn get_batch_list(
             error!("获取批次列表失败: {}", e);
             Err(format!("获取失败: {}", e))
         }
+    }
+}
+
+/// 仪表盘批次信息 - 包含是否为当前会话的标识
+#[derive(Debug, Serialize)]
+pub struct DashboardBatchInfo {
+    #[serde(flatten)]
+    pub batch_info: TestBatchInfo,
+    pub is_current_session: bool,  // 是否为当前会话的批次
+    pub has_station_name: bool,    // 是否有站场名称（用于调试）
+}
+
+/// 获取仪表盘批次列表 - 从数据库获取所有批次，并标识当前会话批次
+#[tauri::command]
+pub async fn get_dashboard_batch_list(
+    state: State<'_, AppState>
+) -> Result<Vec<DashboardBatchInfo>, String> {
+    info!("📊 获取仪表盘批次列表 - 包含所有历史批次");
+
+    let persistence_service = &state.persistence_service;
+
+    // 获取当前会话中的批次ID列表
+    let session_batch_ids = {
+        let session_batch_ids_guard = state.session_batch_ids.lock().await;
+        session_batch_ids_guard.clone()
+    };
+
+    info!("📊 当前会话中有{}个批次", session_batch_ids.len());
+
+    // 从数据库加载所有批次信息
+    match persistence_service.load_all_batch_info().await {
+        Ok(mut batches) => {
+            info!("📊 从数据库成功获取{}个批次", batches.len());
+
+            // 🔧 修复：检查并修复缺失的站场信息
+            for batch in &mut batches {
+                if batch.station_name.is_none() {
+                    // 尝试从关联的测试实例中恢复站场信息
+                    match persistence_service.load_test_instances_by_batch(&batch.batch_id).await {
+                        Ok(instances) => {
+                            if let Some(first_instance) = instances.first() {
+                                // 从实例的变量描述或其他字段中尝试提取站场信息
+                                if let Some(station_from_instance) = extract_station_from_instance(first_instance) {
+                                    batch.station_name = Some(station_from_instance.clone());
+                                    info!("📊 从测试实例恢复批次 {} 的站场信息: {}", batch.batch_name, station_from_instance);
+
+                                    // 🔧 将恢复的站场信息保存回数据库
+                                    if let Err(e) = persistence_service.save_batch_info(batch).await {
+                                        warn!("📊 保存恢复的站场信息失败: {}", e);
+                                    }
+                                } else {
+                                    warn!("📊 无法从测试实例中恢复批次 {} 的站场信息", batch.batch_name);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("📊 加载批次 {} 的测试实例失败: {}", batch.batch_id, e);
+                        }
+                    }
+                }
+            }
+
+            // 转换为仪表盘批次信息，并标识当前会话批次
+            let dashboard_batches: Vec<DashboardBatchInfo> = batches.into_iter()
+                .map(|batch| {
+                    let is_current_session = session_batch_ids.contains(&batch.batch_id);
+                    let has_station_name = batch.station_name.is_some();
+
+                    // 🔍 调试：记录站场信息
+                    if let Some(ref station_name) = batch.station_name {
+                        info!("📊 批次 {} 的站场信息: {}", batch.batch_name, station_name);
+                    } else {
+                        warn!("📊 批次 {} 缺少站场信息", batch.batch_name);
+                    }
+
+                    DashboardBatchInfo {
+                        batch_info: batch,
+                        is_current_session,
+                        has_station_name,
+                    }
+                })
+                .collect();
+
+            let current_session_count = dashboard_batches.iter()
+                .filter(|b| b.is_current_session)
+                .count();
+            let historical_count = dashboard_batches.len() - current_session_count;
+
+            info!("📊 仪表盘批次统计: 总计={}, 当前会话={}, 历史批次={}",
+                  dashboard_batches.len(), current_session_count, historical_count);
+
+            Ok(dashboard_batches)
+        }
+        Err(e) => {
+            error!("📊 获取仪表盘批次列表失败: {}", e);
+            Err(format!("获取失败: {}", e))
+        }
+    }
+}
+
+/// 从测试实例中提取站场信息的辅助函数
+fn extract_station_from_instance(instance: &crate::models::structs::ChannelTestInstance) -> Option<String> {
+    // 尝试从测试批次名称中提取站场信息
+    if let Some(station) = extract_station_from_description(&instance.test_batch_name) {
+        return Some(station);
+    }
+
+    // 尝试从实例ID中提取站场信息（如果包含站场前缀）
+    if let Some(station) = extract_station_from_tag(&instance.instance_id) {
+        return Some(station);
+    }
+
+    // 如果都无法提取，返回默认值
+    Some("未知站场".to_string())
+}
+
+/// 从描述文本中提取站场信息
+fn extract_station_from_description(description: &str) -> Option<String> {
+    // 常见的站场名称模式
+    let station_patterns = [
+        "樟洋电厂", "华能电厂", "大唐电厂", "国电电厂", "中电投",
+        "华电集团", "神华集团", "中煤集团", "国家电投"
+    ];
+
+    for pattern in &station_patterns {
+        if description.contains(pattern) {
+            return Some(pattern.to_string());
+        }
+    }
+
+    None
+}
+
+/// 从标签中提取站场信息
+fn extract_station_from_tag(tag: &str) -> Option<String> {
+    // 如果标签包含站场信息的前缀，尝试提取
+    if tag.len() > 2 {
+        let prefix = &tag[..2];
+        match prefix {
+            "ZY" => Some("樟洋电厂".to_string()),
+            "HN" => Some("华能电厂".to_string()),
+            "DT" => Some("大唐电厂".to_string()),
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 
@@ -1602,6 +1749,101 @@ pub async fn delete_batch_cmd(
         deleted_definitions_count,
         deleted_instances_count,
     })
+}
+
+/// 创建测试批次并保存通道定义（用于前端测试数据生成）
+#[tauri::command]
+pub async fn create_test_batch_with_definitions_cmd(
+    batch_info: TestBatchInfo,
+    definitions: Vec<ChannelPointDefinition>,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("收到创建测试批次并保存通道定义请求: 批次={}, 定义数量={}",
+          batch_info.batch_name, definitions.len());
+
+    if definitions.is_empty() {
+        return Err("没有提供任何通道定义".to_string());
+    }
+
+    // 第一步：保存通道定义到数据库
+    let persistence_service = &state.persistence_service;
+
+    let mut saved_count = 0;
+    for definition in &definitions {
+        match persistence_service.save_channel_definition(definition).await {
+            Ok(_) => {
+                saved_count += 1;
+                debug!("成功保存通道定义: {}", definition.id);
+            }
+            Err(e) => {
+                error!("保存通道定义失败: {} - {}", definition.id, e);
+                // 继续保存其他定义，不中断整个过程
+            }
+        }
+    }
+
+    if saved_count == 0 {
+        return Err("没有成功保存任何通道定义".to_string());
+    }
+
+    // 第二步：创建测试批次
+    let db = persistence_service.get_database_connection();
+    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+
+    // 第二步：创建测试批次，确保station_name被正确设置
+    let mut updated_batch_info = batch_info.clone();
+
+    // 🔧 修复：如果station_name为空，从第一个定义中获取
+    if updated_batch_info.station_name.is_none() && !definitions.is_empty() {
+        updated_batch_info.station_name = Some(definitions[0].station_name.clone());
+        info!("🔧 从通道定义中获取站场名称: {:?}", updated_batch_info.station_name);
+    }
+
+    // 第三步：保存通道定义到数据库
+    info!("💾 开始保存{}个通道定义到数据库", definitions.len());
+    let mut saved_count = 0;
+    let mut failed_count = 0;
+
+    for definition in definitions.iter() {
+        match state.persistence_service.save_channel_definition(definition).await {
+            Ok(_) => {
+                saved_count += 1;
+                debug!("✅ 成功保存通道定义: {}", definition.tag);
+            }
+            Err(e) => {
+                failed_count += 1;
+                warn!("⚠️ 保存通道定义失败: {} - {}", definition.tag, e);
+            }
+        }
+    }
+
+    info!("💾 通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
+
+    // 第四步：创建测试批次
+    match allocation_service.create_test_batch(
+        updated_batch_info.batch_name.clone(),
+        updated_batch_info.product_model.clone(),
+        updated_batch_info.operator_name.clone(),
+        AllocationStrategy::Smart,
+        None, // filter_criteria
+    ).await {
+        Ok(result) => {
+            info!("测试批次创建完成: {} - {}个通道",
+                  result.batch_info.batch_name, result.allocation_summary.total_channels);
+
+            // 将批次ID添加到当前会话跟踪中
+            {
+                let mut session_batch_ids = state.session_batch_ids.lock().await;
+                session_batch_ids.insert(result.batch_info.batch_id.clone());
+            }
+
+            Ok(result.batch_info.batch_id)
+        }
+        Err(e) => {
+            error!("创建测试批次失败: {:?}", e);
+            Err(e.to_string())
+        }
+    }
 }
 
 /// 一键导入Excel并创建批次

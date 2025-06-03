@@ -60,23 +60,31 @@ export interface ChannelPointDefinition {
 
 export interface TestBatchInfo {
   batch_id: string;
-  product_model?: string;
-  serial_number?: string;
-  customer_name?: string;
-  station_name?: string;  // 添加站场信息
-  operator_name?: string;
-  total_points: number;
-  tested_points?: number;
-  passed_points?: number;
-  failed_points?: number;
-  skipped_points?: number;
-  test_start_time?: string;
-  test_end_time?: string;
-  overall_status: OverallTestStatus;
-  batch_name?: string;
-  status_summary?: string;
-  creation_time?: string;
-  last_updated_time?: string;
+  batch_name: string;                    // 批次名称
+  product_model?: string;                // 产品型号
+  serial_number?: string;                // 序列号
+  customer_name?: string;                // 客户名称
+  station_name?: string;                 // 站场信息
+  operator_name?: string;                // 操作员名称
+
+  // 时间信息
+  creation_time: string;                 // 创建时间
+  last_updated_time: string;             // 最后更新时间
+  test_start_time?: string;              // 测试开始时间
+  test_end_time?: string;                // 测试结束时间
+
+  // 统计信息
+  total_points: number;                  // 总点位数
+  tested_points: number;                 // 已测试点位数
+  passed_points: number;                 // 通过点位数
+  failed_points: number;                 // 失败点位数
+  skipped_points: number;                // 跳过点位数
+
+  // 状态信息
+  overall_status: OverallTestStatus;     // 整体状态
+  status_summary?: string;               // 状态摘要
+
+  // 兼容性字段（保持向后兼容）
   created_at: string;
   updated_at: string;
 }
@@ -385,4 +393,11 @@ export interface ImportExcelAndAllocateRequest {
   file_path: string;
   product_model?: string;
   serial_number?: string;
-} 
+}
+
+// 仪表盘批次信息 - 包含是否为当前会话的标识
+export interface DashboardBatchInfo {
+  batch_info: TestBatchInfo;
+  is_current_session: boolean;  // 是否为当前会话的批次
+  has_station_name: boolean;    // 是否有站场名称（用于调试）
+}

@@ -20,12 +20,12 @@ pub use database_migration::DatabaseMigration;
 
 // 导入新的命令函数
 use commands::data_management::{
-    parse_excel_file, create_test_batch, get_batch_list, get_batch_channel_definitions,
+    parse_excel_file, create_test_batch, get_batch_list, get_dashboard_batch_list, get_batch_channel_definitions,
     import_excel_and_prepare_batch_cmd, start_tests_for_batch_cmd, get_batch_status_cmd,
     parse_excel_and_create_batch_cmd, prepare_test_instances_for_batch_cmd,
     import_excel_and_allocate_channels_cmd, clear_session_data,
     parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd,
-    import_excel_and_create_batch_cmd, delete_batch_cmd
+    import_excel_and_create_batch_cmd, create_test_batch_with_definitions_cmd, delete_batch_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
@@ -91,7 +91,7 @@ pub fn run() {
                 tauri_commands::create_test_data,
                 // 数据管理相关命令
                 tauri_commands::import_excel_file,
-                tauri_commands::create_test_batch_with_definitions,
+                // tauri_commands::create_test_batch_with_definitions, // 注释掉，使用data_management中的版本
                 tauri_commands::get_all_channel_definitions,
                 tauri_commands::save_channel_definition,
                 tauri_commands::delete_channel_definition,
@@ -120,6 +120,7 @@ pub fn run() {
                 parse_excel_file,
                 create_test_batch,
                 get_batch_list,
+                get_dashboard_batch_list,
                 get_batch_channel_definitions,
                 parse_excel_and_create_batch_cmd,
                 import_excel_and_prepare_batch_cmd,
@@ -131,6 +132,7 @@ pub fn run() {
                 parse_excel_without_persistence_cmd,
                 create_batch_and_persist_data_cmd,
                 import_excel_and_create_batch_cmd,
+                create_test_batch_with_definitions_cmd,
                 delete_batch_cmd,
                 // 手动测试命令
                 execute_manual_sub_test_cmd,

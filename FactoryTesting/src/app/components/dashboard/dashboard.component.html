@@ -7,6 +7,10 @@
         <span nz-icon nzType="reload" nzTheme="outline"></span>
         刷新数据
       </button>
+      <button *nzSpaceItem nz-button nzType="dashed" (click)="createTestData()">
+        <span nz-icon nzType="plus" nzTheme="outline"></span>
+        创建测试数据
+      </button>
       <nz-tag *nzSpaceItem [nzColor]="systemStatus?.system_health === 'healthy' ? 'green' : 'red'">
         {{ getSystemHealthText() }}
       </nz-tag>
@@ -134,35 +138,102 @@
   <!-- 最近批次 -->
   <nz-card nzTitle="最近批次" *ngIf="recentBatches.length > 0" class="recent-batches-card">
     <nz-list [nzDataSource]="recentBatches" nzItemLayout="horizontal">
-      <nz-list-item *ngFor="let batch of recentBatches">
+      <ng-container *ngFor="let batch of recentBatches">
+        <nz-list-item *ngIf="batch">
         <nz-list-item-meta
           [nzAvatar]="avatarTemplate"
           [nzTitle]="titleTemplate"
           [nzDescription]="descTemplate">
 
           <ng-template #avatarTemplate>
-            <nz-avatar nzIcon="experiment" [ngStyle]="{ backgroundColor: getBatchStatusColor(batch.overall_status) }"></nz-avatar>
+            <nz-avatar nzIcon="experiment" [ngStyle]="{ backgroundColor: getBatchStatusColor(batch?.overall_status || batch?.status) }"></nz-avatar>
           </ng-template>
 
           <ng-template #titleTemplate>
-            <a (click)="viewBatchDetails(batch)">
-              {{ batch.product_model || '未知产品' }} - {{ batch.serial_number || '未知序列号' }}
-              <span *ngIf="batch.station_name" class="station-tag">
-                <nz-tag nzColor="blue">{{ batch.station_name }}</nz-tag>
-              </span>
-            </a>
+            <div class="batch-title">
+              <a (click)="viewBatchDetails(batch)" class="batch-link">
+                <strong>{{ batch?.batch_name || batch?.name || '批次' }}</strong>
+                <span class="product-info">
+                  {{ batch?.product_model || '未知产品' }}
+                  <span *ngIf="batch?.serial_number"> - {{ batch?.serial_number }}</span>
+                </span>
+              </a>
+              <div class="batch-tags">
+                <nz-tag nzColor="blue">
+                  <span nz-icon nzType="environment" nzTheme="outline"></span>
+                  {{ (batch?.station_name || batch?.station || '未知站场') }}
+                </nz-tag>
+                <nz-tag [nzColor]="getBatchStatusColor(batch?.overall_status || batch?.status)">
+                  {{ getBatchStatusText(batch?.overall_status || batch?.status) }}
+                </nz-tag>
+              </div>
+            </div>
           </ng-template>
 
           <ng-template #descTemplate>
-            <div>
-              <nz-space nzAlign="center">
-                <nz-tag *nzSpaceItem [nzColor]="getBatchStatusColor(batch.overall_status)">
-                  {{ getBatchStatusText(batch.overall_status) }}
-                </nz-tag>
-                <span *nzSpaceItem>总点位: {{ batch.total_points }}</span>
-                <span *nzSpaceItem>通过率: {{ calculatePassRate(batch) }}%</span>
-                <span *nzSpaceItem>{{ formatTime(batch.creation_time || '') }}</span>
-              </nz-space>
+            <div class="batch-description">
+              <!-- 第一行：基本统计信息 -->
+              <div class="batch-stats-row">
+                <nz-space nzAlign="center" nzSize="large">
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="database" nzTheme="outline" class="stat-icon"></span>
+                    <strong>总点位:</strong> {{ batch?.total_points || batch?.totalPoints || 0 }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="check-circle" nzTheme="outline" class="stat-icon success"></span>
+                    <strong>已测试:</strong> {{ batch?.tested_points || batch?.testedCount || 0 }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="clock-circle" nzTheme="outline" class="stat-icon pending"></span>
+                    <strong>未测试:</strong> {{ getUntestedPoints(batch) }}
+                  </span>
+                </nz-space>
+              </div>
+
+              <!-- 第二行：测试结果统计 -->
+              <div class="batch-results-row">
+                <nz-space nzAlign="center" nzSize="large">
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="check" nzTheme="outline" class="stat-icon success"></span>
+                    <strong>成功:</strong> {{ batch?.passed_points || batch?.successCount || 0 }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="close" nzTheme="outline" class="stat-icon error"></span>
+                    <strong>失败:</strong> {{ batch?.failed_points || batch?.failureCount || 0 }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="minus" nzTheme="outline" class="stat-icon skipped"></span>
+                    <strong>跳过:</strong> {{ batch?.skipped_points || 0 }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="percentage" nzTheme="outline" class="stat-icon"></span>
+                    <strong>通过率:</strong> {{ calculatePassRate(batch) }}%
+                  </span>
+                </nz-space>
+              </div>
+
+              <!-- 第三行：时间和进度信息 -->
+              <div class="batch-time-row">
+                <nz-space nzAlign="center" nzSize="large">
+                  <span *nzSpaceItem class="stat-item">
+                    <span nz-icon nzType="calendar" nzTheme="outline" class="stat-icon"></span>
+                    <strong>创建时间:</strong> {{ formatDetailedTime(batch?.creation_time || batch?.createdAt || '') }}
+                  </span>
+                  <span *nzSpaceItem class="stat-item">
+                    <span *ngIf="getTestProgress(batch) > 0">
+                      <span nz-icon nzType="loading" nzTheme="outline" class="stat-icon"></span>
+                      <strong>测试进度:</strong> {{ getTestProgress(batch) }}%
+                      <nz-progress
+                        [nzPercent]="getTestProgress(batch)"
+                        nzSize="small"
+                        [nzStatus]="getProgressStatus(batch)"
+                        [nzShowInfo]="false"
+                        class="inline-progress">
+                      </nz-progress>
+                    </span>
+                  </span>
+                </nz-space>
+              </div>
             </div>
           </ng-template>
         </nz-list-item-meta>
@@ -182,7 +253,8 @@
             </button>
           </nz-list-item-action>
         </ul>
-      </nz-list-item>
+        </nz-list-item>
+      </ng-container>
     </nz-list>
   </nz-card>
 

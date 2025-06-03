@@ -31,11 +31,81 @@ impl DatabaseMigration {
     async fn migrate_channel_point_definitions(db: &DatabaseConnection) -> Result<(), AppError> {
         log::info!("开始迁移channel_point_definitions表...");
 
-        // 强制重建表以确保字段结构正确
-        log::info!("强制重建channel_point_definitions表以确保字段结构正确");
-        Self::create_channel_point_definitions_table(db).await?;
+        let table_exists = Self::check_table_exists(db, "channel_point_definitions").await?;
+
+        if !table_exists {
+            // 表不存在，创建新表
+            log::info!("channel_point_definitions表不存在，创建新表");
+            Self::create_channel_point_definitions_table(db).await?;
+        } else {
+            // 表存在，检查并添加缺失的列，保留现有数据
+            log::info!("channel_point_definitions表已存在，检查并添加缺失的列");
+            Self::add_channel_point_definition_columns(db).await?;
+
+            // 检查数据完整性
+            let count_result = db.query_all(Statement::from_string(
+                sea_orm::DatabaseBackend::Sqlite,
+                "SELECT COUNT(*) as count FROM channel_point_definitions".to_string()
+            )).await.map_err(|e| AppError::persistence_error(format!("查询通道定义数量失败: {}", e)))?;
+
+            if let Some(row) = count_result.first() {
+                if let Ok(count) = row.try_get::<i64>("", "count") {
+                    log::info!("channel_point_definitions表中现有{}条记录，数据已保留", count);
+                }
+            }
+        }
 
         log::info!("channel_point_definitions表迁移完成");
+        Ok(())
+    }
+
+    /// 为channel_point_definitions表添加缺失的列
+    async fn add_channel_point_definition_columns(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("检查并添加channel_point_definitions表的缺失列...");
+
+        let existing_columns = Self::get_existing_columns(db, "channel_point_definitions").await?;
+
+        // 需要添加的新列（包括batch_id）
+        let new_columns = vec![
+            ("batch_id", "TEXT"), // 🔥 关键修复：添加批次ID字段
+            ("sll_set_point_plc_address", "TEXT"),
+            ("sll_feedback_plc_address", "TEXT"),
+            ("sl_set_point_plc_address", "TEXT"),
+            ("sl_feedback_plc_address", "TEXT"),
+            ("sh_set_point_plc_address", "TEXT"),
+            ("sh_feedback_plc_address", "TEXT"),
+            ("shh_set_point_plc_address", "TEXT"),
+            ("shh_feedback_plc_address", "TEXT"),
+            ("maintenance_value_set_point_plc_address", "TEXT"),
+            ("maintenance_enable_switch_point_plc_address", "TEXT"),
+            ("created_time", "TEXT"),
+            ("updated_time", "TEXT"),
+        ];
+
+        for (column_name, column_def) in new_columns {
+            if !existing_columns.contains(&column_name.to_string()) {
+                log::info!("添加{}列到channel_point_definitions表", column_name);
+                let sql = format!("ALTER TABLE channel_point_definitions ADD COLUMN {} {}", column_name, column_def);
+                db.execute(Statement::from_string(
+                    sea_orm::DatabaseBackend::Sqlite,
+                    sql
+                )).await.map_err(|e| AppError::persistence_error(format!("添加{}列失败: {}", column_name, e)))?;
+
+                // 为时间戳列设置默认值
+                if column_name == "created_time" || column_name == "updated_time" {
+                    let update_sql = format!(
+                        "UPDATE channel_point_definitions SET {} = datetime('now') WHERE {} IS NULL",
+                        column_name, column_name
+                    );
+                    db.execute(Statement::from_string(
+                        sea_orm::DatabaseBackend::Sqlite,
+                        update_sql
+                    )).await.map_err(|e| AppError::persistence_error(format!("更新{}默认值失败: {}", column_name, e)))?;
+                }
+            }
+        }
+
+        log::info!("✅ channel_point_definitions表列检查和添加完成");
         Ok(())
     }
 
@@ -111,18 +181,10 @@ impl DatabaseMigration {
     async fn create_channel_point_definitions_table(db: &DatabaseConnection) -> Result<(), AppError> {
         log::info!("创建channel_point_definitions表");
 
-        // 首先删除旧表（如果存在）
-        let drop_sql = "DROP TABLE IF EXISTS channel_point_definitions";
-        db.execute(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
-            drop_sql.to_string()
-        )).await.map_err(|e| AppError::persistence_error(format!("删除旧表失败: {}", e)))?;
-
-        log::info!("✅ 已删除旧的channel_point_definitions表");
-
         let sql = r#"
-            CREATE TABLE channel_point_definitions (
+            CREATE TABLE IF NOT EXISTS channel_point_definitions (
                 id TEXT PRIMARY KEY NOT NULL,
+                batch_id TEXT,
 
                 -- === 基础信息字段（14个）===
                 sequence_number INTEGER,
@@ -216,51 +278,7 @@ impl DatabaseMigration {
         Ok(())
     }
 
-    /// 添加通道点位定义表的新列
-    async fn add_channel_point_definition_columns(db: &DatabaseConnection) -> Result<(), AppError> {
-        let existing_columns = Self::get_existing_columns(db, "channel_point_definitions").await?;
 
-        // 需要添加的新列
-        let new_columns = vec![
-            ("sll_set_point_plc_address", "TEXT"),
-            ("sll_feedback_plc_address", "TEXT"),
-            ("sl_set_point_plc_address", "TEXT"),
-            ("sl_feedback_plc_address", "TEXT"),
-            ("sh_set_point_plc_address", "TEXT"),
-            ("sh_feedback_plc_address", "TEXT"),
-            ("shh_set_point_plc_address", "TEXT"),
-            ("shh_feedback_plc_address", "TEXT"),
-            ("maintenance_value_set_point_plc_address", "TEXT"),
-            ("maintenance_enable_switch_point_plc_address", "TEXT"),
-            ("created_time", "TEXT"),
-            ("updated_time", "TEXT"),
-        ];
-
-        for (column_name, column_def) in new_columns {
-            if !existing_columns.contains(&column_name.to_string()) {
-                log::info!("添加{}列到channel_point_definitions表", column_name);
-                let sql = format!("ALTER TABLE channel_point_definitions ADD COLUMN {} {}", column_name, column_def);
-                db.execute(Statement::from_string(
-                    sea_orm::DatabaseBackend::Sqlite,
-                    sql
-                )).await.map_err(|e| AppError::persistence_error(format!("添加{}列失败: {}", column_name, e)))?;
-
-                // 为时间戳列设置默认值
-                if column_name == "created_time" || column_name == "updated_time" {
-                    let update_sql = format!(
-                        "UPDATE channel_point_definitions SET {} = datetime('now') WHERE {} IS NULL",
-                        column_name, column_name
-                    );
-                    db.execute(Statement::from_string(
-                        sea_orm::DatabaseBackend::Sqlite,
-                        update_sql
-                    )).await.map_err(|e| AppError::persistence_error(format!("更新{}默认值失败: {}", column_name, e)))?;
-                }
-            }
-        }
-
-        Ok(())
-    }
 
     /// 创建通道测试实例表
     async fn create_channel_test_instances_table(db: &DatabaseConnection) -> Result<(), AppError> {

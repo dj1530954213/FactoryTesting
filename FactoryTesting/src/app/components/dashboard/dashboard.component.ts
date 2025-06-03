@@ -4,7 +4,7 @@ import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Subscription, interval } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
-import { SystemStatus, TestBatchInfo, OverallTestStatus } from '../../models';
+import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo } from '../../models';
 
 // NG-ZORRO 组件导入
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -55,6 +55,40 @@ interface RecentActivity {
   timestamp: Date;
 }
 
+// 仪表盘显示的批次信息接口 - 包含模板中使用的所有字段
+interface DashboardBatchDisplay {
+  // 新的字段名（用于某些显示）
+  id: string;
+  name: string;
+  station: string;
+  createdAt: string;
+  totalPoints: number;
+  testedCount: number;
+  untestedCount: number;
+  successCount: number;
+  failureCount: number;
+  status: OverallTestStatus;
+  isCurrentSession: boolean;
+
+  // 原始字段名（模板中使用的）
+  batch_id: string;
+  batch_name: string;
+  product_model?: string;
+  serial_number?: string;
+  station_name?: string;
+  creation_time?: string;
+  last_updated_time?: string;
+  total_points: number;
+  tested_points: number;
+  passed_points: number;
+  failed_points: number;
+  skipped_points: number;
+  overall_status: OverallTestStatus;
+  operator_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -85,7 +119,7 @@ interface RecentActivity {
 export class DashboardComponent implements OnInit, OnDestroy {
   // 系统状态
   systemStatus: SystemStatus | null = null;
-  recentBatches: TestBatchInfo[] = [];
+  recentBatches: DashboardBatchDisplay[] = []; // 🔧 修复：使用正确的类型
   recentActivities: RecentActivity[] = [];
   totalChannels = 0;
   totalBatches = 0;
@@ -155,24 +189,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.loading = true;
       this.error = null;
 
-      // 并行加载所有数据
-      const [systemStatus, allBatches, allChannels] = await Promise.all([
+      console.log('📊 [DASHBOARD] 开始加载仪表盘数据');
+
+      // 🔧 修复：使用新的仪表盘批次列表API，获取所有批次并标识当前会话批次
+      const [systemStatus, dashboardBatches, allChannels] = await Promise.all([
         this.tauriApi.getSystemStatus().toPromise(),
-        this.tauriApi.getBatchList().toPromise(), // 使用当前会话的批次列表
+        this.tauriApi.getDashboardBatchList().toPromise(), // 🔧 使用新的仪表盘API
         this.tauriApi.getAllChannelDefinitions().toPromise()
       ]);
 
+      console.log('📊 [DASHBOARD] 获取到的仪表盘批次数据:', dashboardBatches);
+
       this.systemStatus = systemStatus || null;
       this.totalChannels = allChannels?.length || 0;
-      this.totalBatches = allBatches?.length || 0;
+      this.totalBatches = dashboardBatches?.length || 0;
+
+      // 🔧 从仪表盘批次信息中提取批次数据，确保正确处理数据结构
+      const allBatches = dashboardBatches?.map(db => {
+        // 确保 db 和 db.batch_info 都存在
+        if (!db || !db.batch_info) {
+          console.warn('📊 [DASHBOARD] 发现无效的批次数据:', db);
+          return null;
+        }
+        return db.batch_info;
+      }).filter(batch => batch !== null) || [];
+
+      console.log('📊 [DASHBOARD] 提取的批次数据:', allBatches);
+      console.log('📊 [DASHBOARD] 原始仪表盘批次数据:', dashboardBatches);
 
       // 计算待测批次数量
-      this.pendingBatches = (allBatches || []).filter(batch =>
+      this.pendingBatches = allBatches.filter(batch =>
         batch.overall_status === OverallTestStatus.NotTested
       ).length;
 
       // 计算总体成功率
-      const completedBatches = (allBatches || []).filter(batch =>
+      const completedBatches = allBatches.filter(batch =>
         batch.overall_status === OverallTestStatus.TestCompletedPassed ||
         batch.overall_status === OverallTestStatus.TestCompletedFailed
       );
@@ -182,21 +233,97 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.overallSuccessRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
       }
 
-      // 获取最近的批次
-      this.recentBatches = (allBatches || [])
+      // 🔧 处理最近批次数据，转换为前端需要的格式 - 使用最保守的方法
+      const validBatches = allBatches.filter(batch => {
+        return batch &&
+               typeof batch === 'object' &&
+               batch.batch_id &&
+               typeof batch.batch_id === 'string';
+      });
+
+      console.log('📊 [DASHBOARD] 有效批次数量:', validBatches.length);
+
+      this.recentBatches = validBatches
         .sort((a: TestBatchInfo, b: TestBatchInfo) => {
           // 使用 creation_time 字段进行排序
           const timeA = a.creation_time ? new Date(a.creation_time).getTime() : 0;
           const timeB = b.creation_time ? new Date(b.creation_time).getTime() : 0;
           return timeB - timeA; // 最新的在前
         })
-        .slice(0, 5);
+        .slice(0, 10)
+        .map(batch => {
+          try {
+            console.log('📊 [DASHBOARD] 处理批次:', batch.batch_id, '站场:', batch.station_name);
+
+            // 🔧 从仪表盘批次信息中查找对应的会话标识
+            const dashboardBatch = dashboardBatches?.find(db =>
+              db && db.batch_info && db.batch_info.batch_id === batch.batch_id
+            );
+            const isCurrentSession = dashboardBatch?.is_current_session || false;
+
+            // 🔧 安全地获取站场信息
+            const stationName = batch.station_name || '未知站场';
+
+          return {
+            // 新的字段名
+            id: batch.batch_id,
+            name: batch.batch_name || '未命名批次',
+            station: stationName,
+            createdAt: batch.creation_time || batch.created_at || new Date().toISOString(),
+            totalPoints: batch.total_points || 0,
+            testedCount: batch.tested_points || 0,
+            untestedCount: (batch.total_points || 0) - (batch.tested_points || 0),
+            successCount: batch.passed_points || 0,
+            failureCount: batch.failed_points || 0,
+            status: this.getStatusFromProgress(batch.tested_points || 0, batch.total_points || 0),
+            isCurrentSession: isCurrentSession,
+
+            // 原始字段名（保持兼容性）
+            batch_id: batch.batch_id,
+            batch_name: batch.batch_name || '未命名批次',
+            product_model: batch.product_model,
+            serial_number: batch.serial_number,
+            station_name: stationName,
+            creation_time: batch.creation_time,
+            last_updated_time: batch.last_updated_time,
+            total_points: batch.total_points || 0,
+            tested_points: batch.tested_points || 0,
+            passed_points: batch.passed_points || 0,
+            failed_points: batch.failed_points || 0,
+            skipped_points: batch.skipped_points || 0,
+            overall_status: this.getStatusFromProgress(batch.tested_points || 0, batch.total_points || 0),
+            operator_name: batch.operator_name,
+            created_at: batch.created_at,
+            updated_at: batch.updated_at
+          };
+          } catch (error) {
+            console.error('📊 [DASHBOARD] 处理批次数据时发生错误:', error, '批次:', batch);
+            return null;
+          }
+        })
+        .filter(batch => batch !== null); // 🔧 过滤掉null值
+
+      // 🔍 调试：检查站场信息
+      console.log('📊 [DASHBOARD] 最终的recentBatches数组:', this.recentBatches);
+      this.recentBatches.forEach((batch, index) => {
+        console.log(`📊 [DASHBOARD] 批次${index + 1}:`, {
+          id: batch.id,
+          station: batch.station,
+          station_name: batch.station_name,
+          isCurrentSession: batch.isCurrentSession,
+          batch对象: batch
+        });
+      });
 
       // 检查是否有导入的数据
       this.hasImportedData = this.totalBatches > 0;
 
+      console.log('📊 [DASHBOARD] 仪表盘数据加载完成');
+      console.log('📊 [DASHBOARD] 总批次数:', this.totalBatches);
+      console.log('📊 [DASHBOARD] 最近批次数:', this.recentBatches.length);
+
     } catch (error) {
-      console.error('加载仪表板数据失败:', error);
+      console.error('📊 [DASHBOARD] 加载仪表板数据失败:', error);
       this.error = '加载数据失败，请稍后重试';
     } finally {
       this.loading = false;
@@ -374,11 +501,59 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadAvailableBatches();
   }
 
-  // 批次相关方法
-  calculatePassRate(batch: TestBatchInfo): number {
-    if (!batch.total_points || batch.total_points === 0) return 0;
-    const passedPoints = batch.passed_points || 0;
-    return Math.round((passedPoints / batch.total_points) * 100);
+  // 页面操作方法
+  onRefresh() {
+    this.loadDashboardData();
+    this.loadAvailableBatches();
+  }
+
+  viewBatchDetails(batch: DashboardBatchDisplay) {
+    console.log('🔍 [viewBatchDetails] 输入参数:', batch);
+    console.log('🔍 [viewBatchDetails] 批次类型:', typeof batch);
+    console.log('🔍 [viewBatchDetails] 批次属性:', Object.keys(batch || {}));
+
+    if (batch && batch.station_name) {
+      console.log('🔍 [viewBatchDetails] 站场信息:', batch.station_name);
+    } else {
+      console.log('🔍 [viewBatchDetails] ⚠️ 站场信息缺失');
+    }
+
+    console.log('🔍 [viewBatchDetails] 导航到测试区域，批次ID:', batch?.id);
+    this.router.navigate(['/test-area'], {
+      queryParams: { batchId: batch?.id }
+    });
+  }
+
+  deleteBatch(batch: DashboardBatchDisplay) {
+    console.log('删除批次:', batch.id);
+    // TODO: 实现删除批次功能
+    // 这里可以调用后端API删除批次
+  }
+
+  // 批次相关方法 - 支持两种类型
+  calculatePassRate(batch: TestBatchInfo | DashboardBatchDisplay | null | undefined): number {
+    console.log('🔍 [calculatePassRate] 输入参数:', batch);
+
+    if (!batch) {
+      console.log('🔍 [calculatePassRate] 批次为空，返回0');
+      return 0;
+    }
+
+    // 由于 DashboardBatchDisplay 包含了所有字段，直接使用原始字段名
+    const batchData = batch as any;
+    const totalPoints = batchData.total_points || batchData.totalPoints || 0;
+    const passedPoints = batchData.passed_points || batchData.successCount || 0;
+
+    console.log('🔍 [calculatePassRate] 解析数据:', { totalPoints, passedPoints, batchData });
+
+    if (!totalPoints || totalPoints === 0) {
+      console.log('🔍 [calculatePassRate] 总点位为0，返回0');
+      return 0;
+    }
+
+    const result = Math.round((passedPoints / totalPoints) * 100);
+    console.log('🔍 [calculatePassRate] 计算结果:', result);
+    return result;
   }
 
   formatTime(dateString: string): string {
@@ -406,7 +581,108 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  getBatchStatusText(status: string | OverallTestStatus): string {
+  // 格式化详细时间显示
+  formatDetailedTime(dateString: string): string {
+    if (!dateString) {
+      return '未知时间';
+    }
+
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return '无效时间';
+    }
+
+    // 格式化为 YYYY-MM-DD HH:mm:ss
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  // 获取未测试点位数量 - 支持两种类型
+  getUntestedPoints(batch: TestBatchInfo | DashboardBatchDisplay | null | undefined): number {
+    console.log('🔍 [getUntestedPoints] 输入参数:', batch);
+
+    if (!batch) {
+      console.log('🔍 [getUntestedPoints] 批次为空，返回0');
+      return 0;
+    }
+
+    const batchData = batch as any;
+    const tested = batchData.tested_points || batchData.testedCount || 0;
+    const total = batchData.total_points || batchData.totalPoints || 0;
+
+    console.log('🔍 [getUntestedPoints] 解析数据:', { tested, total, batchData });
+
+    const result = Math.max(0, total - tested);
+    console.log('🔍 [getUntestedPoints] 计算结果:', result);
+    return result;
+  }
+
+  // 获取测试进度百分比 - 支持两种类型
+  getTestProgress(batch: TestBatchInfo | DashboardBatchDisplay | null | undefined): number {
+    console.log('🔍 [getTestProgress] 输入参数:', batch);
+
+    if (!batch) {
+      console.log('🔍 [getTestProgress] 批次为空，返回0');
+      return 0;
+    }
+
+    const batchData = batch as any;
+    const total = batchData.total_points || batchData.totalPoints || 0;
+    const tested = batchData.tested_points || batchData.testedCount || 0;
+
+    console.log('🔍 [getTestProgress] 解析数据:', { total, tested, batchData });
+
+    if (!total || total === 0) {
+      console.log('🔍 [getTestProgress] 总点位为0，返回0');
+      return 0;
+    }
+
+    const result = Math.round((tested / total) * 100);
+    console.log('🔍 [getTestProgress] 计算结果:', result);
+    return result;
+  }
+
+  // 获取进度条状态 - 支持两种类型
+  getProgressStatus(batch: TestBatchInfo | DashboardBatchDisplay | null | undefined): 'success' | 'exception' | 'active' | 'normal' {
+    console.log('🔍 [getProgressStatus] 输入参数:', batch);
+
+    if (!batch) {
+      console.log('🔍 [getProgressStatus] 批次为空，返回normal');
+      return 'normal';
+    }
+
+    const progress = this.getTestProgress(batch);
+    const passRate = this.calculatePassRate(batch);
+
+    console.log('🔍 [getProgressStatus] 计算数据:', { progress, passRate });
+
+    if (progress === 100) {
+      const result = passRate >= 90 ? 'success' : 'exception';
+      console.log('🔍 [getProgressStatus] 测试完成，结果:', result);
+      return result;
+    } else if (progress > 0) {
+      console.log('🔍 [getProgressStatus] 测试进行中，返回active');
+      return 'active';
+    }
+
+    console.log('🔍 [getProgressStatus] 未开始测试，返回normal');
+    return 'normal';
+  }
+
+  getBatchStatusText(status: string | OverallTestStatus | undefined): string {
+    console.log('🔍 [getBatchStatusText] 输入参数:', status);
+
+    if (!status) {
+      console.log('🔍 [getBatchStatusText] 状态为空，返回未知状态');
+      return '未知状态';
+    }
+
     if (typeof status === 'string') {
       const statusMap: { [key: string]: string } = {
         'pending': '待开始',
@@ -416,7 +692,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         'failed': '失败',
         'cancelled': '已取消'
       };
-      return statusMap[status] || status;
+      const result = statusMap[status] || status;
+      console.log('🔍 [getBatchStatusText] 字符串状态转换结果:', result);
+      return result;
     }
 
     // 处理 OverallTestStatus 枚举
@@ -427,10 +705,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
       [OverallTestStatus.TestCompletedPassed]: '测试完成并通过',
       [OverallTestStatus.TestCompletedFailed]: '测试完成并失败'
     };
-    return overallStatusMap[status] || '未知状态';
+    const result = overallStatusMap[status] || '未知状态';
+    console.log('🔍 [getBatchStatusText] 枚举状态转换结果:', result);
+    return result;
   }
 
-  getBatchStatusColor(status: string | OverallTestStatus): string {
+  getBatchStatusColor(status: string | OverallTestStatus | undefined): string {
+    console.log('🔍 [getBatchStatusColor] 输入参数:', status);
+
+    if (!status) {
+      console.log('🔍 [getBatchStatusColor] 状态为空，返回默认颜色');
+      return '#d9d9d9';
+    }
+
     if (typeof status === 'string') {
       const colorMap: { [key: string]: string } = {
         'pending': '#d9d9d9',
@@ -440,7 +727,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         'failed': '#ff4d4f',
         'cancelled': '#8c8c8c'
       };
-      return colorMap[status] || '#d9d9d9';
+      const result = colorMap[status] || '#d9d9d9';
+      console.log('🔍 [getBatchStatusColor] 字符串状态颜色结果:', result);
+      return result;
     }
 
     // 处理 OverallTestStatus 枚举
@@ -451,7 +740,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       [OverallTestStatus.TestCompletedPassed]: '#52c41a',
       [OverallTestStatus.TestCompletedFailed]: '#ff4d4f'
     };
-    return overallColorMap[status] || '#d9d9d9';
+    const result = overallColorMap[status] || '#d9d9d9';
+    console.log('🔍 [getBatchStatusColor] 枚举状态颜色结果:', result);
+    return result;
   }
 
   getBatchStatusClass(status: string): string {
@@ -466,51 +757,153 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return classMap[status] || 'status-unknown';
   }
 
-  viewBatchDetails(batch: TestBatchInfo) {
-    this.router.navigate(['/test-execution'], {
-      queryParams: { batchId: batch.batch_id }
-    });
-  }
-
-
-
-  // 删除批次
-  async deleteBatch(batch: TestBatchInfo) {
-    // 显示确认对话框
-    const confirmed = confirm(`确定要删除批次 "${batch.product_model || '未知产品'} - ${batch.serial_number || '未知序列号'}" 吗？\n\n此操作将删除批次及其所有相关数据，且无法撤销。`);
-
-    if (!confirmed) {
-      return;
-    }
-
+  // 创建测试数据用于演示
+  async createTestData() {
     try {
-      this.loading = true;
-      this.loadingMessage = '正在删除批次...';
+      console.log('开始创建测试数据...');
 
-      // 调用删除API
-      await this.tauriApi.deleteBatch(batch.batch_id).toPromise();
+      // 创建多个测试批次，使用真实的站场名称
+      const testBatches = [
+        {
+          batch_name: '樟洋电厂-批次001',
+          product_model: 'DCS-X1000',
+          serial_number: 'ZY20241201001',
+          station_name: '樟洋电厂',
+          operator_name: '张三',
+          total_points: 48,
+          tested_points: 48,
+          passed_points: 45,
+          failed_points: 3,
+          skipped_points: 0
+        },
+        {
+          batch_name: '樟洋电厂-批次002',
+          product_model: 'DCS-Y2000',
+          serial_number: 'ZY20241201002',
+          station_name: '樟洋电厂',
+          operator_name: '李四',
+          total_points: 32,
+          tested_points: 28,
+          passed_points: 26,
+          failed_points: 2,
+          skipped_points: 0
+        },
+        {
+          batch_name: '樟洋电厂-批次003',
+          product_model: 'DCS-Z3000',
+          serial_number: 'ZY20241201003',
+          station_name: '樟洋电厂',
+          operator_name: '王五',
+          total_points: 64,
+          tested_points: 15,
+          passed_points: 14,
+          failed_points: 1,
+          skipped_points: 0
+        },
+        {
+          batch_name: '樟洋电厂-批次004',
+          product_model: 'DCS-A4000',
+          serial_number: 'ZY20241201004',
+          station_name: '樟洋电厂',
+          operator_name: '赵六',
+          total_points: 24,
+          tested_points: 0,
+          passed_points: 0,
+          failed_points: 0,
+          skipped_points: 0
+        }
+      ];
 
-      // 删除成功，刷新数据
-      console.log('批次删除成功:', batch.batch_id);
+      for (const batchData of testBatches) {
+        // 创建TestBatchInfo对象
+        const now = new Date().toISOString();
+        const testBatch: TestBatchInfo = {
+          batch_id: `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          batch_name: batchData.batch_name,
+          product_model: batchData.product_model,
+          serial_number: batchData.serial_number,
+          station_name: batchData.station_name,
+          operator_name: batchData.operator_name,
+          creation_time: now,
+          last_updated_time: now,
+          total_points: batchData.total_points,
+          tested_points: batchData.tested_points,
+          passed_points: batchData.passed_points,
+          failed_points: batchData.failed_points,
+          skipped_points: batchData.skipped_points,
+          overall_status: this.getStatusFromProgress(batchData.tested_points, batchData.total_points),
+          status_summary: this.generateStatusSummary(batchData),
+          created_at: now,
+          updated_at: now
+        };
+
+        // 创建一些示例通道定义
+        const definitions = this.generateSampleDefinitions(batchData.total_points, testBatch.batch_id, batchData.station_name);
+
+        // 调用后端API保存数据
+        try {
+          console.log('🔧 准备调用后端API创建测试批次:', batchData.batch_name);
+          console.log('🔧 批次信息:', testBatch);
+          console.log('🔧 通道定义数量:', definitions.length);
+
+          const result = await this.tauriApi.createTestBatchWithDefinitions(testBatch, definitions).toPromise();
+          console.log(`✅ 成功创建测试批次: ${batchData.batch_name}, 结果:`, result);
+        } catch (error) {
+          console.error(`❌ 创建测试批次失败: ${batchData.batch_name}`, error);
+          throw error; // 重新抛出错误以便外层catch处理
+        }
+      }
+
+      console.log('测试数据创建完成');
+      // 重新加载仪表盘数据
       await this.loadDashboardData();
 
-      // 显示成功消息
-      alert('批次删除成功！');
-
     } catch (error) {
-      console.error('删除批次失败:', error);
-      this.error = '删除批次失败: ' + (error as Error).message;
-      alert('删除批次失败: ' + (error as Error).message);
-    } finally {
-      this.loading = false;
-      this.loadingMessage = '';
+      console.error('创建测试数据失败:', error);
     }
   }
 
-  // 刷新数据
-  onRefresh() {
-    this.loadDashboardData();
-    this.loadAvailableBatches();
+  private getStatusFromProgress(tested: number, total: number): OverallTestStatus {
+    if (tested === 0) {
+      return OverallTestStatus.NotTested;
+    } else if (tested < total) {
+      return OverallTestStatus.HardPointTesting;
+    } else {
+      return OverallTestStatus.TestCompletedPassed;
+    }
+  }
+
+  private generateStatusSummary(batchData: any): string {
+    if (batchData.tested_points === 0) {
+      return '未开始测试';
+    } else if (batchData.tested_points < batchData.total_points) {
+      return `测试进行中 - ${batchData.tested_points}/${batchData.total_points}`;
+    } else {
+      const passRate = Math.round((batchData.passed_points / batchData.total_points) * 100);
+      return `测试完成 - 通过率 ${passRate}%`;
+    }
+  }
+
+  private generateSampleDefinitions(count: number, batchId: string, stationName: string): any[] {
+    const definitions = [];
+    for (let i = 1; i <= count; i++) {
+      definitions.push({
+        id: `def_${batchId}_${i}`,
+        tag: `CH${i.toString().padStart(3, '0')}`,
+        variable_name: `VAR_${i.toString().padStart(3, '0')}`,
+        variable_description: `测试点位 ${i}`,
+        module_type: i % 2 === 0 ? 'AI' : 'DI',
+        plc_communication_address: `DB1.DBD${i * 4}`,
+        station_name: stationName, // 使用传入的站场名称
+        module_name: `模块${Math.floor((i - 1) / 8) + 1}`,
+        channel_tag_in_module: `CH${i % 8}`,
+        data_type: i % 2 === 0 ? 'Float' : 'Bool',
+        power_supply_type: '有源',
+        wire_system: i % 2 === 0 ? '4线制' : '2线制',
+        test_batch_id: batchId
+      });
+    }
+    return definitions;
   }
 
   // 初始化图表
@@ -679,6 +1072,4 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.initSystemStatusChart();
     this.initBatchStatusChart();
   }
-
-
 }

@@ -166,6 +166,85 @@ impl BatchAllocationService {
         })
     }
 
+    /// 创建测试批次并分配通道（使用完整的TestBatchInfo对象）
+    ///
+    /// # 参数
+    /// * `batch_info` - 完整的批次信息对象
+    /// * `strategy` - 分配策略
+    /// * `filter_criteria` - 过滤条件（可选）
+    ///
+    /// # 返回
+    /// * `Result<AllocationResult, AppError>` - 分配结果
+    pub async fn create_test_batch_with_full_info(
+        &self,
+        mut batch_info: TestBatchInfo,
+        strategy: AllocationStrategy,
+        filter_criteria: Option<HashMap<String, String>>,
+    ) -> Result<AllocationResult, AppError> {
+        info!("🔥 [BATCH_ALLOCATION_FULL] 开始创建测试批次: {}", batch_info.batch_name);
+        info!("🔥 [BATCH_ALLOCATION_FULL] 产品型号: {:?}", batch_info.product_model);
+        info!("🔥 [BATCH_ALLOCATION_FULL] 站场名称: {:?}", batch_info.station_name);
+        info!("🔥 [BATCH_ALLOCATION_FULL] 操作员: {:?}", batch_info.operator_name);
+        info!("🔥 [BATCH_ALLOCATION_FULL] 分配策略: {:?}", strategy);
+
+        // 1. 获取可用的通道定义
+        info!("🔥 [BATCH_ALLOCATION_FULL] 步骤1: 获取可用的通道定义");
+        let available_definitions = self.get_available_definitions(filter_criteria).await?;
+        info!("🔥 [BATCH_ALLOCATION_FULL] 从数据库查询到{}个通道定义", available_definitions.len());
+
+        if available_definitions.is_empty() {
+            error!("🔥 [BATCH_ALLOCATION_FULL] 错误: 没有可用的通道定义");
+            return Err(AppError::validation_error("没有可用的通道定义"));
+        }
+
+        // 2. 根据策略分组通道
+        let grouped_definitions = self.group_definitions_by_strategy(&available_definitions, &strategy);
+
+        // 3. 更新批次信息的统计数据
+        batch_info.total_points = available_definitions.len() as u32;
+        batch_info.last_updated_time = chrono::Utc::now();
+
+        // 4. 如果站场名称为空，从第一个定义中获取
+        if batch_info.station_name.is_none() {
+            if let Some(first_def) = available_definitions.first() {
+                batch_info.station_name = Some(first_def.station_name.clone());
+                info!("🔥 [BATCH_ALLOCATION_FULL] 从通道定义中获取站场名称: {:?}", batch_info.station_name);
+            }
+        }
+
+        // 5. 保存批次信息到数据库
+        info!("🔥 [BATCH_ALLOCATION_FULL] 步骤2: 保存批次信息到数据库");
+        let batch_entity: crate::models::entities::test_batch_info::ActiveModel = (&batch_info).into();
+        let saved_batch = batch_entity.insert(&*self.db).await
+            .map_err(|e| AppError::persistence_error(format!("保存批次信息失败: {}", e)))?;
+
+        let final_batch_info: TestBatchInfo = (&saved_batch).into();
+        info!("🔥 [BATCH_ALLOCATION_FULL] 批次信息已保存: ID={}, 站场={:?}",
+              final_batch_info.batch_id, final_batch_info.station_name);
+
+        // 6. 创建测试实例
+        let test_instances = self.create_test_instances(
+            &final_batch_info,
+            &grouped_definitions,
+        ).await?;
+
+        // 7. 生成分配摘要
+        let allocation_summary = self.generate_allocation_summary(&available_definitions);
+
+        info!(
+            "测试批次创建完成: {} - 总计{}个通道，预计测试时长{}分钟",
+            final_batch_info.batch_name,
+            allocation_summary.total_channels,
+            allocation_summary.estimated_test_duration_minutes
+        );
+
+        Ok(AllocationResult {
+            batch_info: final_batch_info,
+            test_instances,
+            allocation_summary,
+        })
+    }
+
     /// 获取可用的通道定义
     async fn get_available_definitions(
         &self,
@@ -281,9 +360,9 @@ impl BatchAllocationService {
         // batch_info.not_tested_points = definitions.len() as u32; // 这个字段不存在
 
         // 设置站点信息（取第一个定义的站点）
-        // if let Some(first_def) = definitions.first() {
-        //     batch_info.station_name = Some(first_def.station_name.clone()); // 这个字段不存在
-        // }
+        if let Some(first_def) = definitions.first() {
+            batch_info.station_name = Some(first_def.station_name.clone());
+        }
 
         // 保存到数据库
         let active_model: test_batch_info::ActiveModel = (&batch_info).into();

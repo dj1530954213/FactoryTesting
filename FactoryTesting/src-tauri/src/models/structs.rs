@@ -19,6 +19,8 @@ pub struct ChannelPointDefinition {
     /// 唯一标识符
     #[serde(default = "default_id")]
     pub id: String,
+    /// 批次ID - 关联到测试批次
+    pub batch_id: Option<String>,
     /// 位号
     pub tag: String,
     /// 变量名（HMI）
@@ -165,6 +167,7 @@ impl ChannelPointDefinition {
     ) -> Self {
         Self {
             id: default_id(),
+            batch_id: None,
             tag,
             variable_name,
             variable_description,
@@ -297,6 +300,7 @@ impl Default for ChannelPointDefinition {
     fn default() -> Self {
         Self {
             id: default_id(),
+            batch_id: None,
             tag: String::new(),
             variable_name: String::new(),
             variable_description: String::new(),

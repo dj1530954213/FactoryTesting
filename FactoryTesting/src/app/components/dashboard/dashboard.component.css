@@ -1064,3 +1064,225 @@
   border-radius: 12px;
   padding: 2px 8px;
 }
+
+/* 新增批次显示样式 */
+.batch-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batch-link {
+  color: #1890ff;
+  text-decoration: none;
+  font-size: 16px;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-link:hover {
+  color: #40a9ff;
+  text-decoration: underline;
+}
+
+.product-info {
+  color: #595959;
+  font-size: 14px;
+  font-weight: normal;
+}
+
+.batch-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.batch-tags .ant-tag {
+  margin: 0;
+  font-size: 12px;
+  border-radius: 12px;
+  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 批次描述样式 */
+.batch-description {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.batch-stats-row,
+.batch-results-row,
+.batch-time-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 统计项样式 */
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #595959;
+  white-space: nowrap;
+}
+
+.stat-item strong {
+  color: #262626;
+  font-weight: 600;
+}
+
+.stat-icon {
+  font-size: 14px;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.stat-icon.success {
+  color: #52c41a;
+}
+
+.stat-icon.error {
+  color: #ff4d4f;
+}
+
+.stat-icon.pending {
+  color: #fa8c16;
+}
+
+.stat-icon.skipped {
+  color: #8c8c8c;
+}
+
+/* 内联进度条样式 */
+.inline-progress {
+  margin-left: 8px;
+  width: 80px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.inline-progress .ant-progress-line {
+  margin: 0;
+}
+
+.inline-progress .ant-progress-inner {
+  height: 6px;
+}
+
+/* 批次列表项样式增强 */
+.recent-batches-card .ant-list-item {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.recent-batches-card .ant-list-item:last-child {
+  border-bottom: none;
+}
+
+.recent-batches-card .ant-list-item:hover {
+  background-color: #fafafa;
+  transition: background-color 0.3s ease;
+}
+
+/* 批次头像样式 */
+.recent-batches-card .ant-avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 批次操作按钮样式 */
+.recent-batches-card .ant-list-item-action {
+  margin-left: 16px;
+}
+
+.recent-batches-card .ant-btn-link {
+  color: #1890ff;
+  font-size: 14px;
+  padding: 4px 8px;
+  height: auto;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.recent-batches-card .ant-btn-link:hover {
+  background-color: #e6f7ff;
+  color: #096dd9;
+}
+
+.recent-batches-card .ant-btn-link.ant-btn-dangerous:hover {
+  background-color: #fff2f0;
+  color: #cf1322;
+}
+
+/* 响应式设计增强 */
+@media (max-width: 768px) {
+  .batch-description {
+    gap: 8px;
+  }
+
+  .batch-stats-row,
+  .batch-results-row,
+  .batch-time-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .stat-item {
+    font-size: 13px;
+  }
+
+  .inline-progress {
+    width: 60px;
+    margin-left: 4px;
+  }
+
+  .batch-tags {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .recent-batches-card .ant-list-item {
+    padding: 16px;
+  }
+
+  .recent-batches-card .ant-list-item-action {
+    margin-left: 8px;
+  }
+}
+
+@media (max-width: 576px) {
+  .batch-link {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .product-info {
+    font-size: 13px;
+  }
+
+  .stat-item {
+    font-size: 12px;
+  }
+
+  .inline-progress {
+    width: 50px;
+  }
+}
