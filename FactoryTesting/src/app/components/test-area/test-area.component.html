@@ -19,7 +19,7 @@
       <h3>选择测试批次</h3>
       <nz-spin [nzSpinning]="isLoadingBatches">
         <div class="batch-list">
-          <nz-empty 
+          <nz-empty
             *ngIf="availableBatches.length === 0 && !isLoadingBatches"
             nzNotFoundContent="暂无可用的测试批次"
             [nzNotFoundImage]="'simple'">
@@ -30,9 +30,9 @@
               </button>
             </div>
           </nz-empty>
-          
+
           <div class="batch-cards" *ngIf="availableBatches.length > 0">
-            <nz-card 
+            <nz-card
               *ngFor="let batch of availableBatches"
               class="batch-card"
               [class.selected]="selectedBatch?.batch_id === batch.batch_id"
@@ -45,12 +45,40 @@
                 </nz-tag>
               </div>
               <div class="batch-info">
-                <p><strong>产品型号:</strong> {{ batch.product_model || 'N/A' }}</p>
-                <p><strong>序列号:</strong> {{ batch.serial_number || 'N/A' }}</p>
-                <p><strong>客户:</strong> {{ batch.customer_name || 'N/A' }}</p>
-                <p><strong>操作员:</strong> {{ batch.operator_name || 'N/A' }}</p>
-                <p><strong>总点数:</strong> {{ batch.total_points }}</p>
-                <p><strong>创建时间:</strong> {{ formatDateTime(batch.creation_time || batch.created_at) }}</p>
+                <div class="batch-basic-info">
+                  <p><strong>站场:</strong> {{ batch.station_name || 'N/A' }}</p>
+                  <p><strong>创建时间:</strong> {{ formatDateTime(batch.creation_time || batch.created_at) }}</p>
+                </div>
+
+                <!-- 测试统计信息 - 始终显示 -->
+                <div class="batch-test-stats">
+                  <div class="stats-grid">
+                    <div class="stat-item">
+                      <span class="stat-label">总点数</span>
+                      <span class="stat-value total">{{ getBatchTestStats(batch).totalPoints }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">待测点数</span>
+                      <span class="stat-value pending">{{ getBatchTestStats(batch).pendingPoints }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">已测点数</span>
+                      <span class="stat-value tested">{{ getBatchTestStats(batch).testedPoints }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">成功点数</span>
+                      <span class="stat-value success">{{ getBatchTestStats(batch).successPoints }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">失败点数</span>
+                      <span class="stat-value failed">{{ getBatchTestStats(batch).failedPoints }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <span class="stat-label">跳过点数</span>
+                      <span class="stat-value skipped">{{ getBatchTestStats(batch).skippedPoints }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </nz-card>
           </div>
@@ -58,39 +86,13 @@
       </nz-spin>
     </div>
 
-    <!-- 批次详情区域 -->
-    <div class="batch-details-section" *ngIf="selectedBatch">
+    <!-- 通道详情区域 -->
+    <div class="channel-details-section" *ngIf="selectedBatch && batchDetails">
       <nz-divider></nz-divider>
-      <h3>批次详情 - {{ selectedBatch.batch_name || selectedBatch.batch_id }}</h3>
-      
+      <h3>通道详情 - {{ selectedBatch.batch_name || selectedBatch.batch_id }}</h3>
+
       <nz-spin [nzSpinning]="isLoadingDetails">
-        <div *ngIf="batchDetails" class="details-content">
-          <!-- 统计信息 -->
-          <div class="stats-section">
-            <div class="statistics-row">
-              <nz-statistic 
-                nzTitle="总通道数" 
-                [nzValue]="batchDetails.allocation_summary.total_definitions"
-                nzSuffix="个">
-              </nz-statistic>
-              <nz-statistic 
-                nzTitle="已分配" 
-                [nzValue]="batchDetails.allocation_summary.allocated_instances"
-                nzSuffix="个">
-              </nz-statistic>
-              <nz-statistic 
-                nzTitle="跳过" 
-                [nzValue]="batchDetails.allocation_summary.skipped_definitions"
-                nzSuffix="个">
-              </nz-statistic>
-              <nz-statistic 
-                nzTitle="分配错误" 
-                [nzValue]="getAllocationErrorCount()"
-                nzSuffix="个"
-                [nzValueStyle]="{ color: getAllocationErrorCount() > 0 ? '#cf1322' : '#3f8600' }">
-              </nz-statistic>
-            </div>
-          </div>
+        <div class="details-content">
 
           <!-- 筛选工具栏 -->
           <div class="filter-toolbar">
@@ -142,17 +144,21 @@
             
             <div class="filter-status">
               <span>{{ getFilterStatusText() }}</span>
+              <nz-divider nzType="vertical"></nz-divider>
+              <span class="scroll-hint">
+                <i nz-icon nzType="info-circle" nzTheme="outline"></i>
+                表格支持滚动查看所有数据
+              </span>
             </div>
           </div>
 
           <!-- 通道列表表格 -->
-          <nz-table 
+          <nz-table
             #channelTable
             [nzData]="getFilteredInstances()"
-            [nzPageSize]="15"
-            [nzShowSizeChanger]="true"
-            [nzPageSizeOptions]="[10, 15, 20, 50]"
-            [nzScroll]="{ x: '1200px' }"
+            [nzPageSize]="0"
+            [nzShowPagination]="false"
+            [nzScroll]="{ x: '1200px', y: '800px' }"
             nzSize="small">
             
             <thead>
@@ -169,7 +175,7 @@
             </thead>
             
             <tbody>
-              <tr *ngFor="let instance of channelTable.data">
+              <tr *ngFor="let instance of getFilteredInstances()">
                 <td>
                   <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
                 </td>

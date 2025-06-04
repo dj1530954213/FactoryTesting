@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzMessageService } from 'ng-zorro-antd/message';
@@ -20,6 +20,8 @@ import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { DataStateService } from '../../services/data-state.service';
+import { BatchSelectionService } from '../../services/batch-selection.service';
+import { Subscription } from 'rxjs';
 import {
   TestBatchInfo,
   ChannelTestInstance,
@@ -35,6 +37,16 @@ import {
   MODULE_TYPE_LABELS,
   POINT_DATA_TYPE_LABELS
 } from '../../models';
+
+// 批次测试统计接口
+interface BatchTestStats {
+  totalPoints: number;
+  pendingPoints: number;
+  testedPoints: number;
+  successPoints: number;
+  failedPoints: number;
+  skippedPoints: number;
+}
 
 @Component({
   selector: 'app-test-area',
@@ -62,7 +74,10 @@ import {
   templateUrl: './test-area.component.html',
   styleUrls: ['./test-area.component.css']
 })
-export class TestAreaComponent implements OnInit {
+export class TestAreaComponent implements OnInit, OnDestroy {
+  // 订阅管理
+  private subscriptions = new Subscription();
+
   // 批次管理相关
   availableBatches: TestBatchInfo[] = [];
   selectedBatch: TestBatchInfo | null = null;
@@ -87,12 +102,34 @@ export class TestAreaComponent implements OnInit {
   constructor(
     private tauriApiService: TauriApiService,
     private message: NzMessageService,
-    private dataStateService: DataStateService
+    private dataStateService: DataStateService,
+    private batchSelectionService: BatchSelectionService
   ) {}
 
   ngOnInit(): void {
     this.loadAvailableBatches();
     this.checkForUnpersistedData();
+    this.subscribeToSelectedBatch();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  /**
+   * 订阅选中的批次变化
+   */
+  private subscribeToSelectedBatch(): void {
+    const subscription = this.batchSelectionService.selectedBatch$.subscribe(batch => {
+      this.selectedBatch = batch;
+      if (batch) {
+        console.log('🎯 [TEST_AREA] 批次选择变化:', batch.batch_id);
+        this.loadBatchDetails();
+      } else {
+        this.batchDetails = null;
+      }
+    });
+    this.subscriptions.add(subscription);
   }
 
   async loadAvailableBatches(): Promise<void> {
@@ -107,6 +144,9 @@ export class TestAreaComponent implements OnInit {
       console.log('✅ [TEST_AREA] 成功从后端获取批次列表');
       console.log('✅ [TEST_AREA] 批次数量:', this.availableBatches.length);
 
+      // 更新批次选择服务
+      this.batchSelectionService.setAvailableBatches(this.availableBatches);
+
       if (this.availableBatches.length > 0) {
         console.log('✅ [TEST_AREA] 批次详情:');
         this.availableBatches.forEach((batch, index) => {
@@ -120,18 +160,16 @@ export class TestAreaComponent implements OnInit {
       console.error('❌ [TEST_AREA] 加载批次列表失败:', error);
       this.message.error('加载批次列表失败: ' + error);
       this.availableBatches = [];
+      this.batchSelectionService.setAvailableBatches([]);
     } finally {
       this.isLoadingBatches = false;
     }
   }
 
   selectBatch(batch: TestBatchInfo): void {
-    this.selectedBatch = batch;
-    this.batchDetails = null;
+    // 使用批次选择服务来管理状态
+    this.batchSelectionService.selectBatch(batch);
     this.message.success(`已选择批次: ${batch.batch_name || batch.batch_id}`);
-    
-    // 自动加载批次详情
-    this.loadBatchDetails();
   }
 
   refreshBatches(): void {
@@ -146,15 +184,18 @@ export class TestAreaComponent implements OnInit {
     try {
       const result = await this.tauriApiService.clearSessionData().toPromise();
       this.message.success(result || '会话数据清理完成');
-      
+
       // 清理本地状态
       this.availableBatches = [];
       this.selectedBatch = null;
       this.batchDetails = null;
-      
+
       // 清理数据状态服务
       this.dataStateService.clearAllData();
-      
+
+      // 清理批次选择服务
+      this.batchSelectionService.reset();
+
       console.log('会话数据已清理，界面已重置');
     } catch (error) {
       console.error('清理会话数据失败:', error);
@@ -388,6 +429,84 @@ export class TestAreaComponent implements OnInit {
 
   readonly OverallTestStatus = OverallTestStatus;
   readonly ModuleType = ModuleType;
+
+  /**
+   * 获取批次的测试统计信息
+   */
+  getBatchTestStats(batch: TestBatchInfo): BatchTestStats {
+    // 如果是当前选中的批次且有详情数据，使用详情数据计算
+    if (this.selectedBatch?.batch_id === batch.batch_id && this.batchDetails) {
+      return this.calculateTestStatsFromDetails();
+    }
+
+    // 否则返回基础统计信息
+    return {
+      totalPoints: batch.total_points || 0,
+      pendingPoints: batch.total_points || 0, // 假设所有点都是待测
+      testedPoints: 0,
+      successPoints: 0,
+      failedPoints: 0,
+      skippedPoints: 0
+    };
+  }
+
+  /**
+   * 从批次详情计算测试统计信息
+   */
+  private calculateTestStatsFromDetails(): BatchTestStats {
+    if (!this.batchDetails?.instances) {
+      return {
+        totalPoints: 0,
+        pendingPoints: 0,
+        testedPoints: 0,
+        successPoints: 0,
+        failedPoints: 0,
+        skippedPoints: 0
+      };
+    }
+
+    const instances = this.batchDetails.instances;
+    const totalPoints = instances.length;
+
+    let pendingPoints = 0;
+    let testedPoints = 0;
+    let successPoints = 0;
+    let failedPoints = 0;
+    let skippedPoints = 0;
+
+    instances.forEach(instance => {
+      switch (instance.overall_status) {
+        case OverallTestStatus.NotTested:
+          pendingPoints++;
+          break;
+        case OverallTestStatus.HardPointTesting:
+        case OverallTestStatus.AlarmTesting:
+          testedPoints++;
+          break;
+        case OverallTestStatus.TestCompletedPassed:
+          testedPoints++;
+          successPoints++;
+          break;
+        case OverallTestStatus.TestCompletedFailed:
+          testedPoints++;
+          failedPoints++;
+          break;
+        default:
+          // 其他状态视为跳过
+          skippedPoints++;
+          break;
+      }
+    });
+
+    return {
+      totalPoints,
+      pendingPoints,
+      testedPoints,
+      successPoints,
+      failedPoints,
+      skippedPoints
+    };
+  }
 
   /**
    * 检查是否有未持久化的数据
