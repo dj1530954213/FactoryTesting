@@ -13,6 +13,9 @@ pub mod test_execution_engine;
 /// 测试PLC配置服务 - 管理测试PLC配置
 pub mod test_plc_config_service;
 
+/// PLC连接管理器 - 管理PLC持久连接和心跳检测
+pub mod plc_connection_manager;
+
 // 重新导出常用类型
 pub use channel_state_manager::{IChannelStateManager, ChannelStateManager};
 pub use specific_test_executors::{
@@ -27,4 +30,5 @@ pub use test_execution_engine::{
     TaskStatus,
     TestTask
 };
-pub use test_plc_config_service::{ITestPlcConfigService, TestPlcConfigService}; 
+pub use test_plc_config_service::{ITestPlcConfigService, TestPlcConfigService};
+pub use plc_connection_manager::{PlcConnectionManager, PlcConnectionState};

@@ -146,8 +146,8 @@ export class AppComponent implements OnInit, OnDestroy {
     // 立即检查一次
     this.checkPlcConnectionStatus();
 
-    // 每5秒检查一次PLC连接状态
-    this.plcStatusSubscription = interval(5000).subscribe(() => {
+    // 每1秒检查一次PLC连接状态，与后端心跳检测保持同步
+    this.plcStatusSubscription = interval(1000).subscribe(() => {
       this.checkPlcConnectionStatus();
     });
   }

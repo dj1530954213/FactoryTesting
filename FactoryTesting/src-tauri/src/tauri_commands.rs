@@ -15,7 +15,8 @@ use crate::services::application::{
 use crate::services::domain::{
     IChannelStateManager, ChannelStateManager,
     ITestExecutionEngine, TestExecutionEngine,
-    ITestPlcConfigService, TestPlcConfigService
+    ITestPlcConfigService, TestPlcConfigService,
+    PlcConnectionManager
 };
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
@@ -48,6 +49,7 @@ pub struct AppState {
     pub app_settings_service: Arc<dyn AppSettingsService>,
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
+    pub plc_connection_manager: Arc<PlcConnectionManager>,
 
     // 会话管理：跟踪当前会话中创建的批次
     pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
@@ -189,6 +191,11 @@ impl AppState {
             TestPlcConfigService::new(persistence_service.clone())
         );
 
+        // 创建PLC连接管理器
+        let plc_connection_manager = Arc::new(PlcConnectionManager::new(
+            test_plc_config_service.clone(),
+        ));
+
         Ok(Self {
             test_coordination_service,
             channel_state_manager,
@@ -198,6 +205,7 @@ impl AppState {
             app_settings_service,
             test_plc_config_service,
             channel_allocation_service,
+            plc_connection_manager,
 
             // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),

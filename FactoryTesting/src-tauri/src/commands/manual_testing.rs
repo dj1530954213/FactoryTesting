@@ -178,92 +178,63 @@ pub async fn connect_plc_cmd(
     info!("🔗 开始连接PLC - 确认接线");
 
     let app_state = state.inner();
-    let test_plc_config_service = app_state.test_plc_config_service.clone();
+    let plc_connection_manager = app_state.plc_connection_manager.clone();
 
-    // 1. 获取PLC连接配置
-    let plc_connections = match test_plc_config_service.get_plc_connections().await {
-        Ok(connections) => connections,
-        Err(e) => {
-            error!("❌ 获取PLC连接配置失败: {}", e);
-            return Ok(PlcConnectionResponse {
-                success: false,
-                message: Some(format!("获取PLC连接配置失败: {}", e)),
-            });
-        }
-    };
+    // 启动PLC连接管理器，建立持久连接
+    match plc_connection_manager.start_connections().await {
+        Ok(()) => {
+            info!("✅ PLC连接管理器启动成功");
 
-    if plc_connections.is_empty() {
-        warn!("⚠️ 没有找到PLC连接配置");
-        return Ok(PlcConnectionResponse {
-            success: false,
-            message: Some("没有找到PLC连接配置，请先在测试PLC配置页面添加连接".to_string()),
-        });
-    }
+            // 等待一段时间让连接建立
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-    // 2. 分别连接测试PLC和被测PLC
-    let mut test_plc_connected = false;
-    let mut target_plc_connected = false;
-    let mut connection_messages = Vec::new();
+            // 检查连接状态
+            let (test_plc_connected, target_plc_connected, test_plc_name, target_plc_name) =
+                plc_connection_manager.get_plc_status_summary().await;
 
-    for connection in &plc_connections {
-        if !connection.is_enabled {
-            continue;
-        }
-
-        info!("🔗 尝试连接PLC: {} ({}:{})", connection.name, connection.ip_address, connection.port);
-
-        match test_plc_config_service.test_plc_connection(&connection.id).await {
-            Ok(test_result) => {
-                if test_result.success {
-                    if connection.is_test_plc {
-                        test_plc_connected = true;
-                        connection_messages.push(format!("测试PLC ({}) 连接成功", connection.name));
-                        info!("✅ 测试PLC连接成功: {}", connection.name);
-                    } else {
-                        target_plc_connected = true;
-                        connection_messages.push(format!("被测PLC ({}) 连接成功", connection.name));
-                        info!("✅ 被测PLC连接成功: {}", connection.name);
-                    }
+            let overall_success = test_plc_connected && target_plc_connected;
+            let message = if overall_success {
+                format!("所有PLC连接成功，接线确认完成。测试PLC: {}, 被测PLC: {}",
+                    test_plc_name.unwrap_or("未知".to_string()),
+                    target_plc_name.unwrap_or("未知".to_string()))
+            } else if test_plc_connected || target_plc_connected {
+                let mut parts = Vec::new();
+                if test_plc_connected {
+                    parts.push(format!("测试PLC ({}) 连接成功", test_plc_name.unwrap_or("未知".to_string())));
                 } else {
-                    let error_msg = format!("{} 连接失败: {}",
-                        if connection.is_test_plc { "测试PLC" } else { "被测PLC" },
-                        test_result.message);
-                    connection_messages.push(error_msg.clone());
-                    error!("❌ {}", error_msg);
+                    parts.push(format!("测试PLC ({}) 连接失败", test_plc_name.unwrap_or("未配置".to_string())));
                 }
+                if target_plc_connected {
+                    parts.push(format!("被测PLC ({}) 连接成功", target_plc_name.unwrap_or("未知".to_string())));
+                } else {
+                    parts.push(format!("被测PLC ({}) 连接失败", target_plc_name.unwrap_or("未配置".to_string())));
+                }
+                parts.join("; ")
+            } else {
+                "所有PLC连接失败，请检查PLC配置和网络连接".to_string()
+            };
+
+            let response = PlcConnectionResponse {
+                success: overall_success,
+                message: Some(message),
+            };
+
+            if overall_success {
+                info!("✅ PLC连接完成 - 测试PLC和被测PLC都已连接，开始心跳检测");
+            } else {
+                warn!("⚠️ PLC连接未完全成功，连接管理器将继续尝试重连");
             }
-            Err(e) => {
-                let error_msg = format!("{} 连接异常: {}",
-                    if connection.is_test_plc { "测试PLC" } else { "被测PLC" },
-                    e);
-                connection_messages.push(error_msg.clone());
-                error!("❌ {}", error_msg);
-            }
+
+            Ok(response)
+        }
+        Err(e) => {
+            error!("❌ PLC连接管理器启动失败: {}", e);
+            Ok(PlcConnectionResponse {
+                success: false,
+                message: Some(format!("PLC连接管理器启动失败: {}", e)),
+            })
         }
     }
-
-    // 3. 验证连接状态
-    let overall_success = test_plc_connected && target_plc_connected;
-    let message = if overall_success {
-        "所有PLC连接成功，接线确认完成".to_string()
-    } else if test_plc_connected || target_plc_connected {
-        format!("部分PLC连接成功: {}", connection_messages.join("; "))
-    } else {
-        format!("所有PLC连接失败: {}", connection_messages.join("; "))
-    };
-
-    let response = PlcConnectionResponse {
-        success: overall_success,
-        message: Some(message),
-    };
-
-    if overall_success {
-        info!("✅ PLC连接完成 - 测试PLC和被测PLC都已连接");
-    } else {
-        warn!("⚠️ PLC连接未完全成功");
-    }
-
-    Ok(response)
 }
 
 /// 开始批次自动测试
@@ -298,48 +269,11 @@ pub async fn get_plc_connection_status_cmd(
     state: State<'_, AppState>
 ) -> Result<PlcConnectionStatus, String> {
     let app_state = state.inner();
-    let test_plc_config_service = app_state.test_plc_config_service.clone();
+    let plc_connection_manager = app_state.plc_connection_manager.clone();
 
-    // 获取PLC连接配置
-    let plc_connections = match test_plc_config_service.get_plc_connections().await {
-        Ok(connections) => connections,
-        Err(e) => {
-            error!("❌ 获取PLC连接配置失败: {}", e);
-            return Ok(PlcConnectionStatus {
-                test_plc_connected: false,
-                target_plc_connected: false,
-                test_plc_name: None,
-                target_plc_name: None,
-                last_check_time: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            });
-        }
-    };
-
-    let mut test_plc_connected = false;
-    let mut target_plc_connected = false;
-    let mut test_plc_name = None;
-    let mut target_plc_name = None;
-
-    // 检查每个启用的PLC连接状态
-    for connection in &plc_connections {
-        if !connection.is_enabled {
-            continue;
-        }
-
-        // 测试连接状态
-        let is_connected = match test_plc_config_service.test_plc_connection(&connection.id).await {
-            Ok(test_result) => test_result.success,
-            Err(_) => false,
-        };
-
-        if connection.is_test_plc {
-            test_plc_connected = is_connected;
-            test_plc_name = Some(connection.name.clone());
-        } else {
-            target_plc_connected = is_connected;
-            target_plc_name = Some(connection.name.clone());
-        }
-    }
+    // 从PLC连接管理器获取实时连接状态
+    let (test_plc_connected, target_plc_connected, test_plc_name, target_plc_name) =
+        plc_connection_manager.get_plc_status_summary().await;
 
     Ok(PlcConnectionStatus {
         test_plc_connected,
