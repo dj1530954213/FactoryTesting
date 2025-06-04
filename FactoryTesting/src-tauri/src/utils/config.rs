@@ -56,8 +56,6 @@ pub struct PlcConfig {
     pub retry_count: u32,
     /// 重试间隔（毫秒）
     pub retry_interval_ms: u64,
-    /// 是否启用模拟模式
-    pub mock_mode: bool,
 }
 
 /// 测试配置
@@ -150,7 +148,6 @@ impl Default for PlcConfig {
             write_timeout_ms: 3000,
             retry_count: 3,
             retry_interval_ms: 1000,
-            mock_mode: true,
         }
     }
 }
@@ -261,9 +258,7 @@ impl ConfigManager {
         if let Ok(plc_type) = std::env::var("PLC_TYPE") {
             self.config.plc_config.plc_type = plc_type;
         }
-        if let Ok(mock_mode) = std::env::var("PLC_MOCK_MODE") {
-            self.config.plc_config.mock_mode = mock_mode.to_lowercase() == "true";
-        }
+
 
         // 应用程序设置
         if let Ok(env) = std::env::var("APP_ENVIRONMENT") {
@@ -322,7 +317,7 @@ impl ConfigManager {
         }
 
         // 验证PLC类型
-        let valid_plc_types = ["modbus", "s7", "opcua", "mock"];
+        let valid_plc_types = ["modbus", "s7", "opcua"];
         if !valid_plc_types.contains(&self.config.plc_config.plc_type.as_str()) {
             return Err(AppError::configuration_error(format!(
                 "无效的PLC类型: {}，有效值: {:?}",

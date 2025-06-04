@@ -53,8 +53,7 @@ export interface PlcConnectionConfig {
 export enum PlcType {
   ModbusTcp = 'ModbusTcp',
   SiemensS7 = 'SiemensS7',
-  OpcUa = 'OpcUa',
-  Mock = 'Mock'                          // 模拟PLC
+  OpcUa = 'OpcUa'
 }
 
 /**
@@ -147,8 +146,7 @@ export const TestPlcChannelTypeLabels: Record<TestPlcChannelType, string> = {
 export const PlcTypeLabels: Record<PlcType, string> = {
   [PlcType.ModbusTcp]: 'Modbus TCP',
   [PlcType.SiemensS7]: 'Siemens S7',
-  [PlcType.OpcUa]: 'OPC UA',
-  [PlcType.Mock]: '模拟PLC'
+  [PlcType.OpcUa]: 'OPC UA'
 };
 
 /**

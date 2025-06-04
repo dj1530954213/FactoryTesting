@@ -51,7 +51,7 @@ pub use application::batch_allocation_service::{
 
 // 重新导出基础设施层的主要类型（避免冲突）
 pub use infrastructure::{
-    IPlcCommunicationService, MockPlcService,
+    IPlcCommunicationService,
     PlcTag, PlcDataType, PlcConnectionStatus, PlcCommunicationStats,
     IPersistenceService, SqliteOrmPersistenceService,
     PersistenceConfig, PersistenceStats, QueryCriteria, QueryResult,

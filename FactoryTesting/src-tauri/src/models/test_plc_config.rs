@@ -46,7 +46,7 @@ pub enum PlcType {
     ModbusTcp,
     SiemensS7,
     OpcUa,
-    Mock,                          // 模拟PLC
+
 }
 
 /// 连接状态枚举

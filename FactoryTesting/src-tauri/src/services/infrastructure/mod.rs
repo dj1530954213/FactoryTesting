@@ -19,7 +19,6 @@ pub mod event_publisher;
 // 重新导出PLC相关接口和实现
 pub use plc::{
     PlcCommunicationService as IPlcCommunicationService,
-    MockPlcService,
     PlcTag,
     PlcDataType,
     PlcConnectionStatus,

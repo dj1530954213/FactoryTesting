@@ -341,14 +341,7 @@ impl ITestPlcConfigService for TestPlcConfigService {
             crate::models::test_plc_config::PlcType::ModbusTcp => {
                 self.test_modbus_tcp_connection(&connection_config).await
             }
-            crate::models::test_plc_config::PlcType::Mock => {
-                // Mock类型总是返回成功
-                Ok(TestPlcConnectionResponse {
-                    success: true,
-                    message: "Mock PLC连接测试成功".to_string(),
-                    connection_time_ms: Some(50),
-                })
-            }
+
             _ => {
                 // 其他协议暂未实现
                 Ok(TestPlcConnectionResponse {

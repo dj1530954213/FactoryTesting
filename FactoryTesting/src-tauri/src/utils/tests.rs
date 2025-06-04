@@ -73,7 +73,6 @@ mod tests {
         assert_eq!(config.plc_config.plc_type, "modbus");
         assert_eq!(config.plc_config.host, "127.0.0.1");
         assert_eq!(config.plc_config.port, 502);
-        assert!(config.plc_config.mock_mode);
 
         // 检查测试配置默认值
         assert_eq!(config.test_config.analog_tolerance_percent, 1.0);

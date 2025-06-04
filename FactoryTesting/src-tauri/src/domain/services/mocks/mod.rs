@@ -5,7 +5,6 @@
 pub mod mock_test_orchestration_service;
 pub mod mock_channel_state_manager;
 pub mod mock_test_execution_engine;
-pub mod mock_plc_communication_service;
 pub mod mock_batch_allocation_service;
 pub mod mock_event_publisher;
 pub mod mock_persistence_service;
@@ -15,7 +14,6 @@ pub mod test_data_generator;
 pub use mock_test_orchestration_service::*;
 pub use mock_channel_state_manager::*;
 pub use mock_test_execution_engine::*;
-pub use mock_plc_communication_service::*;
 pub use mock_batch_allocation_service::*;
 pub use mock_event_publisher::*;
 pub use mock_persistence_service::*;
@@ -211,10 +209,7 @@ impl MockFactory {
         MockTestExecutionEngine::new(config.unwrap_or_default())
     }
 
-    /// 创建PLC通信服务Mock
-    pub fn create_plc_communication_service(config: Option<MockConfig>) -> MockPlcCommunicationService {
-        MockPlcCommunicationService::new(config.unwrap_or_default())
-    }
+
 
     /// 创建批次分配服务Mock
     pub fn create_batch_allocation_service(config: Option<MockConfig>) -> MockBatchAllocationService {
@@ -239,7 +234,6 @@ impl MockFactory {
             test_orchestration: Self::create_test_orchestration_service(Some(config.clone())),
             channel_state_manager: Self::create_channel_state_manager(Some(config.clone())),
             test_execution_engine: Self::create_test_execution_engine(Some(config.clone())),
-            plc_communication: Self::create_plc_communication_service(Some(config.clone())),
             batch_allocation: Self::create_batch_allocation_service(Some(config.clone())),
             event_publisher: Self::create_event_publisher(Some(config.clone())),
             persistence: Self::create_persistence_service(Some(config)),
@@ -252,7 +246,6 @@ pub struct MockServiceSuite {
     pub test_orchestration: MockTestOrchestrationService,
     pub channel_state_manager: MockChannelStateManager,
     pub test_execution_engine: MockTestExecutionEngine,
-    pub plc_communication: MockPlcCommunicationService,
     pub batch_allocation: MockBatchAllocationService,
     pub event_publisher: MockEventPublisher,
     pub persistence: MockPersistenceService,

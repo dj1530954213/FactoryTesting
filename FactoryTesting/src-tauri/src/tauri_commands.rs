@@ -19,7 +19,7 @@ use crate::services::domain::{
 };
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
-    IPlcCommunicationService, MockPlcService,
+    IPlcCommunicationService,
     excel::ExcelImporter,
     persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig},
     SimpleEventPublisher
@@ -119,8 +119,31 @@ impl AppState {
         );
 
         // 创建PLC服务
-        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(MockPlcService::new("TestRig"));
-        let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(MockPlcService::new("Target"));
+        let test_rig_config = crate::services::infrastructure::plc::ModbusConfig {
+            ip_address: "192.168.1.100".to_string(),
+            port: 502,
+            slave_id: 1,
+            byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+            connection_timeout_ms: 5000,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+        };
+        let target_config = crate::services::infrastructure::plc::ModbusConfig {
+            ip_address: "192.168.1.101".to_string(),
+            port: 502,
+            slave_id: 1,
+            byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+            connection_timeout_ms: 5000,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+        };
+
+        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
+            crate::services::infrastructure::plc::ModbusPlcService::new(test_rig_config)
+        );
+        let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(
+            crate::services::infrastructure::plc::ModbusPlcService::new(target_config)
+        );
 
         // 创建测试执行引擎
         let test_execution_engine: Arc<dyn ITestExecutionEngine> = Arc::new(

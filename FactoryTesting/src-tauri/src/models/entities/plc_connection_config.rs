@@ -126,7 +126,6 @@ impl From<&Model> for crate::models::test_plc_config::PlcConnectionConfig {
                 "ModbusTcp" => crate::models::test_plc_config::PlcType::ModbusTcp,
                 "SiemensS7" => crate::models::test_plc_config::PlcType::SiemensS7,
                 "OpcUa" => crate::models::test_plc_config::PlcType::OpcUa,
-                "Mock" => crate::models::test_plc_config::PlcType::Mock,
                 _ => crate::models::test_plc_config::PlcType::ModbusTcp, // 默认值
             },
             ip_address: model.ip_address.clone(),

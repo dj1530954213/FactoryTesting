@@ -44,8 +44,7 @@ pub trait AppConfig: Send + Sync {
     /// 获取日志级别
     fn log_level(&self) -> &str;
 
-    /// 是否启用Mock模式
-    fn enable_mock_mode(&self) -> bool;
+
 
     /// 获取测试数据目录
     fn test_data_directory(&self) -> &str;
@@ -61,7 +60,7 @@ pub struct DefaultAppConfig {
     plc_timeout_ms: u64,
     database_url: String,
     log_level: String,
-    enable_mock_mode: bool,
+
     test_data_directory: String,
     backup_directory: String,
 }
@@ -73,7 +72,7 @@ impl Default for DefaultAppConfig {
             plc_timeout_ms: 5000,
             database_url: "sqlite://fat_test.db".to_string(),
             log_level: "info".to_string(),
-            enable_mock_mode: false,
+
             test_data_directory: "./test_data".to_string(),
             backup_directory: "./backups".to_string(),
         }
@@ -97,9 +96,7 @@ impl AppConfig for DefaultAppConfig {
         &self.log_level
     }
 
-    fn enable_mock_mode(&self) -> bool {
-        self.enable_mock_mode
-    }
+
 
     fn test_data_directory(&self) -> &str {
         &self.test_data_directory
@@ -139,9 +136,7 @@ impl AppConfig for ConfigBasedAppConfig {
         "info"
     }
 
-    fn enable_mock_mode(&self) -> bool {
-        self.settings.get("enable_mock_mode").unwrap_or(false)
-    }
+
 
     fn test_data_directory(&self) -> &str {
         "./test_data"
@@ -258,7 +253,8 @@ impl ServiceContainer for MockServiceContainer {
     }
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
-        Arc::new(self.mock_suite.plc_communication.clone())
+        // 在Mock容器中也使用真实的Modbus PLC服务
+        Arc::new(crate::infrastructure::ModbusTcpPlcService::new())
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
