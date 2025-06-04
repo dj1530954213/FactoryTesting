@@ -33,7 +33,8 @@ import {
   PlcTypeLabels,
   ConnectionStatusLabels,
   getChannelTypeColor,
-  getConnectionStatusColor
+  getConnectionStatusColor,
+  TestPlcConnectionResponse
 } from '../../models/test-plc-config.model';
 import { Subscription } from 'rxjs';
 
@@ -725,19 +726,31 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
     this.testingConnections.add(connectionId);
     
     this.testPlcConfigService.testPlcConnection(connectionId).subscribe({
-      next: (success) => {
-        if (success) {
-          this.message.success('PLC连接测试成功');
+      next: (response: TestPlcConnectionResponse) => {
+        const connection = this.plcConnections.find(c => c.id === connectionId);
+        if (connection) {
+          connection.connectionStatus = response.success ? ConnectionStatus.Connected : ConnectionStatus.Error;
+        }
+
+        if (response.success) {
+          this.message.success(response.message || 'PLC连接测试成功');
         } else {
-          this.message.error('PLC连接测试失败');
+          this.message.error(response.message || 'PLC连接测试失败');
+        }
+        
+        this.testingConnections.delete(connectionId);
+        this.plcConnections = [...this.plcConnections];
+      },
+      error: (err) => {
+        console.error('测试PLC连接失败:', err);
+        this.message.error('测试PLC连接失败: 调用服务时发生错误');
+        
+        const connection = this.plcConnections.find(c => c.id === connectionId);
+        if (connection) {
+          connection.connectionStatus = ConnectionStatus.Error;
         }
         this.testingConnections.delete(connectionId);
-        this.loadData(); // 刷新连接状态
-      },
-      error: (error) => {
-        console.error('测试PLC连接失败:', error);
-        this.message.error('测试PLC连接失败');
-        this.testingConnections.delete(connectionId);
+        this.plcConnections = [...this.plcConnections];
       }
     });
   }

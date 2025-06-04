@@ -10,6 +10,7 @@ use crate::models::test_plc_config::*;
 use crate::services::traits::BaseService;
 use crate::services::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
+use crate::domain::services::plc_communication_service::{IPlcCommunicationService, PlcConnectionConfig as DomainPlcConnectionConfig, PlcProtocol, ConnectionTestResult};
 
 /// 测试PLC配置管理服务接口
 #[async_trait]
@@ -328,22 +329,38 @@ impl ITestPlcConfigService for TestPlcConfigService {
 
     async fn test_plc_connection(&self, connection_id: &str) -> AppResult<TestPlcConnectionResponse> {
         debug!("测试PLC连接: {}", connection_id);
-        
-        // 这里需要实现实际的PLC连接测试逻辑
-        // 临时实现：模拟测试结果
-        let success = connection_id.len() % 2 == 0; // 简单的模拟逻辑
-        
-        let response = TestPlcConnectionResponse {
-            success,
-            message: if success {
-                "PLC连接测试成功".to_string()
-            } else {
-                "PLC连接测试失败：连接超时".to_string()
-            },
-            connection_time_ms: if success { Some(150) } else { None },
+
+        // 从数据库获取PLC连接配置
+        let connection_config = self.persistence_service.load_plc_connection(connection_id).await?
+            .ok_or_else(|| AppError::not_found_error("PLC连接配置", &format!("ID: {}", connection_id)))?;
+
+        debug!("找到PLC连接配置: {} ({}:{})", connection_config.name, connection_config.ip_address, connection_config.port);
+
+        // 根据PLC类型选择相应的通信服务进行测试
+        let test_result = match connection_config.plc_type {
+            crate::models::test_plc_config::PlcType::ModbusTcp => {
+                self.test_modbus_tcp_connection(&connection_config).await
+            }
+            crate::models::test_plc_config::PlcType::Mock => {
+                // Mock类型总是返回成功
+                Ok(TestPlcConnectionResponse {
+                    success: true,
+                    message: "Mock PLC连接测试成功".to_string(),
+                    connection_time_ms: Some(50),
+                })
+            }
+            _ => {
+                // 其他协议暂未实现
+                Ok(TestPlcConnectionResponse {
+                    success: false,
+                    message: format!("暂不支持的PLC类型: {:?}", connection_config.plc_type),
+                    connection_time_ms: None,
+                })
+            }
         };
-        
-        info!("PLC连接测试完成: {} - {}", connection_id, if success { "成功" } else { "失败" });
+
+        let response = test_result?;
+        info!("PLC连接测试完成: {} - {}", connection_id, if response.success { "成功" } else { "失败" });
         Ok(response)
     }
 
@@ -509,6 +526,86 @@ impl ITestPlcConfigService for TestPlcConfigService {
 }
 
 impl TestPlcConfigService {
+    /// 测试Modbus TCP连接
+    async fn test_modbus_tcp_connection(&self, config: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<TestPlcConnectionResponse> {
+        use std::time::Instant;
+        use tokio::time::{timeout, Duration};
+        use tokio_modbus::prelude::*;
+
+        let start_time = Instant::now();
+
+        debug!("开始测试Modbus TCP连接: {}:{}", config.ip_address, config.port);
+
+        // 设置超时时间
+        let timeout_duration = Duration::from_millis(config.timeout as u64);
+
+        // 直接使用tokio_modbus进行连接测试
+        let socket_addr = format!("{}:{}", config.ip_address, config.port);
+        let socket_addr = match socket_addr.parse::<std::net::SocketAddr>() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                warn!("无效的地址格式: {}", e);
+                return Ok(TestPlcConnectionResponse {
+                    success: false,
+                    message: format!("无效的地址格式: {}", e),
+                    connection_time_ms: Some(elapsed_ms),
+                });
+            }
+        };
+
+        let test_result = timeout(timeout_duration, async {
+            // 尝试建立Modbus TCP连接
+            match tokio_modbus::client::tcp::connect_slave(socket_addr, Slave(1)).await {
+                Ok(mut ctx) => {
+                    // 尝试读取一个测试寄存器
+                    match ctx.read_holding_registers(0, 1).await {
+                        Ok(_) => Ok(true),
+                        Err(_) => Ok(false), // 连接成功但读取失败，可能是PLC不支持该地址
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        }).await;
+
+        let elapsed_ms = start_time.elapsed().as_millis() as u64;
+
+        match test_result {
+            Ok(Ok(true)) => {
+                debug!("Modbus TCP连接测试成功，耗时: {}ms", elapsed_ms);
+                Ok(TestPlcConnectionResponse {
+                    success: true,
+                    message: format!("Modbus TCP连接测试成功 ({}ms)", elapsed_ms),
+                    connection_time_ms: Some(elapsed_ms),
+                })
+            }
+            Ok(Ok(false)) => {
+                debug!("Modbus TCP连接建立成功但读取测试失败，耗时: {}ms", elapsed_ms);
+                Ok(TestPlcConnectionResponse {
+                    success: true, // 连接成功，即使读取失败
+                    message: format!("Modbus TCP连接成功，但测试读取失败 ({}ms)", elapsed_ms),
+                    connection_time_ms: Some(elapsed_ms),
+                })
+            }
+            Ok(Err(e)) => {
+                warn!("Modbus TCP连接测试失败: {}", e);
+                Ok(TestPlcConnectionResponse {
+                    success: false,
+                    message: format!("连接测试失败: {}", e),
+                    connection_time_ms: Some(elapsed_ms),
+                })
+            }
+            Err(_) => {
+                warn!("Modbus TCP连接测试超时 ({}ms)", elapsed_ms);
+                Ok(TestPlcConnectionResponse {
+                    success: false,
+                    message: format!("连接测试超时 ({}ms)", elapsed_ms),
+                    connection_time_ms: Some(elapsed_ms),
+                })
+            }
+        }
+    }
+
     /// 智能映射生成：实现有源/无源匹配逻辑
     fn generate_intelligent_mappings(
         target_definitions: &[crate::models::ChannelPointDefinition],
