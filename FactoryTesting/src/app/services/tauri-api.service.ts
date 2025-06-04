@@ -22,6 +22,7 @@ import {
   DashboardBatchInfo,
   DeleteBatchResponse
 } from '../models';
+import { PlcConnectionStatus } from '../models/plc-connection-status.model';
 
 @Injectable({
   providedIn: 'root'
@@ -115,6 +116,61 @@ export class TauriApiService {
    */
   createTestData(): Observable<ChannelPointDefinition[]> {
     return from(invoke<ChannelPointDefinition[]>('create_test_data'));
+  }
+
+  /**
+   * 连接PLC - 确认接线
+   */
+  connectPlc(): Observable<{ success: boolean; message?: string }> {
+    console.log('🔗 [TAURI_API] 调用连接PLC API');
+    return from(invoke<{ success: boolean; message?: string }>('connect_plc_cmd')).pipe(
+      tap(result => {
+        if (result.success) {
+          console.log('✅ [TAURI_API] PLC连接成功');
+        } else {
+          console.error('❌ [TAURI_API] PLC连接失败:', result.message);
+        }
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] PLC连接API调用失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * 开始批次自动测试
+   */
+  startBatchAutoTest(batchId: string): Observable<{ success: boolean; message?: string }> {
+    console.log('🚀 [TAURI_API] 调用开始批次自动测试API');
+    console.log('🚀 [TAURI_API] 批次ID:', batchId);
+    return from(invoke<{ success: boolean; message?: string }>('start_batch_auto_test_cmd', {
+      args: { batch_id: batchId }
+    })).pipe(
+      tap(result => {
+        if (result.success) {
+          console.log('✅ [TAURI_API] 批次自动测试启动成功');
+        } else {
+          console.error('❌ [TAURI_API] 批次自动测试启动失败:', result.message);
+        }
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 批次自动测试API调用失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  /**
+   * 获取PLC连接状态
+   */
+  getPlcConnectionStatus(): Observable<PlcConnectionStatus> {
+    return from(invoke<PlcConnectionStatus>('get_plc_connection_status_cmd')).pipe(
+      catchError(error => {
+        console.error('❌ [TAURI_API] 获取PLC连接状态失败:', error);
+        throw error;
+      })
+    );
   }
 
   // ============================================================================

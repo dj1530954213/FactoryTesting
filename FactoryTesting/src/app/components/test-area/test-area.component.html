@@ -3,87 +3,120 @@
     <!-- 页面操作按钮 -->
     <ng-template #extraTemplate>
       <nz-space>
-        <button *nzSpaceItem nz-button nzType="default" (click)="refreshBatches()">
-          <span nz-icon nzType="reload" nzTheme="outline"></span>
-          刷新批次
+        <button
+          *nzSpaceItem
+          nz-button
+          nzType="default"
+          [nzLoading]="isConnecting"
+          [disabled]="!selectedBatch || isConnecting || isConnected"
+          (click)="confirmWiring()">
+          <span nz-icon nzType="link" nzTheme="outline"></span>
+          确认接线
         </button>
-        <button *nzSpaceItem nz-button nzType="primary" nzDanger (click)="clearSessionData()">
-          <span nz-icon nzType="clear" nzTheme="outline"></span>
-          清理会话数据
+        <button
+          *nzSpaceItem
+          nz-button
+          nzType="primary"
+          [nzLoading]="isAutoTesting"
+          [disabled]="!selectedBatch || !isConnected || isAutoTesting"
+          (click)="startAutoTest()">
+          <span nz-icon nzType="play-circle" nzTheme="outline"></span>
+          开始通道自动测试
         </button>
+        <nz-tag
+          *nzSpaceItem
+          [nzColor]="getConnectionStatusColor()"
+          class="connection-status-tag">
+          <i nz-icon [nzType]="getConnectionStatusIcon()" nzTheme="outline"></i>
+          {{ getConnectionStatusText() }}
+        </nz-tag>
       </nz-space>
     </ng-template>
 
-    <!-- 批次选择区域 -->
+    <!-- 批次选择区域 - 可折叠 -->
     <div class="batch-selection-section">
-      <h3>选择测试批次</h3>
-      <nz-spin [nzSpinning]="isLoadingBatches">
-        <div class="batch-list">
-          <nz-empty
-            *ngIf="availableBatches.length === 0 && !isLoadingBatches"
-            nzNotFoundContent="暂无可用的测试批次"
-            [nzNotFoundImage]="'simple'">
-            <div nz-empty-footer>
-              <button nz-button nzType="primary" (click)="refreshBatches()">
-                <i nz-icon nzType="reload"></i>
-                刷新批次列表
-              </button>
-            </div>
-          </nz-empty>
+      <nz-collapse nzExpandIconPosition="end">
+        <nz-collapse-panel
+          [nzActive]="batchPanelExpanded"
+          (nzActiveChange)="onBatchPanelToggle($event)"
+          [nzHeader]="getBatchPanelHeader()"
+          [nzExtra]="batchPanelExtra">
 
-          <div class="batch-cards" *ngIf="availableBatches.length > 0">
-            <nz-card
-              *ngFor="let batch of availableBatches"
-              class="batch-card"
-              [class.selected]="selectedBatch?.batch_id === batch.batch_id"
-              (click)="selectBatch(batch)"
-              nzHoverable>
-              <div class="batch-header">
-                <h4>{{ batch.batch_name || batch.batch_id }}</h4>
-                <nz-tag [nzColor]="getStatusColor(batch.overall_status)">
-                  {{ batch.status_summary || '未开始' }}
-                </nz-tag>
-              </div>
-              <div class="batch-info">
-                <div class="batch-basic-info">
-                  <p><strong>站场:</strong> {{ batch.station_name || 'N/A' }}</p>
-                  <p><strong>创建时间:</strong> {{ formatDateTime(batch.creation_time || batch.created_at) }}</p>
+          <ng-template #batchPanelExtra>
+            <span class="batch-count-info">
+              <i nz-icon nzType="database" nzTheme="outline"></i>
+              {{ availableBatches.length }} 个批次
+            </span>
+          </ng-template>
+
+          <nz-spin [nzSpinning]="isLoadingBatches">
+            <div class="batch-list">
+              <nz-empty
+                *ngIf="availableBatches.length === 0 && !isLoadingBatches"
+                nzNotFoundContent="暂无可用的测试批次"
+                [nzNotFoundImage]="'simple'">
+                <div nz-empty-footer>
+                  <span nz-typography nzType="secondary">
+                    请先在数据管理页面导入Excel点表文件
+                  </span>
                 </div>
+              </nz-empty>
 
-                <!-- 测试统计信息 - 始终显示 -->
-                <div class="batch-test-stats">
-                  <div class="stats-grid">
-                    <div class="stat-item">
-                      <span class="stat-label">总点数</span>
-                      <span class="stat-value total">{{ getBatchTestStats(batch).totalPoints }}</span>
+              <div class="batch-cards" *ngIf="availableBatches.length > 0">
+                <nz-card
+                  *ngFor="let batch of availableBatches"
+                  class="batch-card"
+                  [class.selected]="selectedBatch?.batch_id === batch.batch_id"
+                  (click)="selectBatch(batch)"
+                  nzHoverable>
+                  <div class="batch-header">
+                    <h4>{{ batch.batch_name || batch.batch_id }}</h4>
+                    <nz-tag [nzColor]="getStatusColor(batch.overall_status)">
+                      {{ batch.status_summary || '未开始' }}
+                    </nz-tag>
+                  </div>
+                  <div class="batch-info">
+                    <div class="batch-basic-info">
+                      <p><strong>站场:</strong> {{ batch.station_name || 'N/A' }}</p>
+                      <p><strong>创建时间:</strong> {{ formatDateTime(batch.creation_time || batch.created_at) }}</p>
                     </div>
-                    <div class="stat-item">
-                      <span class="stat-label">待测点数</span>
-                      <span class="stat-value pending">{{ getBatchTestStats(batch).pendingPoints }}</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">已测点数</span>
-                      <span class="stat-value tested">{{ getBatchTestStats(batch).testedPoints }}</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">成功点数</span>
-                      <span class="stat-value success">{{ getBatchTestStats(batch).successPoints }}</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">失败点数</span>
-                      <span class="stat-value failed">{{ getBatchTestStats(batch).failedPoints }}</span>
-                    </div>
-                    <div class="stat-item">
-                      <span class="stat-label">跳过点数</span>
-                      <span class="stat-value skipped">{{ getBatchTestStats(batch).skippedPoints }}</span>
+
+                    <!-- 测试统计信息 - 始终显示 -->
+                    <div class="batch-test-stats">
+                      <div class="stats-grid">
+                        <div class="stat-item">
+                          <span class="stat-label">总点数</span>
+                          <span class="stat-value total">{{ getBatchTestStats(batch).totalPoints }}</span>
+                        </div>
+                        <div class="stat-item">
+                          <span class="stat-label">待测点数</span>
+                          <span class="stat-value pending">{{ getBatchTestStats(batch).pendingPoints }}</span>
+                        </div>
+                        <div class="stat-item">
+                          <span class="stat-label">已测点数</span>
+                          <span class="stat-value tested">{{ getBatchTestStats(batch).testedPoints }}</span>
+                        </div>
+                        <div class="stat-item">
+                          <span class="stat-label">成功点数</span>
+                          <span class="stat-value success">{{ getBatchTestStats(batch).successPoints }}</span>
+                        </div>
+                        <div class="stat-item">
+                          <span class="stat-label">失败点数</span>
+                          <span class="stat-value failed">{{ getBatchTestStats(batch).failedPoints }}</span>
+                        </div>
+                        <div class="stat-item">
+                          <span class="stat-label">跳过点数</span>
+                          <span class="stat-value skipped">{{ getBatchTestStats(batch).skippedPoints }}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </nz-card>
               </div>
-            </nz-card>
-          </div>
-        </div>
-      </nz-spin>
+            </div>
+          </nz-spin>
+        </nz-collapse-panel>
+      </nz-collapse>
     </div>
 
     <!-- 通道详情区域 -->

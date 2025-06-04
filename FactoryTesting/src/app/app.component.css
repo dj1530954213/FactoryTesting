@@ -63,6 +63,29 @@
   color: rgba(255, 255, 255, 0.65);
 }
 
+.last-check {
+  font-size: 11px;
+}
+
+.check-time {
+  color: rgba(255, 255, 255, 0.85);
+  font-family: monospace;
+}
+
+/* PLC连接状态闪烁动画 */
+.blinking {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0.3;
+  }
+}
+
 /* 主内容区域 */
 .app-content {
   background: #f0f2f5;

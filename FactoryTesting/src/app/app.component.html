@@ -45,15 +45,27 @@
           </nz-tag>
         </div>
         <div *nzSpaceItem class="status-item">
-          <span class="status-label">PLC连接:</span>
-          <nz-tag [nzColor]="isConnected ? 'green' : 'red'">
-            {{ isConnected ? '已连接' : '未连接' }}
+          <span class="status-label">测试PLC:</span>
+          <nz-tag
+            [nzColor]="plcConnectionStatus?.testPlcConnected ? 'green' : 'red'"
+            [class.blinking]="!plcConnectionStatus?.testPlcConnected"
+            [title]="plcConnectionStatus?.testPlcName || '未配置'">
+            {{ plcConnectionStatus?.testPlcConnected ? '已连接' : '未连接' }}
           </nz-tag>
         </div>
-        <nz-badge *nzSpaceItem 
-                  [nzStatus]="isConnected ? 'success' : 'error'" 
-                  [nzText]="isConnected ? '在线' : '离线'">
-        </nz-badge>
+        <div *nzSpaceItem class="status-item">
+          <span class="status-label">被测PLC:</span>
+          <nz-tag
+            [nzColor]="plcConnectionStatus?.targetPlcConnected ? 'green' : 'red'"
+            [class.blinking]="!plcConnectionStatus?.targetPlcConnected"
+            [title]="plcConnectionStatus?.targetPlcName || '未配置'">
+            {{ plcConnectionStatus?.targetPlcConnected ? '已连接' : '未连接' }}
+          </nz-tag>
+        </div>
+        <div *nzSpaceItem class="status-item last-check" [hidden]="!plcConnectionStatus?.lastCheckTime">
+          <span class="status-label">最后检查:</span>
+          <span class="check-time">{{ plcConnectionStatus?.lastCheckTime | date:'HH:mm:ss' }}</span>
+        </div>
       </nz-space>
     </div>
   </nz-header>

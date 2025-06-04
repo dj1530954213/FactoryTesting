@@ -28,7 +28,8 @@ use commands::data_management::{
     import_excel_and_create_batch_cmd, create_test_batch_with_definitions_cmd, delete_batch_cmd
 };
 use commands::manual_testing::{
-    execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd
+    execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd,
+    connect_plc_cmd, start_batch_auto_test_cmd, get_plc_connection_status_cmd
 };
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
@@ -138,6 +139,9 @@ pub fn run() {
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,
                 write_channel_value_cmd,
+                connect_plc_cmd,
+                start_batch_auto_test_cmd,
+                get_plc_connection_status_cmd,
                 // 测试PLC配置命令
                 get_test_plc_channels_cmd,
                 save_test_plc_channel_cmd,

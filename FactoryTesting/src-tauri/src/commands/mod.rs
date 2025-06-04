@@ -34,4 +34,13 @@ pub use test_plc_config::{
     get_channel_mappings_cmd,
     generate_channel_mappings_cmd,
     initialize_default_test_plc_channels_cmd,
-}; 
+};
+
+pub use manual_testing::{
+    execute_manual_sub_test_cmd,
+    read_channel_value_cmd,
+    write_channel_value_cmd,
+    connect_plc_cmd,
+    start_batch_auto_test_cmd,
+    get_plc_connection_status_cmd
+};

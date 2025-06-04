@@ -18,6 +18,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
 import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
+import { NzCollapseModule } from 'ng-zorro-antd/collapse';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { DataStateService } from '../../services/data-state.service';
 import { BatchSelectionService } from '../../services/batch-selection.service';
@@ -69,7 +70,8 @@ interface BatchTestStats {
     NzIconModule,
     NzEmptyModule,
     NzDropDownModule,
-    NzMenuModule
+    NzMenuModule,
+    NzCollapseModule
   ],
   templateUrl: './test-area.component.html',
   styleUrls: ['./test-area.component.css']
@@ -84,6 +86,14 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   isLoadingBatches = false;
   batchDetails: PrepareTestInstancesResponse | null = null;
   isLoadingDetails = false;
+
+  // 批次面板折叠状态
+  batchPanelExpanded = false;
+
+  // PLC连接和测试状态
+  isConnecting = false;
+  isConnected = false;
+  isAutoTesting = false;
 
   // 筛选和搜索相关
   selectedModuleTypes: ModuleType[] = [];
@@ -172,34 +182,73 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.message.success(`已选择批次: ${batch.batch_name || batch.batch_id}`);
   }
 
-  refreshBatches(): void {
-    this.loadAvailableBatches();
-    this.message.info('正在刷新批次列表...');
+  /**
+   * 确认接线 - 连接测试PLC和被测PLC
+   */
+  async confirmWiring(): Promise<void> {
+    if (!this.selectedBatch) {
+      this.message.warning('请先选择一个测试批次');
+      return;
+    }
+
+    console.log('🔗 [TEST_AREA] 开始确认接线，连接PLC');
+    this.isConnecting = true;
+
+    try {
+      // 调用后端API连接PLC
+      const result = await this.tauriApiService.connectPlc().toPromise();
+
+      if (result && result.success) {
+        this.isConnected = true;
+        this.message.success('PLC连接成功，接线确认完成');
+        console.log('✅ [TEST_AREA] PLC连接成功');
+      } else {
+        throw new Error((result && result.message) || 'PLC连接失败');
+      }
+    } catch (error) {
+      console.error('❌ [TEST_AREA] PLC连接失败:', error);
+      this.message.error('PLC连接失败: ' + error);
+      this.isConnected = false;
+    } finally {
+      this.isConnecting = false;
+    }
   }
 
   /**
-   * 清理当前会话数据
+   * 开始通道自动测试
    */
-  async clearSessionData(): Promise<void> {
+  async startAutoTest(): Promise<void> {
+    if (!this.selectedBatch) {
+      this.message.warning('请先选择一个测试批次');
+      return;
+    }
+
+    if (!this.isConnected) {
+      this.message.warning('请先确认接线连接PLC');
+      return;
+    }
+
+    console.log('🚀 [TEST_AREA] 开始通道自动测试');
+    this.isAutoTesting = true;
+
     try {
-      const result = await this.tauriApiService.clearSessionData().toPromise();
-      this.message.success(result || '会话数据清理完成');
+      // 调用后端API开始自动测试
+      const result = await this.tauriApiService.startBatchAutoTest(this.selectedBatch.batch_id).toPromise();
 
-      // 清理本地状态
-      this.availableBatches = [];
-      this.selectedBatch = null;
-      this.batchDetails = null;
+      if (result && result.success) {
+        this.message.success('通道自动测试已启动');
+        console.log('✅ [TEST_AREA] 通道自动测试启动成功');
 
-      // 清理数据状态服务
-      this.dataStateService.clearAllData();
-
-      // 清理批次选择服务
-      this.batchSelectionService.reset();
-
-      console.log('会话数据已清理，界面已重置');
+        // 重新加载批次详情以获取最新状态
+        await this.loadBatchDetails();
+      } else {
+        throw new Error((result && result.message) || '启动自动测试失败');
+      }
     } catch (error) {
-      console.error('清理会话数据失败:', error);
-      this.message.error('清理会话数据失败: ' + error);
+      console.error('❌ [TEST_AREA] 启动自动测试失败:', error);
+      this.message.error('启动自动测试失败: ' + error);
+    } finally {
+      this.isAutoTesting = false;
     }
   }
 
@@ -429,6 +478,51 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   readonly OverallTestStatus = OverallTestStatus;
   readonly ModuleType = ModuleType;
+
+  /**
+   * 批次面板折叠状态切换
+   */
+  onBatchPanelToggle(expanded: boolean): void {
+    this.batchPanelExpanded = expanded;
+  }
+
+  /**
+   * 获取批次面板标题
+   */
+  getBatchPanelHeader(): string {
+    if (this.selectedBatch) {
+      const stats = this.getBatchTestStats(this.selectedBatch);
+      return `当前批次: ${this.selectedBatch.batch_name || this.selectedBatch.batch_id} (${stats.totalPoints}个点位)`;
+    }
+    return '选择测试批次';
+  }
+
+  /**
+   * 获取连接状态颜色
+   */
+  getConnectionStatusColor(): string {
+    if (this.isConnecting) return 'processing';
+    if (this.isConnected) return 'success';
+    return 'default';
+  }
+
+  /**
+   * 获取连接状态图标
+   */
+  getConnectionStatusIcon(): string {
+    if (this.isConnecting) return 'loading';
+    if (this.isConnected) return 'check-circle';
+    return 'disconnect';
+  }
+
+  /**
+   * 获取连接状态文本
+   */
+  getConnectionStatusText(): string {
+    if (this.isConnecting) return '连接中...';
+    if (this.isConnected) return 'PLC已连接';
+    return 'PLC未连接';
+  }
 
   /**
    * 获取批次的测试统计信息
