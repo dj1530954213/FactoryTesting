@@ -49,6 +49,7 @@ pub fn run() {
         .filter_module("sea_orm", log::LevelFilter::Warn) // 过滤sea_orm查询日志
         .filter_module("sea_orm_migration", log::LevelFilter::Warn) // 过滤迁移日志
         .filter_module("sqlx::query", log::LevelFilter::Off) // 完全关闭sqlx查询日志
+        .filter_module("tokio_modbus", log::LevelFilter::Warn) // 过滤tokio_modbus的DEBUG日志
         .filter_module("app::services", log::LevelFilter::Debug) // 确保业务服务日志显示
         .filter_module("app::tauri_commands", log::LevelFilter::Debug) // 确保命令日志显示
         .format_timestamp_secs() // 添加时间戳
@@ -78,6 +79,17 @@ pub fn run() {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
             .manage(app_state)
+            .setup(|app| {
+                // 在应用启动后设置AppHandle到事件发布器
+                let app_handle = app.handle();
+
+                // 设置全局AppHandle，用于事件发布
+                crate::services::infrastructure::event_publisher::set_global_app_handle(app_handle.clone());
+
+                log::info!("Tauri应用启动完成，AppHandle已设置到事件发布器");
+
+                Ok(())
+            })
             .invoke_handler(tauri::generate_handler![
                 // 测试协调相关命令
                 tauri_commands::submit_test_execution,

@@ -23,6 +23,28 @@
           <span nz-icon nzType="play-circle" nzTheme="outline"></span>
           开始通道自动测试
         </button>
+
+        <button
+          *nzSpaceItem
+          nz-button
+          nzType="default"
+          [nzLoading]="isLoadingDetails"
+          [disabled]="!selectedBatch || isLoadingDetails"
+          (click)="refreshBatchDetails()">
+          <span nz-icon nzType="reload" nzTheme="outline"></span>
+          刷新状态
+        </button>
+
+        <!-- 测试状态显示 -->
+        <ng-container *nzSpaceItem>
+          <div class="test-status-container" *ngIf="isAutoTesting">
+            <nz-tag nzColor="processing">
+              <i nz-icon nzType="loading" nzSpin></i>
+              正在进行自动测试...
+            </nz-tag>
+          </div>
+        </ng-container>
+
         <nz-tag
           *nzSpaceItem
           [nzColor]="getConnectionStatusColor()"
@@ -126,6 +148,85 @@
 
       <nz-spin [nzSpinning]="isLoadingDetails">
         <div class="details-content">
+
+          <!-- 测试进度区域 -->
+          <div class="test-progress-section" *ngIf="selectedBatch">
+            <nz-card nzTitle="测试进度" [nzSize]="'small'" class="progress-card">
+              <div class="progress-content">
+                <!-- 进度条和统计 -->
+                <div class="progress-main">
+                  <div class="progress-header">
+                    <h4>{{ selectedBatch.batch_name || selectedBatch.batch_id }}</h4>
+                    <div class="progress-percentage">
+                      <span class="percentage-text">{{ testProgress.progressPercentage.toFixed(1) }}%</span>
+                      <nz-tag [nzColor]="getTestStatusColor()">
+                        {{ getTestStatusText() }}
+                      </nz-tag>
+                    </div>
+                  </div>
+
+                  <nz-progress
+                    [nzPercent]="testProgress.progressPercentage"
+                    [nzStatus]="getProgressStatus()"
+                    [nzStrokeColor]="getProgressColor()"
+                    nzSize="default"
+                    [nzShowInfo]="false">
+                  </nz-progress>
+
+                  <div class="progress-info">
+                    <span>{{ testProgress.completedPoints }} / {{ testProgress.totalPoints }} 个点位已完成</span>
+                    <span *ngIf="testProgress.currentPoint" class="current-test">
+                      当前测试: {{ testProgress.currentPoint }}
+                    </span>
+                    <span *ngIf="isTestCompleted" class="completion-status">
+                      ✅ 测试已完成
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 详细统计 -->
+                <div class="progress-stats">
+                  <div class="stats-row">
+                    <div class="stat-item success">
+                      <span class="stat-icon">✅</span>
+                      <span class="stat-label">成功</span>
+                      <span class="stat-value">{{ testProgress.successPoints }}</span>
+                    </div>
+                    <div class="stat-item failed">
+                      <span class="stat-icon">❌</span>
+                      <span class="stat-label">失败</span>
+                      <span class="stat-value">{{ testProgress.failedPoints }}</span>
+                    </div>
+                    <div class="stat-item pending">
+                      <span class="stat-icon">⏳</span>
+                      <span class="stat-label">待测</span>
+                      <span class="stat-value">{{ testProgress.totalPoints - testProgress.completedPoints }}</span>
+                    </div>
+                    <div class="stat-item testing" *ngIf="isAutoTesting">
+                      <span class="stat-icon">🔄</span>
+                      <span class="stat-label">测试中</span>
+                      <span class="stat-value">{{ getTestingCount() }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 最近测试结果 -->
+                <div class="recent-results" *ngIf="recentTestResults.length > 0">
+                  <div class="recent-header">
+                    <span>最近测试结果:</span>
+                  </div>
+                  <div class="recent-list">
+                    <nz-tag
+                      *ngFor="let result of recentTestResults.slice(-5)"
+                      [nzColor]="result.success ? 'success' : 'error'"
+                      class="result-tag">
+                      {{ result.pointTag }}: {{ result.success ? '成功' : '失败' }}
+                    </nz-tag>
+                  </div>
+                </div>
+              </div>
+            </nz-card>
+          </div>
 
           <!-- 筛选工具栏 -->
           <div class="filter-toolbar">
@@ -233,11 +334,20 @@
                   </nz-tag>
                 </td>
                 <td>
-                  <span *ngIf="instance.error_message" class="error-message">
+                  <span *ngIf="instance.error_message && instance.error_message.trim()" class="error-message">
                     {{ instance.error_message }}
                   </span>
-                  <span *ngIf="!instance.error_message" class="no-error">
-                    无错误
+                  <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedFailed && (!instance.error_message || !instance.error_message.trim())" class="error-message">
+                    测试失败 - 未知错误
+                  </span>
+                  <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedPassed" class="success-message">
+                    测试通过
+                  </span>
+                  <span *ngIf="instance.overall_status === OverallTestStatus.NotTested || instance.overall_status === OverallTestStatus.WiringConfirmed" class="no-error">
+                    未测试
+                  </span>
+                  <span *ngIf="instance.overall_status === OverallTestStatus.HardPointTesting || instance.overall_status === OverallTestStatus.AlarmTesting" class="testing-message">
+                    测试中...
                   </span>
                 </td>
                 <td>
@@ -288,4 +398,6 @@
       </nz-spin>
     </div>
   </nz-card>
-</div> 
+
+
+</div>

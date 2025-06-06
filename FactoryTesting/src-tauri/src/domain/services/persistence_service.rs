@@ -68,11 +68,17 @@ pub trait IPersistenceService: BaseService {
     /// * `Option<ChannelTestInstance>` - 测试实例
     async fn load_test_instance(&self, instance_id: &str) -> AppResult<Option<ChannelTestInstance>>;
     
+    /// 加载所有测试实例
+    ///
+    /// # 返回
+    /// * `Vec<ChannelTestInstance>` - 所有测试实例列表
+    async fn load_all_test_instances(&self) -> AppResult<Vec<ChannelTestInstance>>;
+
     /// 加载批次的所有测试实例
-    /// 
+    ///
     /// # 参数
     /// * `batch_id` - 批次ID
-    /// 
+    ///
     /// # 返回
     /// * `Vec<ChannelTestInstance>` - 测试实例列表
     async fn load_test_instances_by_batch(&self, batch_id: &str) -> AppResult<Vec<ChannelTestInstance>>;

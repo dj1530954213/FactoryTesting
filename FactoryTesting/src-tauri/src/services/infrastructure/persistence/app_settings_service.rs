@@ -141,8 +141,6 @@ impl AppSettingsService for JsonAppSettingsService {
                 format!("写入配置文件 {:?} 失败", file_path),
                 e.kind().to_string()
             ))?;
-        
-        log::debug!("应用配置已保存到 {:?}", file_path);
         Ok(())
     }
 
@@ -150,7 +148,6 @@ impl AppSettingsService for JsonAppSettingsService {
         let file_path = self.get_settings_file_path();
         
         if !file_path.exists() {
-            log::debug!("配置文件 {:?} 不存在，返回 None", file_path);
             return Ok(None);
         }
         
@@ -162,8 +159,6 @@ impl AppSettingsService for JsonAppSettingsService {
         
         let settings: AppSettings = serde_json::from_str(&json_content)
             .map_err(|e| AppError::json_error(format!("反序列化配置文件失败: {}", e)))?;
-        
-        log::debug!("应用配置已从 {:?} 加载", file_path);
         Ok(Some(settings))
     }
 

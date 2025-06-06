@@ -620,7 +620,7 @@ impl DatabaseMigration {
             let tag = row.try_get::<String>("", "tag").unwrap_or_default();
             let station_name = row.try_get::<String>("", "station_name").unwrap_or_default();
 
-            log::info!("🔍 处理通道定义: ID={}, Tag={}, Station={}", definition_id, tag, station_name);
+
 
             // 尝试通过测试实例找到对应的批次ID
             match Self::find_batch_id_for_definition(db, &definition_id).await {
@@ -628,7 +628,6 @@ impl DatabaseMigration {
                     // 找到了批次ID，更新通道定义
                     match Self::update_definition_batch_id(db, &definition_id, &batch_id).await {
                         Ok(_) => {
-                            log::info!("✅ 成功恢复通道定义 {} 的批次关联: {}", tag, batch_id);
                             recovered_count += 1;
                         }
                         Err(e) => {

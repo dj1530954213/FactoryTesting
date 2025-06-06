@@ -101,7 +101,12 @@ impl IPersistenceService for MockPersistenceService {
         self.simulate_delay().await;
         Ok(None)
     }
-    
+
+    async fn load_all_test_instances(&self) -> AppResult<Vec<ChannelTestInstance>> {
+        self.simulate_delay().await;
+        Ok(vec![])
+    }
+
     async fn load_test_instances_by_batch(&self, _batch_id: &str) -> AppResult<Vec<ChannelTestInstance>> {
         self.simulate_delay().await;
         Ok(vec![])

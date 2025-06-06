@@ -120,7 +120,7 @@ impl AppState {
             ChannelStateManager::new(persistence_service.clone())
         );
 
-        // 创建PLC服务
+        // 创建PLC服务（暂时使用原来的方式，确保应用能启动）
         let test_rig_config = crate::services::infrastructure::plc::ModbusConfig {
             ip_address: "192.168.1.100".to_string(),
             port: 502,
@@ -166,6 +166,13 @@ impl AppState {
             ChannelAllocationService::new()
         );
 
+        // 创建测试PLC配置服务
+        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
+            TestPlcConfigService::new(persistence_service.clone())
+        );
+
+
+
         // 创建测试协调服务
         let test_coordination_service: Arc<dyn ITestCoordinationService> = Arc::new(
             TestCoordinationService::new(
@@ -174,6 +181,7 @@ impl AppState {
                 persistence_service.clone(),
                 event_publisher,
                 channel_allocation_service.clone(),
+                test_plc_config_service.clone(),
             )
         );
 
@@ -186,15 +194,15 @@ impl AppState {
             )?
         );
 
-        // 创建测试PLC配置服务
-        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
-            TestPlcConfigService::new(persistence_service.clone())
-        );
-
         // 创建PLC连接管理器
         let plc_connection_manager = Arc::new(PlcConnectionManager::new(
             test_plc_config_service.clone(),
         ));
+
+        // 设置全局PLC连接管理器，让ModbusPlcService能够访问
+        crate::services::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
+
+
 
         Ok(Self {
             test_coordination_service,
@@ -384,7 +392,8 @@ pub async fn create_test_data(
         def.power_supply_type = "有源".to_string();
         def.range_lower_limit = Some(0.0);
         def.range_upper_limit = Some(100.0);
-        def.test_rig_plc_address = Some(format!("DB2.DBD{}", i * 4));
+        // 不再生成虚拟地址
+        def.test_rig_plc_address = None;
         definitions.push(def);
     }
 
@@ -632,11 +641,10 @@ pub async fn get_instance_state(
 #[tauri::command]
 pub async fn update_test_result(
     state: State<'_, AppState>,
-    instance_id: String,
     outcome: RawTestOutcome,
 ) -> Result<(), String> {
     state.channel_state_manager
-        .update_test_result(&instance_id, outcome)
+        .update_test_result(outcome)
         .await
         .map_err(|e| e.to_string())
 }

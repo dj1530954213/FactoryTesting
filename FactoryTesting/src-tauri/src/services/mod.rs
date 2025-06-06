@@ -34,7 +34,7 @@ pub use domain::{
     IChannelStateManager, ChannelStateManager,
     ITestExecutionEngine, TestExecutionEngine, TaskStatus, TestTask,
     ISpecificTestStepExecutor, AIHardPointPercentExecutor,
-    AIAlarmTestExecutor, DIStateReadExecutor
+    AIAlarmTestExecutor, DIHardPointTestExecutor, DOHardPointTestExecutor, AOHardPointTestExecutor
 };
 
 // 重新导出通道分配服务

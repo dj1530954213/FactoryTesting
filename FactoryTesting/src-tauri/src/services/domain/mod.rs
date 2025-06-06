@@ -19,10 +19,12 @@ pub mod plc_connection_manager;
 // 重新导出常用类型
 pub use channel_state_manager::{IChannelStateManager, ChannelStateManager};
 pub use specific_test_executors::{
-    ISpecificTestStepExecutor, 
-    AIHardPointPercentExecutor, 
-    AIAlarmTestExecutor, 
-    DIStateReadExecutor
+    ISpecificTestStepExecutor,
+    AIHardPointPercentExecutor,
+    AIAlarmTestExecutor,
+    DIHardPointTestExecutor,
+    DOHardPointTestExecutor,
+    AOHardPointTestExecutor
 };
 pub use test_execution_engine::{
     ITestExecutionEngine,

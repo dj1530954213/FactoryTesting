@@ -254,8 +254,8 @@ export class TauriApiService {
   /**
    * 更新测试结果
    */
-  updateTestResult(instanceId: string, outcome: RawTestOutcome): Observable<void> {
-    return from(invoke<void>('update_test_result', { instanceId, outcome }));
+  updateTestResult(outcome: RawTestOutcome): Observable<void> {
+    return from(invoke<void>('update_test_result', { outcome }));
   }
 
   // ============================================================================
@@ -315,17 +315,9 @@ export class TauriApiService {
    * 获取仪表盘批次列表 - 从数据库获取所有批次并标识当前会话批次
    */
   getDashboardBatchList(): Observable<DashboardBatchInfo[]> {
-    console.log('📊 [TAURI_API] 调用获取仪表盘批次列表API');
     return from(invoke<DashboardBatchInfo[]>('get_dashboard_batch_list')).pipe(
       tap(dashboardBatches => {
-        console.log('✅ [TAURI_API] 成功获取仪表盘批次列表');
-        console.log('✅ [TAURI_API] 总批次数量:', dashboardBatches.length);
-
-        const currentSessionCount = dashboardBatches.filter(b => b.is_current_session).length;
-        const historicalCount = dashboardBatches.length - currentSessionCount;
-
-        console.log('✅ [TAURI_API] 当前会话批次:', currentSessionCount);
-        console.log('✅ [TAURI_API] 历史批次:', historicalCount);
+        // 静默获取数据，不输出日志
 
         // 🔍 调试站场信息 - 修复：由于后端使用了 #[serde(flatten)]，直接访问字段
         dashboardBatches.forEach((dashboardBatch, index) => {

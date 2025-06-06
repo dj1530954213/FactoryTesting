@@ -34,7 +34,7 @@ pub struct PlcConnection {
 
 /// PLC连接管理器
 pub struct PlcConnectionManager {
-    connections: Arc<RwLock<HashMap<String, PlcConnection>>>,
+    pub connections: Arc<RwLock<HashMap<String, PlcConnection>>>,
     test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     heartbeat_interval: Duration,
     reconnect_interval: Duration,
@@ -337,18 +337,14 @@ impl PlcConnectionManager {
         };
         
         if let Some(context_arc) = context {
-            debug!("💓 检查PLC心跳: {}", config_name);
-            
             // 尝试读取线圈03001 (地址3000，因为Modbus地址从0开始)
             let heartbeat_result = {
                 let mut context_guard = context_arc.lock().await;
                 context_guard.read_coils(3000, 1).await
             };
-            
+
             match heartbeat_result {
                 Ok(_) => {
-                    debug!("✅ PLC心跳正常: {}", config_name);
-                    
                     let mut connections_write = connections.write().await;
                     if let Some(connection) = connections_write.get_mut(&connection_id) {
                         connection.last_heartbeat = Some(chrono::Utc::now());
@@ -357,7 +353,7 @@ impl PlcConnectionManager {
                 }
                 Err(e) => {
                     warn!("💔 PLC心跳失败: {} - {}", config_name, e);
-                    
+
                     let mut connections_write = connections.write().await;
                     if let Some(connection) = connections_write.get_mut(&connection_id) {
                         connection.state = PlcConnectionState::Reconnecting;

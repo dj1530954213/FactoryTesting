@@ -135,6 +135,7 @@ dependencies = [
  "jsonwebtoken",
  "log",
  "mockall",
+ "once_cell",
  "printpdf",
  "rand 0.8.5",
  "rust_xlsxwriter",

@@ -4,7 +4,7 @@ import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Subscription, interval } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
-import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo, DeleteBatchResponse } from '../../models';
+import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo, DeleteBatchResponse, OVERALL_TEST_STATUS_LABELS } from '../../models';
 
 // NG-ZORRO 组件导入
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -204,25 +204,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.tauriApi.getAllChannelDefinitions().toPromise()
       ]);
 
-      console.log('📊 [DASHBOARD] 获取到的仪表盘批次数据:', dashboardBatches);
-
       this.systemStatus = systemStatus || null;
       this.totalChannels = allChannels?.length || 0;
       this.totalBatches = dashboardBatches?.length || 0;
 
-      // 🔧 修复：由于后端使用了 #[serde(flatten)]，dashboardBatches 本身就是展平的数据
+      // 由于后端使用了 #[serde(flatten)]，dashboardBatches 本身就是展平的数据
       // 不需要提取 batch_info，直接使用 dashboardBatches
       const allBatches = dashboardBatches?.filter(db => {
         // 确保 db 存在且有必要的字段
         if (!db || !db.batch_id) {
-          console.warn('📊 [DASHBOARD] 发现无效的批次数据:', db);
+          console.warn('发现无效的批次数据:', db);
           return false;
         }
         return true;
       }) || [];
-
-      console.log('📊 [DASHBOARD] 提取的批次数据:', allBatches);
-      console.log('📊 [DASHBOARD] 原始仪表盘批次数据:', dashboardBatches);
 
       // 计算待测批次数量
       this.pendingBatches = allBatches.filter(batch =>
@@ -248,11 +243,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
                typeof batch.batch_id === 'string';
       });
 
-      console.log('📊 [DASHBOARD] 有效批次数量:', validBatches.length);
-
       this.recentBatches = validBatches
         .sort((a: DashboardBatchInfo, b: DashboardBatchInfo) => {
-          // 🔧 修复：使用正确的类型，因为现在 validBatches 是 DashboardBatchInfo[]
+          // 使用正确的类型，因为现在 validBatches 是 DashboardBatchInfo[]
           const timeA = a.creation_time ? new Date(a.creation_time).getTime() : 0;
           const timeB = b.creation_time ? new Date(b.creation_time).getTime() : 0;
           return timeB - timeA; // 最新的在前
@@ -260,12 +253,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         .slice(0, 10)
         .map(batch => {
           try {
-            console.log('📊 [DASHBOARD] 处理批次:', batch.batch_id, '站场:', batch.station_name, '当前会话:', batch.is_current_session);
-
-            // 🔧 修复：直接使用 batch 的会话信息，因为它本身就是 DashboardBatchInfo
+            // 直接使用 batch 的会话信息，因为它本身就是 DashboardBatchInfo
             const isCurrentSession = batch.is_current_session || false;
 
-            // 🔧 安全地获取站场信息
+            // 安全地获取站场信息
             const stationName = batch.station_name || '未知站场';
 
           return {
@@ -301,33 +292,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
             updated_at: batch.updated_at
           };
           } catch (error) {
-            console.error('📊 [DASHBOARD] 处理批次数据时发生错误:', error, '批次:', batch);
+            console.error('处理批次数据时发生错误:', error, '批次:', batch);
             return null;
           }
         })
-        .filter(batch => batch !== null); // 🔧 过滤掉null值
-
-      // 🔍 调试：检查站场信息
-      console.log('📊 [DASHBOARD] 最终的recentBatches数组:', this.recentBatches);
-      this.recentBatches.forEach((batch, index) => {
-        console.log(`📊 [DASHBOARD] 批次${index + 1}:`, {
-          id: batch.id,
-          station: batch.station,
-          station_name: batch.station_name,
-          isCurrentSession: batch.isCurrentSession,
-          batch对象: batch
-        });
-      });
+        .filter(batch => batch !== null); // 过滤掉null值
 
       // 检查是否有导入的数据
       this.hasImportedData = this.totalBatches > 0;
 
-      console.log('📊 [DASHBOARD] 仪表盘数据加载完成');
-      console.log('📊 [DASHBOARD] 总批次数:', this.totalBatches);
-      console.log('📊 [DASHBOARD] 最近批次数:', this.recentBatches.length);
-
     } catch (error) {
-      console.error('📊 [DASHBOARD] 加载仪表板数据失败:', error);
+      console.error('加载仪表板数据失败:', error);
       this.error = '加载数据失败，请稍后重试';
     } finally {
       this.loading = false;
@@ -561,7 +536,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return this.performBatchDeletion(batch);
       },
       nzOnCancel: () => {
-        console.log('🚫 [DELETE_BATCH] 用户取消删除操作');
+        // 用户取消删除操作
       }
     });
 
@@ -644,7 +619,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // 延迟刷新数据，让用户看到即时的视觉反馈
         setTimeout(async () => {
           await this.loadDashboardData();
-          console.log('✅ [DELETE_BATCH] 仪表盘数据已刷新');
         }, 500);
 
       } else {
@@ -654,7 +628,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           `❌ 删除批次失败: ${errorMessage}`,
           { nzDuration: 6000 }
         );
-        console.error('❌ [DELETE_BATCH] 删除失败:', errorMessage);
+        console.error('删除失败:', errorMessage);
       }
 
     } catch (error) {
@@ -839,15 +813,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return result;
     }
 
-    // 处理 OverallTestStatus 枚举
-    const overallStatusMap: { [key in OverallTestStatus]: string } = {
-      [OverallTestStatus.NotTested]: '未测试',
-      [OverallTestStatus.HardPointTesting]: '硬点测试中',
-      [OverallTestStatus.AlarmTesting]: '报警测试中',
-      [OverallTestStatus.TestCompletedPassed]: '测试完成并通过',
-      [OverallTestStatus.TestCompletedFailed]: '测试完成并失败'
-    };
-    const result = overallStatusMap[status] || '未知状态';
+    // 使用全局状态标签映射
+    const result = OVERALL_TEST_STATUS_LABELS[status] || '未知状态';
     console.log('🔍 [getBatchStatusText] 枚举状态转换结果:', result);
     return result;
   }
@@ -874,13 +841,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return result;
     }
 
-    // 处理 OverallTestStatus 枚举
+    // 使用状态颜色映射
     const overallColorMap: { [key in OverallTestStatus]: string } = {
       [OverallTestStatus.NotTested]: '#d9d9d9',
+      [OverallTestStatus.Skipped]: '#8c8c8c',
+      [OverallTestStatus.WiringConfirmationRequired]: '#faad14',
+      [OverallTestStatus.WiringConfirmed]: '#1890ff',
+      [OverallTestStatus.HardPointTestInProgress]: '#722ed1',
       [OverallTestStatus.HardPointTesting]: '#1890ff',
+      [OverallTestStatus.HardPointTestCompleted]: '#13c2c2',
+      [OverallTestStatus.ManualTestInProgress]: '#722ed1',
+      [OverallTestStatus.ManualTesting]: '#722ed1',
       [OverallTestStatus.AlarmTesting]: '#fa8c16',
       [OverallTestStatus.TestCompletedPassed]: '#52c41a',
-      [OverallTestStatus.TestCompletedFailed]: '#ff4d4f'
+      [OverallTestStatus.TestCompletedFailed]: '#ff4d4f',
+      [OverallTestStatus.Retesting]: '#faad14'
     };
     const result = overallColorMap[status] || '#d9d9d9';
     console.log('🔍 [getBatchStatusColor] 枚举状态颜色结果:', result);

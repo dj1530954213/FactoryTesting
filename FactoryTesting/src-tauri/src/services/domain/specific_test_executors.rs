@@ -4,13 +4,13 @@
 
 use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem,
-    AnalogReadingPoint, ModuleType, PointDataType, SubTestStatus
+    AnalogReadingPoint, ModuleType, SubTestStatus
 };
 use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use chrono::Utc;
-use log::{debug, info, warn};
+use log::{debug, info, warn, error};
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -55,6 +55,14 @@ impl AIHardPointPercentExecutor {
         }
     }
 
+    /// 获取通道对应的真实测试台架地址
+    /// 从通道实例中获取已分配的测试PLC通道地址
+    fn get_test_rig_address_for_channel(&self, instance: &ChannelTestInstance) -> AppResult<String> {
+        instance.test_plc_communication_address.as_ref()
+            .ok_or_else(|| AppError::validation_error("测试实例未分配测试PLC通道地址"))
+            .map(|addr| addr.clone())
+    }
+
     /// 执行AI点的完整硬点测试流程
     /// 包括多点测试、线性度检查、报警功能验证等
     async fn execute_complete_ai_hardpoint_test(
@@ -67,7 +75,9 @@ impl AIHardPointPercentExecutor {
         let mut readings = Vec::new();
         let test_percentages = vec![0.0, 0.25, 0.5, 0.75, 1.0];
 
-        info!("开始AI硬点测试: {}", instance.instance_id);
+        let is_ai_test = matches!(definition.module_type, ModuleType::AI | ModuleType::AINone);
+        let test_type = if is_ai_test { "AI硬点测试" } else { "AO硬点测试" };
+        info!("开始{}: {}", test_type, instance.instance_id);
 
         // 计算量程信息
         let range_lower = definition.range_lower_limit.unwrap_or(0.0);
@@ -86,13 +96,16 @@ impl AIHardPointPercentExecutor {
         for percentage in test_percentages {
             let eng_value = range_lower + (range_span * percentage);
 
-            // 设置测试台架输出值
-            if let Some(test_rig_address) = &definition.test_rig_plc_address {
-                test_rig_plc.write_float32(test_rig_address, eng_value).await
-                    .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
+            // 获取真实的测试台架地址
+            let test_rig_address = self.get_test_rig_address_for_channel(instance)?;
 
-                // 等待信号稳定
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            // 设置测试台架输出值(直接输出0-100因为在测试PLC中直接设定了工程量为0-100)
+            let test_rig_output_value = percentage * 100.0;
+            test_rig_plc.write_float32(&test_rig_address, test_rig_output_value).await
+                .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
+
+                // 等待信号稳定时间 - 统一设置为3秒
+                tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
                 // 读取被测PLC的实际值
                 let actual_raw = target_plc.read_float32(&definition.plc_communication_address).await
@@ -144,14 +157,6 @@ impl AIHardPointPercentExecutor {
                         details: HashMap::new(),
                     });
                 }
-            } else {
-                warn!("AI点缺少测试台架地址配置: {}", definition.tag);
-                return Ok(RawTestOutcome::failure(
-                    instance.instance_id.clone(),
-                    SubTestItem::HardPoint,
-                    "缺少测试台架地址配置".to_string(),
-                ));
-            }
         }
 
         // 检查线性度（可选的高级检查）
@@ -227,8 +232,9 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
     }
 
     fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
-        matches!(definition.module_type, ModuleType::AI | ModuleType::AINone) &&
-        definition.test_rig_plc_address.is_some()
+        // AI/AO点位都支持硬点测试，不再依赖虚拟的test_rig_plc_address字段
+        // 真实的测试台架地址将在执行时通过通道分配服务获取
+        matches!(definition.module_type, ModuleType::AI | ModuleType::AINone | ModuleType::AO | ModuleType::AONone)
     }
 }
 
@@ -321,11 +327,9 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
 
         plc_service_target.write_float32(&set_address, alarm_set_value).await?;
 
-        // 步骤2: 等待报警触发
-        if self.trigger_delay_ms > 0 {
-            debug!("[{}] 等待报警触发 {} ms", self.executor_name(), self.trigger_delay_ms);
-            tokio::time::sleep(tokio::time::Duration::from_millis(self.trigger_delay_ms)).await;
-        }
+        // 步骤2: 等待报警触发 - 统一设置为3秒
+        debug!("[{}] 等待报警触发 3000 ms", self.executor_name());
+        tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
         // 步骤3: 读取报警反馈状态
         debug!("[{}] 读取报警反馈状态: {}", self.executor_name(), feedback_address);
@@ -348,11 +352,9 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
               self.executor_name(), set_address, safe_value);
         plc_service_target.write_float32(&set_address, safe_value).await?;
 
-        // 步骤5: 等待报警复位
-        if self.reset_delay_ms > 0 {
-            debug!("[{}] 等待报警复位 {} ms", self.executor_name(), self.reset_delay_ms);
-            tokio::time::sleep(tokio::time::Duration::from_millis(self.reset_delay_ms)).await;
-        }
+        // 步骤5: 等待报警复位 - 统一设置为3秒
+        debug!("[{}] 等待报警复位 3000 ms", self.executor_name());
+        tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
         // 步骤6: 确认报警已复位
         let alarm_reset = !plc_service_target.read_bool(&feedback_address).await?;
@@ -407,99 +409,444 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
     }
 }
 
-/// DI状态读取执行器
+/// DI硬点测试执行器
 ///
-/// 读取DI点的状态并验证
-pub struct DIStateReadExecutor {
-    /// 期望的状态值
-    pub expected_state: Option<bool>,
-    /// 读取延时 (毫秒)
-    pub read_delay_ms: u64,
+/// 执行DI点的完整硬点测试：测试PLC的DO通道输出 → 被测PLC的DI通道检测
+/// 测试步骤：
+/// 1. 测试PLC DO通道输出低电平 → 检查被测PLC DI通道显示"断开"
+/// 2. 等待信号稳定
+/// 3. 测试PLC DO通道输出高电平 → 检查被测PLC DI通道显示"接通"
+/// 4. 等待信号稳定
+/// 5. 测试PLC DO通道输出低电平 → 检查被测PLC DI通道显示"断开"
+pub struct DIHardPointTestExecutor {
+    /// 测试步骤间隔时间 (毫秒)
+    pub step_interval_ms: u64,
 }
 
-impl DIStateReadExecutor {
-    /// 创建新的DI状态读取执行器
-    pub fn new(expected_state: Option<bool>, read_delay_ms: u64) -> Self {
+impl DIHardPointTestExecutor {
+    /// 创建新的DI硬点测试执行器
+    pub fn new(step_interval_ms: u64) -> Self {
         Self {
-            expected_state,
-            read_delay_ms,
+            step_interval_ms,
         }
+    }
+
+    /// 获取测试PLC对应的DO通道地址
+    /// 从通道实例中获取已分配的测试PLC通道地址
+    fn get_test_rig_do_address(&self, instance: &ChannelTestInstance) -> AppResult<String> {
+        instance.test_plc_communication_address.as_ref()
+            .ok_or_else(|| AppError::validation_error("测试实例未分配测试PLC通道地址"))
+            .map(|addr| addr.clone())
     }
 }
 
 #[async_trait]
-impl ISpecificTestStepExecutor for DIStateReadExecutor {
+impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
     async fn execute(
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
-        _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
+        plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行DI状态读取测试 - 实例: {}",
+        debug!("[{}] 开始执行DI硬点测试 - 实例: {}",
                self.executor_name(), instance.instance_id);
 
-        let target_address = &definition.plc_communication_address;
         let start_time = Utc::now();
+        let test_rig_do_address = self.get_test_rig_do_address(instance)?;
+        let target_di_address = &definition.plc_communication_address;
 
-        // 等待读取延时
-        if self.read_delay_ms > 0 {
-            debug!("[{}] 等待读取延时 {} ms", self.executor_name(), self.read_delay_ms);
-            tokio::time::sleep(tokio::time::Duration::from_millis(self.read_delay_ms)).await;
+        info!("[{}] DI硬点测试开始 - 测试PLC DO地址: {}, 被测PLC DI地址: {}",
+              self.executor_name(), test_rig_do_address, target_di_address);
+
+        // 步骤1: 测试PLC DO输出低电平
+        info!("[{}] 步骤1: 设置测试PLC DO为低电平", self.executor_name());
+        plc_service_test_rig.write_bool(&test_rig_do_address, false).await
+            .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO低电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤2: 检查被测PLC DI是否显示"断开"
+        info!("[{}] 步骤2: 检查被测PLC DI状态(期望:断开)", self.executor_name());
+        let di_state_1 = plc_service_target.read_bool(target_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+
+        if di_state_1 {
+            let error_msg = format!("DI硬点测试失败: DO低电平时DI应为断开(false)，实际为接通(true)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
         }
 
-        // 读取DI状态
-        info!("[{}] 读取DI状态: {}", self.executor_name(), target_address);
-        let actual_state = plc_service_target.read_bool(target_address).await?;
+        // 步骤3: 测试PLC DO输出高电平
+        info!("[{}] 步骤3: 设置测试PLC DO为高电平", self.executor_name());
+        plc_service_test_rig.write_bool(&test_rig_do_address, true).await
+            .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO高电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤4: 检查被测PLC DI是否显示"接通"
+        info!("[{}] 步骤4: 检查被测PLC DI状态(期望:接通)", self.executor_name());
+        let di_state_2 = plc_service_target.read_bool(target_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+
+        if !di_state_2 {
+            let error_msg = format!("DI硬点测试失败: DO高电平时DI应为接通(true)，实际为断开(false)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
+        }
+
+        // 步骤5: 测试PLC DO输出低电平(复位)
+        info!("[{}] 步骤5: 复位测试PLC DO为低电平", self.executor_name());
+        plc_service_test_rig.write_bool(&test_rig_do_address, false).await
+            .map_err(|e| AppError::plc_communication_error(format!("复位测试PLC DO低电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤6: 最终检查被测PLC DI是否显示"断开"
+        info!("[{}] 步骤6: 最终检查被测PLC DI状态(期望:断开)", self.executor_name());
+        let di_state_3 = plc_service_target.read_bool(target_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+
+        if di_state_3 {
+            let error_msg = format!("DI硬点测试失败: 复位后DI应为断开(false)，实际为接通(true)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
+        }
 
         let end_time = Utc::now();
+        let success_msg = format!("DI硬点测试成功: 低→高→低电平切换，DI状态正确响应");
+        info!("[{}] {}", self.executor_name(), success_msg);
 
-        // 判断测试结果
-        let is_success = match self.expected_state {
-            Some(expected) => actual_state == expected,
-            None => true, // 如果没有期望值，只要能读取到就算成功
-        };
-
-        let message = match self.expected_state {
-            Some(expected) => {
-                if is_success {
-                    format!("DI状态读取通过 - 期望: {}, 实际: {}", expected, actual_state)
-                } else {
-                    format!("DI状态读取失败 - 期望: {}, 实际: {}", expected, actual_state)
-                }
-            },
-            None => format!("DI状态读取完成 - 当前状态: {}", actual_state),
-        };
-
-        info!("[{}] {}", self.executor_name(), message);
-
-        // 构造测试结果
-        let mut outcome = RawTestOutcome::new(
+        // 构造成功的测试结果
+        let mut outcome = RawTestOutcome::success(
             instance.instance_id.clone(),
-            self.item_type(),
-            is_success,
+            SubTestItem::HardPoint,
         );
-
-        outcome.message = Some(message);
+        outcome.message = Some(success_msg);
         outcome.start_time = start_time;
         outcome.end_time = end_time;
-        outcome.raw_value_read = Some(if actual_state { "1" } else { "0" }.to_string());
-        outcome.eng_value_calculated = Some(if actual_state { "true" } else { "false" }.to_string());
+        outcome.raw_value_read = Some(format!("状态序列: {} → {} → {}", di_state_1, di_state_2, di_state_3));
 
         Ok(outcome)
     }
 
     fn item_type(&self) -> SubTestItem {
-        SubTestItem::StateDisplay
+        SubTestItem::HardPoint
     }
 
     fn executor_name(&self) -> &'static str {
-        "DIStateReadExecutor"
+        "DIHardPointTestExecutor"
     }
 
     fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
-        matches!(definition.module_type, ModuleType::DI | ModuleType::DINone) &&
-        matches!(definition.data_type, PointDataType::Bool)
+        matches!(definition.module_type, ModuleType::DI | ModuleType::DINone)
+    }
+}
+
+/// DO硬点测试执行器
+///
+/// 执行DO点的完整硬点测试：被测PLC的DO通道输出 → 测试PLC的DI通道检测
+/// 测试步骤：
+/// 1. 被测PLC DO通道输出低电平 → 检查测试PLC DI通道显示"断开"
+/// 2. 等待信号稳定
+/// 3. 被测PLC DO通道输出高电平 → 检查测试PLC DI通道显示"接通"
+/// 4. 等待信号稳定
+/// 5. 被测PLC DO通道输出低电平 → 检查测试PLC DI通道显示"断开"
+pub struct DOHardPointTestExecutor {
+    /// 测试步骤间隔时间 (毫秒)
+    pub step_interval_ms: u64,
+}
+
+impl DOHardPointTestExecutor {
+    /// 创建新的DO硬点测试执行器
+    pub fn new(step_interval_ms: u64) -> Self {
+        Self {
+            step_interval_ms,
+        }
+    }
+
+    /// 获取测试PLC对应的DI通道地址
+    /// 从通道实例中获取已分配的测试PLC通道地址
+    fn get_test_rig_di_address(&self, instance: &ChannelTestInstance) -> AppResult<String> {
+        instance.test_plc_communication_address.as_ref()
+            .ok_or_else(|| AppError::validation_error("测试实例未分配测试PLC通道地址"))
+            .map(|addr| addr.clone())
+    }
+}
+
+#[async_trait]
+impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
+    async fn execute(
+        &self,
+        instance: &ChannelTestInstance,
+        definition: &ChannelPointDefinition,
+        plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
+        plc_service_target: Arc<dyn IPlcCommunicationService>,
+    ) -> AppResult<RawTestOutcome> {
+        debug!("[{}] 开始执行DO硬点测试 - 实例: {}",
+               self.executor_name(), instance.instance_id);
+
+        let start_time = Utc::now();
+        let test_rig_di_address = self.get_test_rig_di_address(instance)?;
+        let target_do_address = &definition.plc_communication_address;
+
+        info!("[{}] DO硬点测试开始 - 被测PLC DO地址: {}, 测试PLC DI地址: {}",
+              self.executor_name(), target_do_address, test_rig_di_address);
+
+        // 步骤1: 被测PLC DO输出低电平
+        info!("[{}] 步骤1: 设置被测PLC DO为低电平", self.executor_name());
+        plc_service_target.write_bool(target_do_address, false).await
+            .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO低电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤2: 检查测试PLC DI是否显示"断开"
+        info!("[{}] 步骤2: 检查测试PLC DI状态(期望:断开)", self.executor_name());
+        let di_state_1 = plc_service_test_rig.read_bool(&test_rig_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+
+        if di_state_1 {
+            let error_msg = format!("DO硬点测试失败: DO低电平时测试PLC DI应为断开(false)，实际为接通(true)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
+        }
+
+        // 步骤3: 被测PLC DO输出高电平
+        info!("[{}] 步骤3: 设置被测PLC DO为高电平", self.executor_name());
+        plc_service_target.write_bool(target_do_address, true).await
+            .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO高电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤4: 检查测试PLC DI是否显示"接通"
+        info!("[{}] 步骤4: 检查测试PLC DI状态(期望:接通)", self.executor_name());
+        let di_state_2 = plc_service_test_rig.read_bool(&test_rig_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+
+        if !di_state_2 {
+            let error_msg = format!("DO硬点测试失败: DO高电平时测试PLC DI应为接通(true)，实际为断开(false)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
+        }
+
+        // 步骤5: 被测PLC DO输出低电平(复位)
+        info!("[{}] 步骤5: 复位被测PLC DO为低电平", self.executor_name());
+        plc_service_target.write_bool(target_do_address, false).await
+            .map_err(|e| AppError::plc_communication_error(format!("复位被测PLC DO低电平失败: {}", e)))?;
+
+        // 等待信号稳定
+        tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+        // 步骤6: 最终检查测试PLC DI是否显示"断开"
+        info!("[{}] 步骤6: 最终检查测试PLC DI状态(期望:断开)", self.executor_name());
+        let di_state_3 = plc_service_test_rig.read_bool(&test_rig_di_address).await
+            .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+
+        if di_state_3 {
+            let error_msg = format!("DO硬点测试失败: 复位后测试PLC DI应为断开(false)，实际为接通(true)");
+            warn!("[{}] {}", self.executor_name(), error_msg);
+            return Ok(RawTestOutcome::failure(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+                error_msg,
+            ));
+        }
+
+        let end_time = Utc::now();
+        let success_msg = format!("DO硬点测试成功: 低→高→低电平切换，测试PLC DI状态正确响应");
+        info!("[{}] {}", self.executor_name(), success_msg);
+
+        // 构造成功的测试结果
+        let mut outcome = RawTestOutcome::success(
+            instance.instance_id.clone(),
+            SubTestItem::HardPoint,
+        );
+        outcome.message = Some(success_msg);
+        outcome.start_time = start_time;
+        outcome.end_time = end_time;
+        outcome.raw_value_read = Some(format!("状态序列: {} → {} → {}", di_state_1, di_state_2, di_state_3));
+
+        Ok(outcome)
+    }
+
+    fn item_type(&self) -> SubTestItem {
+        SubTestItem::HardPoint
+    }
+
+    fn executor_name(&self) -> &'static str {
+        "DOHardPointTestExecutor"
+    }
+
+    fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
+        matches!(definition.module_type, ModuleType::DO | ModuleType::DONone)
+    }
+}
+
+/// AO硬点测试执行器
+///
+/// 执行AO点的完整硬点测试：被测PLC的AO通道输出 → 测试PLC的AI通道采集
+/// 测试步骤：
+/// 1. 被测PLC AO按序输出: 0%, 25%, 50%, 75%, 100%
+/// 2. 测试PLC AI采集对应数值
+/// 3. 验证采集值与期望值的偏差在允许范围内
+pub struct AOHardPointTestExecutor {
+    /// 测试步骤间隔时间 (毫秒)
+    pub step_interval_ms: u64,
+}
+
+impl AOHardPointTestExecutor {
+    /// 创建新的AO硬点测试执行器
+    pub fn new(step_interval_ms: u64) -> Self {
+        Self {
+            step_interval_ms,
+        }
+    }
+
+    /// 获取测试PLC对应的AI通道地址
+    /// 从通道实例中获取已分配的测试PLC通道地址
+    fn get_test_rig_ai_address(&self, instance: &ChannelTestInstance) -> AppResult<String> {
+        instance.test_plc_communication_address.as_ref()
+            .ok_or_else(|| AppError::validation_error("测试实例未分配测试PLC通道地址"))
+            .map(|addr| addr.clone())
+    }
+}
+
+#[async_trait]
+impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
+    async fn execute(
+        &self,
+        instance: &ChannelTestInstance,
+        definition: &ChannelPointDefinition,
+        plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
+        plc_service_target: Arc<dyn IPlcCommunicationService>,
+    ) -> AppResult<RawTestOutcome> {
+        debug!("[{}] 开始执行AO硬点测试 - 实例: {}",
+               self.executor_name(), instance.instance_id);
+
+        let start_time = Utc::now();
+        let test_rig_ai_address = self.get_test_rig_ai_address(instance)?;
+        let target_ao_address = &definition.plc_communication_address;
+
+        // 获取量程信息
+        let range_lower = definition.range_lower_limit.unwrap_or(0.0);
+        let range_upper = definition.range_upper_limit.unwrap_or(100.0);
+
+        if range_upper <= range_lower {
+            return Err(AppError::validation_error(
+                format!("无效的量程范围: {} - {}", range_lower, range_upper)
+            ));
+        }
+
+        info!("[{}] AO硬点测试开始 - 被测PLC AO地址: {}, 测试PLC AI地址: {}, 量程: {}-{}",
+              self.executor_name(), target_ao_address, test_rig_ai_address, range_lower, range_upper);
+
+        let test_percentages = vec![0.0, 0.25, 0.5, 0.75, 1.0];
+        let mut readings = Vec::new();
+
+        for (step, percentage) in test_percentages.iter().enumerate() {
+            let output_value = range_lower + (range_upper - range_lower) * percentage;
+
+            info!("[{}] 步骤{}: 设置被测PLC AO输出 {}% = {:.3}",
+                  self.executor_name(), step + 1, percentage * 100.0, output_value);
+
+            // 设置被测PLC AO输出
+            plc_service_target.write_float32(target_ao_address, output_value).await
+                .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC AO输出失败: {}", e)))?;
+
+            // 等待信号稳定
+            tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
+
+            // 读取测试PLC AI采集值
+            let read_value = plc_service_test_rig.read_float32(&test_rig_ai_address).await
+                .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC AI值失败: {}", e)))?;
+
+            // 计算偏差
+            let deviation = ((read_value - output_value) / (range_upper - range_lower) * 100.0).abs();
+            let is_within_tolerance = deviation <= 5.0; // 5%偏差容限
+
+            info!("[{}] 步骤{}: 期望值={:.3}, 实际值={:.3}, 偏差={:.2}%, 结果={}",
+                  self.executor_name(), step + 1, output_value, read_value, deviation,
+                  if is_within_tolerance { "通过" } else { "失败" });
+
+            readings.push((output_value, read_value, deviation, is_within_tolerance));
+
+            if !is_within_tolerance {
+                let error_msg = format!("AO硬点测试失败: 步骤{}偏差过大 {:.2}% > 5%", step + 1, deviation);
+                warn!("[{}] {}", self.executor_name(), error_msg);
+                return Ok(RawTestOutcome::failure(
+                    instance.instance_id.clone(),
+                    SubTestItem::HardPoint,
+                    error_msg,
+                ));
+            }
+        }
+
+        let end_time = Utc::now();
+        let success_msg = format!("AO硬点测试成功: 所有{}个测试点偏差均在5%以内", readings.len());
+        info!("[{}] {}", self.executor_name(), success_msg);
+
+        // 构造成功的测试结果
+        let mut outcome = RawTestOutcome::success(
+            instance.instance_id.clone(),
+            SubTestItem::HardPoint,
+        );
+        outcome.message = Some(success_msg);
+        outcome.start_time = start_time;
+        outcome.end_time = end_time;
+
+        // 转换读数为 AnalogReadingPoint 格式
+        let analog_readings: Vec<AnalogReadingPoint> = readings.iter().enumerate().map(|(i, (expected, actual, deviation, is_within_tolerance))| {
+            AnalogReadingPoint {
+                set_percentage: test_percentages[i],
+                set_value_eng: *expected,
+                expected_reading_raw: Some(*expected),
+                actual_reading_raw: Some(*actual),
+                actual_reading_eng: Some(*actual),
+                status: if *is_within_tolerance { SubTestStatus::Passed } else { SubTestStatus::Failed },
+                error_percentage: Some(*deviation),
+            }
+        }).collect();
+
+        outcome.readings = Some(analog_readings);
+
+        Ok(outcome)
+    }
+
+    fn item_type(&self) -> SubTestItem {
+        SubTestItem::HardPoint
+    }
+
+    fn executor_name(&self) -> &'static str {
+        "AOHardPointTestExecutor"
+    }
+
+    fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
+        matches!(definition.module_type, ModuleType::AO | ModuleType::AONone)
     }
 }
 
@@ -524,7 +871,8 @@ mod tests {
 
         definition.range_lower_limit = Some(0.0);
         definition.range_upper_limit = Some(100.0);
-        definition.test_rig_plc_address = Some("DB2.DBD0".to_string());
+        // 不再使用虚拟地址
+        definition.test_rig_plc_address = None;
         definition.sh_set_value = Some(80.0);
         definition.sh_set_point_address = Some("DB1.DBD4".to_string());
         definition.sh_feedback_address = Some("M0.0".to_string());

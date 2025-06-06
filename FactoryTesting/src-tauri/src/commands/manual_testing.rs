@@ -67,7 +67,7 @@ pub async fn execute_manual_sub_test_cmd(
     };
     
     // 更新测试实例状态
-    if let Err(e) = state.channel_state_manager.update_test_result(&args.instance_id, outcome.clone()).await {
+    if let Err(e) = state.channel_state_manager.update_test_result(outcome.clone()).await {
         error!("更新测试实例状态失败: {}", e);
         return Err(format!("更新测试实例状态失败: {}", e));
     }
@@ -245,22 +245,117 @@ pub async fn start_batch_auto_test_cmd(
 ) -> Result<BatchAutoTestResponse, String> {
     info!("🚀 开始批次自动测试: 批次ID={}", args.batch_id);
 
-    // TODO: 实现实际的批次自动测试逻辑
     // 1. 验证批次存在
-    // 2. 获取批次中的所有测试实例
-    // 3. 调用测试任务管理服务创建并启动测试任务
-    // 4. 根据并发配置并行执行硬点通道测试
-
-    // 目前返回模拟成功响应
-    warn!("⚠️ 批次自动测试功能尚未完全实现，返回模拟成功响应");
-
-    let response = BatchAutoTestResponse {
-        success: true,
-        message: Some("批次自动测试已启动 (模拟)".to_string()),
+    let batch_info = match state.persistence_service.load_batch_info(&args.batch_id).await {
+        Ok(Some(info)) => {
+            info!("✅ 找到批次信息: {}", info.batch_name);
+            info
+        },
+        Ok(None) => {
+            error!("❌ 批次不存在: {}", args.batch_id);
+            return Ok(BatchAutoTestResponse {
+                success: false,
+                message: Some(format!("批次不存在: {}", args.batch_id)),
+            });
+        },
+        Err(e) => {
+            error!("❌ 获取批次信息失败: {}", e);
+            return Ok(BatchAutoTestResponse {
+                success: false,
+                message: Some(format!("获取批次信息失败: {}", e)),
+            });
+        }
     };
 
-    info!("✅ 批次自动测试启动完成");
-    Ok(response)
+    // 2. 获取批次中的所有测试实例
+    let test_instances = match state.persistence_service.load_test_instances_by_batch(&args.batch_id).await {
+        Ok(instances) => {
+            info!("✅ 获取到 {} 个测试实例", instances.len());
+            if instances.is_empty() {
+                warn!("⚠️ 批次中没有测试实例");
+                return Ok(BatchAutoTestResponse {
+                    success: false,
+                    message: Some("批次中没有测试实例，请先进行批次分配".to_string()),
+                });
+            }
+            instances
+        },
+        Err(e) => {
+            error!("❌ 获取测试实例失败: {}", e);
+            return Ok(BatchAutoTestResponse {
+                success: false,
+                message: Some(format!("获取测试实例失败: {}", e)),
+            });
+        }
+    };
+
+    // 3. 获取通道定义
+    let mut channel_definitions = Vec::new();
+    for instance in &test_instances {
+        if let Some(definition) = state.channel_state_manager.get_channel_definition(&instance.definition_id).await {
+            channel_definitions.push(definition);
+        } else {
+            warn!("⚠️ 未找到通道定义: {}", instance.definition_id);
+        }
+    }
+
+    if channel_definitions.is_empty() {
+        error!("❌ 没有找到任何通道定义");
+        return Ok(BatchAutoTestResponse {
+            success: false,
+            message: Some("没有找到通道定义，请检查数据完整性".to_string()),
+        });
+    }
+
+    // 4. 直接启动已存在的批次测试
+    // 首先检查批次是否已经在活动批次中，如果不在，需要先加载到活动批次
+    match state.test_coordination_service.start_batch_testing(&args.batch_id).await {
+        Ok(()) => {
+            info!("✅ 批次自动测试启动成功: {}", args.batch_id);
+            Ok(BatchAutoTestResponse {
+                success: true,
+                message: Some(format!("批次 '{}' 的硬点通道自动测试已启动，共 {} 个测试点位",
+                                    batch_info.batch_name, test_instances.len())),
+            })
+        },
+        Err(e) => {
+            // 如果直接启动失败，可能是因为批次不在活动列表中，尝试加载现有批次
+            warn!("⚠️ 直接启动失败，尝试加载现有批次: {}", e);
+
+            // 使用新的加载现有批次方法
+            match state.test_coordination_service.load_existing_batch(&args.batch_id).await {
+                Ok(()) => {
+                    info!("✅ 批次已加载到活动列表，现在启动测试: {}", args.batch_id);
+
+                    // 再次尝试启动测试
+                    match state.test_coordination_service.start_batch_testing(&args.batch_id).await {
+                        Ok(()) => {
+                            info!("✅ 批次测试启动成功: {}", args.batch_id);
+                            Ok(BatchAutoTestResponse {
+                                success: true,
+                                message: Some(format!("批次 '{}' 的硬点通道自动测试已启动，共 {} 个测试点位",
+                                                    batch_info.batch_name, test_instances.len())),
+                            })
+                        },
+                        Err(e) => {
+                            error!("❌ 启动批次测试失败: {}", e);
+                            Ok(BatchAutoTestResponse {
+                                success: false,
+                                message: Some(format!("启动测试失败: {}", e)),
+                            })
+                        }
+                    }
+                },
+                Err(e) => {
+                    error!("❌ 加载批次失败: {}", e);
+                    Ok(BatchAutoTestResponse {
+                        success: false,
+                        message: Some(format!("加载批次失败: {}", e)),
+                    })
+                }
+            }
+        }
+    }
 }
 
 /// 获取PLC连接状态

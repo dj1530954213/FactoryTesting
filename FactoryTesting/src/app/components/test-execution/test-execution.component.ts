@@ -14,7 +14,8 @@ import {
   RawTestOutcome,
   ModuleType,
   PointDataType,
-  OverallTestStatus
+  OverallTestStatus,
+  OVERALL_TEST_STATUS_LABELS
 } from '../../models';
 
 interface TestExecutionData {
@@ -499,6 +500,10 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   currentInstanceCount = 0;
   autoStart = false;
 
+  // 枚举引用（用于模板）
+  readonly OverallTestStatus = OverallTestStatus;
+  readonly OVERALL_TEST_STATUS_LABELS = OVERALL_TEST_STATUS_LABELS;
+
   // 数据
   newBatch: Partial<TestBatchInfo> = {
     product_model: 'TestProduct_V1.0',
@@ -516,11 +521,15 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   private subscriptions: Subscription[] = [];
   private progressPolling: Subscription | null = null;
 
-  constructor(private tauriApi: TauriApiService) {}
+  constructor(
+    private tauriApi: TauriApiService,
+    private route: ActivatedRoute,
+    private router: Router
+  ) {}
 
   ngOnInit() {
     this.addLog('info', '测试执行组件已初始化');
-    
+
     // 订阅系统状态
     this.subscriptions.push(
       this.tauriApi.systemStatus$.subscribe(status => {
@@ -528,8 +537,22 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
       })
     );
 
-    // 加载当前会话的所有批次
-    this.loadSessionBatches();
+    // 检查URL参数中是否有批次ID
+    this.route.queryParams.subscribe(params => {
+      if (params['batchId']) {
+        this.currentBatchId = params['batchId'];
+        this.addLog('info', `从URL参数接收到批次ID: ${this.currentBatchId}`);
+        // 先加载会话批次，然后选择指定的批次
+        this.loadSessionBatches().then(() => {
+          if (this.currentBatchId) {
+            this.selectBatch(this.currentBatchId);
+          }
+        });
+      } else {
+        // 没有指定批次ID，正常加载所有批次
+        this.loadSessionBatches();
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -540,15 +563,19 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   // 加载当前会话的所有批次
-  loadSessionBatches() {
-    this.tauriApi.getSessionBatches().subscribe({
-      next: (batches) => {
-        this.sessionBatches = batches;
-        this.addLog('info', `加载了 ${batches.length} 个会话批次`);
-      },
-      error: (error) => {
-        this.addLog('error', `加载会话批次失败: ${error}`);
-      }
+  loadSessionBatches(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.tauriApi.getSessionBatches().subscribe({
+        next: (batches) => {
+          this.sessionBatches = batches;
+          this.addLog('info', `加载了 ${batches.length} 个会话批次`);
+          resolve();
+        },
+        error: (error) => {
+          this.addLog('error', `加载会话批次失败: ${error}`);
+          reject(error);
+        }
+      });
     });
   }
 
@@ -582,6 +609,19 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
 
   // 创建并提交测试批次
   createAndSubmitBatch() {
+    // 🔧 检查是否已有批次，如果有就不再创建
+    if (this.sessionBatches.length > 0) {
+      this.addLog('warning', '检测到已有批次，请使用现有批次进行测试');
+      this.addLog('info', `当前有 ${this.sessionBatches.length} 个批次可用`);
+
+      // 如果没有选中批次，自动选择第一个
+      if (!this.currentBatchId && this.sessionBatches.length > 0) {
+        this.selectBatch(this.sessionBatches[0].batch_id);
+        this.addLog('info', `自动选择批次: ${this.sessionBatches[0].batch_id}`);
+      }
+      return;
+    }
+
     this.isLoading = true;
     this.addLog('info', '开始创建测试批次...');
 
@@ -626,24 +666,24 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
         this.tauriApi.submitTestExecution(request).subscribe({
           next: (response: TestExecutionResponse) => {
             this.isLoading = false;
-            
+
             // 记录所有生成的批次信息
             this.addLog('success', `批次创建成功: ${response.message}`);
             this.addLog('info', `生成了 ${response.all_batches.length} 个批次`);
-            
+
             // 显示所有批次的详细信息
             response.all_batches.forEach((batch, index) => {
               this.addLog('info', `批次${index + 1}: ${batch.batch_name} (${batch.total_points}个点位)`);
             });
-            
+
             // 选择第一个批次作为当前批次
             this.currentBatchId = response.batch_id;
             this.currentBatchStatus = response.status;
             this.currentInstanceCount = response.instance_count;
-            
+
             // 重新加载会话批次列表
             this.loadSessionBatches();
-            
+
             if (this.autoStart) {
               this.startProgressPolling();
             }
@@ -875,13 +915,7 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   getStatusLabel(status: OverallTestStatus): string {
-    const labels: {[key: string]: string} = {
-      'NotTested': '未测试',
-      'HardPointTesting': '硬点测试中',
-      'TestCompletedPassed': '测试通过',
-      'TestCompletedFailed': '测试失败'
-    };
-    return labels[status] || status;
+    return OVERALL_TEST_STATUS_LABELS[status] || status;
   }
 
   getSubTestItemLabel(item: string): string {

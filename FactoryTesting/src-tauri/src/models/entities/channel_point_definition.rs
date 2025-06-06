@@ -316,6 +316,8 @@ impl From<&Model> for crate::models::structs::ChannelPointDefinition {
             access_property: model.read_write_property.clone(),
             save_history: model.save_history.clone().map(|s| s == "是"),
             power_failure_protection: model.power_off_protection.clone().map(|s| s == "是"),
+
+            // 不再自动生成虚拟测试台架地址，将通过通道分配时从测试PLC配置表获取真实地址
             test_rig_plc_address: None,
         }
     }

@@ -42,7 +42,10 @@ pub trait PersistenceService: BaseService {
     
     /// 加载测试实例
     async fn load_test_instance(&self, instance_id: &str) -> AppResult<Option<ChannelTestInstance>>;
-    
+
+    /// 加载所有测试实例
+    async fn load_all_test_instances(&self) -> AppResult<Vec<ChannelTestInstance>>;
+
     /// 加载批次的所有测试实例
     async fn load_test_instances_by_batch(&self, batch_id: &str) -> AppResult<Vec<ChannelTestInstance>>;
     
@@ -196,6 +199,9 @@ pub struct BatchStatistics {
     pub failed_channels: u32,
     pub skipped_channels: u32,
     pub in_progress_channels: u32,
+    pub start_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub end_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub estimated_completion_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// 事件发布服务trait

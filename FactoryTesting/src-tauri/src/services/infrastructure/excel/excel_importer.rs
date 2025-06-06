@@ -23,7 +23,7 @@ impl ExcelImporter {
     /// # 返回
     /// * `AppResult<Vec<ChannelPointDefinition>>` - 解析的通道定义列表
     pub async fn parse_excel_file(file_path: &str) -> AppResult<Vec<ChannelPointDefinition>> {
-        info!("开始解析Excel文件: {}", file_path);
+
 
         // 检查文件是否存在
         if !Path::new(file_path).exists() {
@@ -63,30 +63,14 @@ impl ExcelImporter {
             row_count += 1;
             let actual_row_number = row_idx + 1; // Excel中的实际行号
 
-            info!("🔍 [EXCEL_PARSE] 正在解析第{}行，列数: {}", actual_row_number, row.len());
-
             // 解析数据行
             match Self::parse_data_row(row, actual_row_number) {
                 Ok(definition) => {
-                    info!("✅ [EXCEL_PARSE] 第{}行解析成功: 位号={}, 变量名={}, 模块类型={:?}",
-                          actual_row_number, definition.tag, definition.variable_name, definition.module_type);
                     definitions.push(definition);
                 },
                 Err(e) => {
-                    // 记录详细错误信息
-                    log::error!("❌ [EXCEL_PARSE] 第{}行解析失败: {}", actual_row_number, e);
-
-                    // 显示该行的关键字段内容用于调试
-                    if row.len() >= 12 {
-                        let tag = if row.len() > 6 { row[6].to_string() } else { "N/A".to_string() };
-                        let var_name = if row.len() > 8 { row[8].to_string() } else { "N/A".to_string() };
-                        let module_type = if row.len() > 2 { row[2].to_string() } else { "N/A".to_string() };
-                        let data_type = if row.len() > 10 { row[10].to_string() } else { "N/A".to_string() };
-                        let plc_addr = if row.len() > 50 { row[50].to_string() } else { "N/A".to_string() };
-
-                        log::error!("🔍 [EXCEL_PARSE] 第{}行详细信息: 位号='{}', 变量名='{}', 模块类型='{}', 数据类型='{}', PLC地址='{}'",
-                                   actual_row_number, tag, var_name, module_type, data_type, plc_addr);
-                    }
+                    // 只记录错误，不显示详细调试信息
+                    log::error!("第{}行解析失败: {}", actual_row_number, e);
                 }
             }
         }
@@ -142,7 +126,7 @@ impl ExcelImporter {
 
     /// 解析Excel数据行为ChannelPointDefinition
     fn parse_data_row(row: &[calamine::DataType], row_number: usize) -> AppResult<ChannelPointDefinition> {
-        info!("🔍 [PARSE_ROW] 解析第{}行，列数: {}", row_number, row.len());
+
 
         if row.len() < 52 {  // 根据真实Excel文件，至少需要52列（从序号到上位机通讯地址）
             error!("❌ [PARSE_ROW] 第{}行数据列数不足，期望52列，实际{}列", row_number, row.len());
@@ -187,8 +171,7 @@ impl ExcelImporter {
         let plc_absolute_address = Self::get_optional_string_value(&row[51], "PLC绝对地址");  // 第52列（索引51）：PLC绝对地址（如%MD100）
         let modbus_communication_address = Self::get_string_value(&row[52], row_number, "上位机通讯地址")?;  // 第53列（索引52）：Modbus TCP通讯地址（如40001）
 
-        info!("✅ [PARSE_ROW] 第{}行关键字段: 位号='{}', 变量名='{}', 模块类型='{}', PLC绝对地址='{}', Modbus通讯地址='{}'",
-              row_number, tag, variable_name, module_type_str, plc_absolute_address, modbus_communication_address);
+
 
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -230,7 +213,7 @@ impl ExcelImporter {
         row: &[calamine::DataType],
         row_number: usize
     ) -> AppResult<()> {
-        info!("🔍 [EXTRACT_FIELDS] 第{}行：开始提取额外字段", row_number);
+
 
         // 辅助函数：安全获取字符串值
         let get_string = |index: usize| -> String {
@@ -307,8 +290,8 @@ impl ExcelImporter {
             definition.range_lower_limit = get_float(14);
             definition.range_upper_limit = get_float(15);
 
-            info!("🔍 [EXTRACT_FIELDS] 第{}行：量程 [{:?}, {:?}]",
-                row_number, definition.range_lower_limit, definition.range_upper_limit);
+            // 不再生成虚拟地址，测试台架地址将通过通道分配时从测试PLC配置表获取
+            definition.test_rig_plc_address = None;
         }
 
         // 提取SLL（超低低）报警设定
@@ -493,13 +476,7 @@ impl ExcelImporter {
             };
         }
 
-        info!("🔍 [EXTRACT_FIELDS] 第{}行：报警设定值 SLL={:?}, SL={:?}, SH={:?}, SHH={:?}",
-            row_number, definition.sll_set_value, definition.sl_set_value,
-            definition.sh_set_value, definition.shh_set_value);
 
-        info!("🔍 [EXTRACT_FIELDS] 第{}行：维护字段 维护点位={:?}, 维护使能={:?}",
-            row_number, definition.maintenance_value_set_point_address,
-            definition.maintenance_enable_switch_point_address);
 
         Ok(())
     }

@@ -6,12 +6,26 @@ use tokio::sync::Mutex;
 use tokio::time::Duration;
 use tokio_modbus::client::Context as ModbusClientContext;
 use tokio_modbus::prelude::*; // for tcp::connect_slave and Slave
+use std::sync::OnceLock;
 
 use crate::utils::error::{AppError, AppResult};
 use crate::services::traits::BaseService;
 use super::plc_communication_service::{
     PlcCommunicationService, PlcConnectionStatus, PlcDataType, PlcTag, PlcCommunicationStats
 };
+
+// 全局PLC连接管理器注册表
+static GLOBAL_PLC_MANAGER: OnceLock<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> = OnceLock::new();
+
+/// 设置全局PLC连接管理器
+pub fn set_global_plc_manager(manager: Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>) {
+    let _ = GLOBAL_PLC_MANAGER.set(manager);
+}
+
+/// 获取全局PLC连接管理器
+pub fn get_global_plc_manager() -> Option<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> {
+    GLOBAL_PLC_MANAGER.get().cloned()
+}
 
 // 假设 ByteOrder 和 ByteOrderConverter 存在于项目中
 // 如果它们在另一个路径，需要调整 use 语句
@@ -233,6 +247,11 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Read Methods ---
     async fn read_bool(&self, address: &str) -> AppResult<bool> {
+        // 首先检查是否有活跃的PLC连接管理器连接
+        if let Some(manager) = self.get_plc_connection_manager().await {
+            return self.read_bool_from_manager(&manager, address).await;
+        }
+
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
         let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
@@ -354,6 +373,11 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Write Methods ---
     async fn write_bool(&self, address: &str, value: bool) -> AppResult<()> {
+        // 首先检查是否有活跃的PLC连接管理器连接
+        if let Some(manager) = self.get_plc_connection_manager().await {
+            return self.write_bool_to_manager(&manager, address, value).await;
+        }
+
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
         let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
@@ -537,8 +561,109 @@ impl PlcCommunicationService for ModbusPlcService {
     }
     
     async fn get_device_info(&self) -> AppResult<std::collections::HashMap<String, String>> {
-        // Standard Modbus has MEI (Modbus Encapsulated Interface) Transport (Type 14) 
+        // Standard Modbus has MEI (Modbus Encapsulated Interface) Transport (Type 14)
         // for device identification, but it's not universally supported or simple to query.
         Err(AppError::PlcCommunicationError { message: "Modbus不支持获取通用设备信息".to_string() })
     }
-} 
+}
+
+impl ModbusPlcService {
+    /// 获取全局PLC连接管理器实例
+    async fn get_plc_connection_manager(&self) -> Option<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> {
+        get_global_plc_manager()
+    }
+
+    /// 从PLC连接管理器读取布尔值
+    async fn read_bool_from_manager(
+        &self,
+        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        address: &str,
+    ) -> AppResult<bool> {
+        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+
+        // 获取连接
+        let connections = manager.connections.read().await;
+
+        // 查找第一个已连接的PLC
+        for (_, connection) in connections.iter() {
+            if connection.state == PlcConnectionState::Connected {
+                if let Some(context_arc) = &connection.context {
+                    let mut context = context_arc.lock().await;
+
+                    // 解析地址并读取
+                    let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
+
+                    return match addr_type {
+                        '0' => { // 线圈
+                            match context.read_coils(reg_offset, 1).await {
+                                Ok(Ok(values)) => Ok(values.first().copied().unwrap_or(false)),
+                                Ok(Err(exception)) => Err(AppError::PlcCommunicationError {
+                                    message: format!("Modbus异常: {:?}", exception)
+                                }),
+                                Err(e) => Err(AppError::PlcCommunicationError {
+                                    message: format!("读取线圈失败: {:?}", e)
+                                }),
+                            }
+                        },
+                        '1' => { // 离散输入
+                            match context.read_discrete_inputs(reg_offset, 1).await {
+                                Ok(Ok(values)) => Ok(values.first().copied().unwrap_or(false)),
+                                Ok(Err(exception)) => Err(AppError::PlcCommunicationError {
+                                    message: format!("Modbus异常: {:?}", exception)
+                                }),
+                                Err(e) => Err(AppError::PlcCommunicationError {
+                                    message: format!("读取离散输入失败: {:?}", e)
+                                }),
+                            }
+                        },
+                        _ => Err(AppError::PlcCommunicationError {
+                            message: format!("地址 {} 不是有效的布尔型地址", address)
+                        }),
+                    };
+                }
+            }
+        }
+
+        Err(AppError::PlcCommunicationError { message: "未找到可用的PLC连接".to_string() })
+    }
+
+    /// 向PLC连接管理器写入布尔值
+    async fn write_bool_to_manager(
+        &self,
+        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        address: &str,
+        value: bool,
+    ) -> AppResult<()> {
+        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+
+        // 获取连接
+        let connections = manager.connections.read().await;
+
+        // 查找第一个已连接的PLC
+        for (_, connection) in connections.iter() {
+            if connection.state == PlcConnectionState::Connected {
+                if let Some(context_arc) = &connection.context {
+                    let mut context = context_arc.lock().await;
+
+                    // 解析地址并写入
+                    let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
+
+                    return match addr_type {
+                        '0' => { // 线圈
+                            context.write_single_coil(reg_offset, value).await
+                                .map_err(|e| AppError::PlcCommunicationError {
+                                    message: format!("写入线圈失败: {}", e)
+                                })?;
+                            Ok(())
+                        },
+                        _ => Err(AppError::PlcCommunicationError {
+                            message: format!("地址 {} 不是有效的可写布尔型地址", address)
+                        }),
+                    };
+                }
+            }
+        }
+
+        Err(AppError::PlcCommunicationError { message: "未找到可用的PLC连接".to_string() })
+    }
+}

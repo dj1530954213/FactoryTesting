@@ -194,7 +194,7 @@ pub async fn create_test_batch(
 pub async fn get_batch_list(
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
-    info!("获取批次列表 - 测试区域专用");
+
 
     let persistence_service = &state.persistence_service;
 
@@ -204,11 +204,8 @@ pub async fn get_batch_list(
         session_batch_ids_guard.clone()
     };
 
-    info!("当前会话中有{}个批次", session_batch_ids.len());
-
     // 如果当前会话中没有批次，直接返回空列表
     if session_batch_ids.is_empty() {
-        info!("当前会话中没有可用的测试批次，用户需要先导入Excel文件");
         return Ok(vec![]);
     }
 
@@ -219,7 +216,7 @@ pub async fn get_batch_list(
                 .filter(|batch| session_batch_ids.contains(&batch.batch_id))
                 .collect();
 
-            info!("成功获取{}个当前会话批次", current_session_batches.len());
+
             Ok(current_session_batches)
         }
         Err(e) => {
@@ -243,8 +240,6 @@ pub struct DashboardBatchInfo {
 pub async fn get_dashboard_batch_list(
     state: State<'_, AppState>
 ) -> Result<Vec<DashboardBatchInfo>, String> {
-    info!("📊 获取仪表盘批次列表 - 包含所有历史批次");
-
     let persistence_service = &state.persistence_service;
 
     // 获取当前会话中的批次ID列表
@@ -253,12 +248,10 @@ pub async fn get_dashboard_batch_list(
         session_batch_ids_guard.clone()
     };
 
-    info!("📊 当前会话中有{}个批次", session_batch_ids.len());
-
     // 从数据库加载所有批次信息
     match persistence_service.load_all_batch_info().await {
         Ok(mut batches) => {
-            info!("📊 从数据库成功获取{}个批次", batches.len());
+
 
             // 🔧 修复：检查并修复缺失的站场信息
             for batch in &mut batches {
@@ -270,19 +263,16 @@ pub async fn get_dashboard_batch_list(
                                 // 从实例的变量描述或其他字段中尝试提取站场信息
                                 if let Some(station_from_instance) = extract_station_from_instance(first_instance) {
                                     batch.station_name = Some(station_from_instance.clone());
-                                    info!("📊 从测试实例恢复批次 {} 的站场信息: {}", batch.batch_name, station_from_instance);
 
-                                    // 🔧 将恢复的站场信息保存回数据库
+                                    // 将恢复的站场信息保存回数据库
                                     if let Err(e) = persistence_service.save_batch_info(batch).await {
-                                        warn!("📊 保存恢复的站场信息失败: {}", e);
+                                        warn!("保存恢复的站场信息失败: {}", e);
                                     }
-                                } else {
-                                    warn!("📊 无法从测试实例中恢复批次 {} 的站场信息", batch.batch_name);
                                 }
                             }
                         }
                         Err(e) => {
-                            warn!("📊 加载批次 {} 的测试实例失败: {}", batch.batch_id, e);
+                            warn!("加载批次 {} 的测试实例失败: {}", batch.batch_id, e);
                         }
                     }
                 }
@@ -294,12 +284,7 @@ pub async fn get_dashboard_batch_list(
                     let is_current_session = session_batch_ids.contains(&batch.batch_id);
                     let has_station_name = batch.station_name.is_some();
 
-                    // 🔍 调试：记录站场信息
-                    if let Some(ref station_name) = batch.station_name {
-                        info!("📊 批次 {} 的站场信息: {}", batch.batch_name, station_name);
-                    } else {
-                        warn!("📊 批次 {} 缺少站场信息", batch.batch_name);
-                    }
+
 
                     DashboardBatchInfo {
                         batch_info: batch,
@@ -314,13 +299,12 @@ pub async fn get_dashboard_batch_list(
                 .count();
             let historical_count = dashboard_batches.len() - current_session_count;
 
-            info!("📊 仪表盘批次统计: 总计={}, 当前会话={}, 历史批次={}",
-                  dashboard_batches.len(), current_session_count, historical_count);
+
 
             Ok(dashboard_batches)
         }
         Err(e) => {
-            error!("📊 获取仪表盘批次列表失败: {}", e);
+            error!("获取仪表盘批次列表失败: {}", e);
             Err(format!("获取失败: {}", e))
         }
     }
@@ -456,16 +440,9 @@ pub async fn import_excel_and_prepare_batch_cmd(
     args: ImportExcelAndPrepareBatchCmdArgs,
     state: State<'_, AppState>
 ) -> Result<ImportAndPrepareBatchResponse, String> {
-    info!("🚀 [IMPORT_EXCEL] 收到导入Excel并准备批次请求: {}", args.file_path_str);
-    info!("🚀 [IMPORT_EXCEL] 产品型号: {:?}, 序列号: {:?}", args.product_model, args.serial_number);
-
     // 1. 解析Excel文件
-    info!("🔍 [IMPORT_EXCEL] 步骤1: 开始解析Excel文件");
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
-        Ok(defs) => {
-            info!("✅ [IMPORT_EXCEL] Excel文件解析成功，获得{}个通道定义", defs.len());
-            defs
-        },
+        Ok(defs) => defs,
         Err(e) => {
             error!("❌ [IMPORT_EXCEL] Excel文件解析失败: {}", e);
             return Err(format!("Excel文件解析失败: {}", e));
@@ -478,18 +455,8 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 2. 立即执行批次分配 - 这是关键步骤
-    info!("🔄 [IMPORT_EXCEL] 步骤2: 开始执行自动批次分配");
     let allocation_result = match execute_batch_allocation(&definitions, &args, &state).await {
-        Ok(result) => {
-            info!("✅ [IMPORT_EXCEL] 批次分配成功，生成{}个批次", result.batches.len());
-            // 🔍 调试：检查分配结果中的通道定义
-            if let Some(ref channel_definitions) = result.channel_definitions {
-                info!("🔍 [IMPORT_EXCEL] 分配结果包含{}个通道定义", channel_definitions.len());
-            } else {
-                warn!("⚠️ [IMPORT_EXCEL] 分配结果中没有通道定义数据！");
-            }
-            result
-        },
+        Ok(result) => result,
         Err(e) => {
             error!("❌ [IMPORT_EXCEL] 批次分配失败: {}", e);
             return Err(format!("批次分配失败: {}", e));
@@ -497,19 +464,15 @@ pub async fn import_excel_and_prepare_batch_cmd(
     };
 
     // 3. 将分配结果存储到状态管理器
-    info!("💾 [IMPORT_EXCEL] 步骤3: 将批次数据存储到状态管理器");
     match store_allocation_to_state_manager(&allocation_result, &state).await {
-        Ok(_) => {
-            info!("✅ [IMPORT_EXCEL] 批次数据已成功存储到状态管理器");
-        },
+        Ok(_) => {},
         Err(e) => {
-            error!("❌ [IMPORT_EXCEL] 存储到状态管理器失败: {}", e);
+            error!("存储到状态管理器失败: {}", e);
             return Err(format!("存储批次数据失败: {}", e));
         }
     }
 
     // 4. 构建响应数据
-    info!("🎉 [IMPORT_EXCEL] 步骤4: 构建响应数据");
 
     // 从分配结果中获取第一个批次作为主要批次信息
     let primary_batch = allocation_result.batches.first()
@@ -520,10 +483,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
         instances: allocation_result.allocated_instances.clone(),
     };
 
-    info!("✅ [IMPORT_EXCEL] 导入Excel并准备批次完成");
-    info!("✅ [IMPORT_EXCEL] 主要批次: {}", primary_batch.batch_id);
-    info!("✅ [IMPORT_EXCEL] 总批次数: {}", allocation_result.batches.len());
-    info!("✅ [IMPORT_EXCEL] 总实例数: {}", allocation_result.allocated_instances.len());
+
 
     Ok(response)
 }
@@ -573,26 +533,27 @@ pub async fn get_batch_status_cmd(
     // 获取测试实例
     let instances = match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
         Ok(instances) => {
-            info!("✅ [GET_BATCH_STATUS] 成功获取测试实例: {} 个", instances.len());
-            // 详细记录前几个实例
-            for (index, instance) in instances.iter().take(5).enumerate() {
-                info!("✅ [GET_BATCH_STATUS] 实例 {}: ID={}, 定义ID={}, 分配PLC通道={:?}, 状态={:?}",
-                    index + 1, instance.instance_id, instance.definition_id,
-                    instance.test_plc_channel_tag, instance.overall_status);
+            info!("✅ [GET_BATCH_STATUS] 成功获取{}个测试实例", instances.len());
+
+            // 🔍 调试：检查前5个实例的状态
+            for (i, instance) in instances.iter().take(5).enumerate() {
+                info!("🔍 [DEBUG] 实例{}: ID={}, 状态={}, 定义ID={}",
+                      i + 1,
+                      instance.instance_id,
+                      instance.overall_status,
+                      instance.definition_id);
             }
-            if instances.len() > 5 {
-                info!("✅ [GET_BATCH_STATUS] ... 还有 {} 个实例", instances.len() - 5);
-            }
+
             instances
         },
         Err(e) => {
-            error!("❌ [GET_BATCH_STATUS] 获取测试实例失败: {}", e);
+            error!("获取测试实例失败: {}", e);
             return Err(format!("获取测试实例失败: {}", e));
         }
     };
 
     // 从状态管理器获取通道定义
-    info!("🔍 [GET_BATCH_STATUS] 从状态管理器获取通道定义");
+
     let definitions = {
         let state_manager = &state.channel_state_manager;
         let instance_definition_ids: std::collections::HashSet<String> = instances
@@ -603,14 +564,13 @@ pub async fn get_batch_status_cmd(
         let mut definitions = Vec::new();
         for definition_id in &instance_definition_ids {
             if let Some(definition) = state_manager.get_channel_definition(definition_id).await {
-                info!("✅ [GET_BATCH_STATUS] 从状态管理器获取定义: ID={}, Tag={}", definition_id, definition.tag);
                 definitions.push(definition);
             } else {
-                warn!("⚠️ [GET_BATCH_STATUS] 状态管理器中未找到定义: {}", definition_id);
+                warn!("状态管理器中未找到定义: {}", definition_id);
             }
         }
 
-        info!("✅ [GET_BATCH_STATUS] 从状态管理器获取通道定义: {} 个", definitions.len());
+
         definitions
     };
 
@@ -1250,7 +1210,6 @@ pub async fn clear_session_data(
         match persistence_service.delete_batch_info(batch_id).await {
             Ok(_) => {
                 cleaned_count += 1;
-                info!("成功删除批次: {}", batch_id);
             }
             Err(e) => {
                 errors.push(format!("删除批次{}失败: {}", batch_id, e));
@@ -1409,7 +1368,7 @@ pub async fn create_batch_and_persist_data_cmd(
     // 第三步：将批次添加到会话跟踪中（仅内存操作）
     let mut saved_batches_count = 0;
     for batch in &allocation_result.batches {
-        log::info!("[CreateBatchData] 添加批次到会话跟踪: {} ({})", batch.batch_name, batch.batch_id);
+
         saved_batches_count += 1;
 
         // 将批次ID添加到当前会话跟踪中
@@ -1439,12 +1398,7 @@ pub async fn create_batch_and_persist_data_cmd(
 
     info!("{}", message);
 
-    // 详细记录所有生成的批次
-    log::info!("[CreateBatchData] ===== 批次分配完成 =====");
-    for (i, batch) in allocation_result.batches.iter().enumerate() {
-        log::info!("[CreateBatchData] 批次{}: ID={}, 名称={}, 点位数={}",
-            i + 1, batch.batch_id, batch.batch_name, batch.total_points);
-    }
+
 
     Ok(CreateBatchAndPersistDataResponse {
         success,
@@ -1471,15 +1425,12 @@ pub async fn import_excel_to_database_cmd(
     replace_existing: bool,
     state: State<'_, AppState>
 ) -> Result<ImportResult, String> {
-    info!("收到Excel导入数据库请求: {}", file_path);
-
     // 从持久化服务获取数据库连接
     let db = state.persistence_service.get_database_connection();
     let import_service = DataImportService::new(Arc::new(db.clone()));
 
     match import_service.import_from_excel(&file_path, replace_existing).await {
         Ok(result) => {
-            info!("Excel导入完成: 成功{}个，失败{}个", result.successful_imports, result.failed_imports);
             Ok(result)
         }
         Err(e) => {
@@ -1568,7 +1519,6 @@ pub async fn clear_all_channel_definitions_cmd(
 
     match import_service.clear_all_data().await {
         Ok(deleted_count) => {
-            info!("成功清空{}条通道定义数据", deleted_count);
             Ok(deleted_count)
         }
         Err(e) => {
@@ -1612,14 +1562,14 @@ pub async fn delete_batch_cmd(
     state: State<'_, AppState>
 ) -> Result<DeleteBatchResponse, String> {
     let batch_id = &request.batch_id;
-    info!("🗑️ [DELETE_BATCH] 收到删除批次请求: {}", batch_id);
+
 
     let persistence_service = &state.persistence_service;
 
     // 检查批次是否存在
     let batch_info = match persistence_service.load_batch_info(batch_id).await {
         Ok(Some(info)) => {
-            info!("✅ [DELETE_BATCH] 找到要删除的批次: {}", info.batch_name);
+
             info
         },
         Ok(None) => {
@@ -1659,72 +1609,63 @@ pub async fn delete_batch_cmd(
     let mut errors = Vec::new();
 
     // 1. 首先收集需要删除的通道定义ID（在删除测试实例之前）
-    info!("🗑️ [DELETE_BATCH] 开始收集需要删除的通道定义ID...");
     let mut definition_ids_to_delete = std::collections::HashSet::new();
     match persistence_service.load_test_instances_by_batch(batch_id).await {
         Ok(instances) => {
             for instance in &instances {
                 definition_ids_to_delete.insert(instance.definition_id.clone());
             }
-            info!("📊 [DELETE_BATCH] 从{}个测试实例中收集到{}个唯一的通道定义ID",
-                instances.len(), definition_ids_to_delete.len());
         }
         Err(e) => {
             errors.push(format!("加载批次测试实例失败（用于收集定义ID）: {}", e));
-            error!("❌ [DELETE_BATCH] 加载批次测试实例失败（用于收集定义ID）: {}", e);
+            error!("加载批次测试实例失败（用于收集定义ID）: {}", e);
         }
     }
 
     // 2. 删除该批次的所有测试实例
-    info!("🗑️ [DELETE_BATCH] 开始删除批次的测试实例...");
     match persistence_service.load_test_instances_by_batch(batch_id).await {
         Ok(instances) => {
-            info!("📊 [DELETE_BATCH] 找到{}个测试实例需要删除", instances.len());
             for instance in instances {
                 match persistence_service.delete_test_instance(&instance.instance_id).await {
                     Ok(_) => {
                         deleted_instances_count += 1;
-                        info!("✅ [DELETE_BATCH] 成功删除测试实例: {}", instance.instance_id);
                     }
                     Err(e) => {
                         errors.push(format!("删除测试实例失败: {} - {}", instance.instance_id, e));
-                        error!("❌ [DELETE_BATCH] 删除测试实例失败: {} - {}", instance.instance_id, e);
+                        error!("删除测试实例失败: {} - {}", instance.instance_id, e);
                     }
                 }
             }
         }
         Err(e) => {
             errors.push(format!("加载批次测试实例失败: {}", e));
-            error!("❌ [DELETE_BATCH] 加载批次测试实例失败: {}", e);
+            error!("加载批次测试实例失败: {}", e);
         }
     }
 
     // 3. 删除收集到的通道定义
-    info!("🗑️ [DELETE_BATCH] 开始删除批次的通道定义...");
     for definition_id in definition_ids_to_delete {
         // 注意：这里简化处理，假设每个批次的定义都是独立的
         // 在实际项目中可能需要更复杂的逻辑来检查引用关系
         match persistence_service.delete_channel_definition(&definition_id).await {
             Ok(_) => {
                 deleted_definitions_count += 1;
-                info!("✅ [DELETE_BATCH] 成功删除通道定义: {}", definition_id);
             }
             Err(e) => {
                 errors.push(format!("删除通道定义失败: {} - {}", definition_id, e));
-                error!("❌ [DELETE_BATCH] 删除通道定义失败: {} - {}", definition_id, e);
+                error!("删除通道定义失败: {} - {}", definition_id, e);
             }
         }
     }
 
     // 4. 最后删除批次信息
-    info!("🗑️ [DELETE_BATCH] 开始删除批次信息...");
     match persistence_service.delete_batch_info(batch_id).await {
         Ok(_) => {
-            info!("✅ [DELETE_BATCH] 成功删除批次信息: {}", batch_id);
+            // 删除成功
         }
         Err(e) => {
             errors.push(format!("删除批次信息失败: {}", e));
-            error!("❌ [DELETE_BATCH] 删除批次信息失败: {}", e);
+            error!("删除批次信息失败: {}", e);
         }
     }
 
@@ -1732,7 +1673,6 @@ pub async fn delete_batch_cmd(
     {
         let mut session_batch_ids_guard = state.session_batch_ids.lock().await;
         session_batch_ids_guard.retain(|id| id != batch_id);
-        info!("✅ [DELETE_BATCH] 从会话跟踪中移除批次: {}", batch_id);
     }
 
     let success = errors.is_empty();
@@ -1753,10 +1693,8 @@ pub async fn delete_batch_cmd(
     };
 
     if !errors.is_empty() {
-        error!("❌ [DELETE_BATCH] 删除过程中的错误: {:?}", errors);
+        error!("删除过程中的错误: {:?}", errors);
     }
-
-    info!("🎉 [DELETE_BATCH] 批次删除操作完成: {}", message);
 
     Ok(DeleteBatchResponse {
         success,
@@ -1815,7 +1753,6 @@ pub async fn create_test_batch_with_definitions_cmd(
     }
 
     // 第三步：保存通道定义到数据库
-    info!("💾 开始保存{}个通道定义到数据库", definitions.len());
     let mut saved_count = 0;
     let mut failed_count = 0;
 
@@ -1823,16 +1760,13 @@ pub async fn create_test_batch_with_definitions_cmd(
         match state.persistence_service.save_channel_definition(definition).await {
             Ok(_) => {
                 saved_count += 1;
-                debug!("✅ 成功保存通道定义: {}", definition.tag);
             }
             Err(e) => {
                 failed_count += 1;
-                warn!("⚠️ 保存通道定义失败: {} - {}", definition.tag, e);
+                warn!("保存通道定义失败: {} - {}", definition.tag, e);
             }
         }
     }
-
-    info!("💾 通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
 
     // 第四步：创建测试批次
     match allocation_service.create_test_batch(
@@ -1872,21 +1806,13 @@ pub async fn import_excel_and_create_batch_cmd(
     allocation_strategy: String,
     state: State<'_, AppState>
 ) -> Result<ImportExcelAndCreateBatchResponse, String> {
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] ===== 新命令被调用了！！！ =====");
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 收到一键导入Excel并创建批次请求");
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 文件路径: {}", file_path);
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 批次名称: {}", batch_name);
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 产品型号: {:?}", product_model);
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 操作员: {:?}", operator_name);
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 替换现有数据: {}", replace_existing);
-    error!("🚀🚀🚀 [IMPORT_EXCEL_AND_CREATE_BATCH] 分配策略: {}", allocation_strategy);
+
 
     // 第一步：导入Excel数据
     let db = state.persistence_service.get_database_connection();
     let import_service = DataImportService::new(Arc::new(db.clone()));
     let import_result = match import_service.import_from_excel(&file_path, replace_existing).await {
         Ok(result) => {
-            info!("Excel导入完成: 成功{}个，失败{}个", result.successful_imports, result.failed_imports);
             result
         }
         Err(e) => {
@@ -1918,10 +1844,6 @@ pub async fn import_excel_and_create_batch_cmd(
         None, // 不使用过滤条件，使用所有导入的数据
     ).await {
         Ok(result) => {
-            info!("🔥 [IMPORT_EXCEL_AND_CREATE_BATCH] 测试批次创建完成: {} - {}个通道",
-                  result.batch_info.batch_name,
-                  result.allocation_summary.total_channels);
-
             // 转换为命令层的 AllocationResult
             let allocation_result = AllocationResult {
                 batches: vec![result.batch_info.clone()],
@@ -1930,14 +1852,13 @@ pub async fn import_excel_and_create_batch_cmd(
                 channel_definitions: None, // 这里没有通道定义数据
             };
 
-            // 🚀 重要：将分配结果存储到状态管理器中
-            info!("🔥 [IMPORT_EXCEL_AND_CREATE_BATCH] 将分配结果存储到状态管理器");
+            // 将分配结果存储到状态管理器中
             match state.channel_state_manager.store_batch_allocation_result(allocation_result.clone()).await {
                 Ok(_) => {
-                    info!("🔥 [IMPORT_EXCEL_AND_CREATE_BATCH] 成功存储分配结果到状态管理器");
+                    // 存储成功
                 }
                 Err(e) => {
-                    error!("🔥 [IMPORT_EXCEL_AND_CREATE_BATCH] 存储分配结果到状态管理器失败: {:?}", e);
+                    error!("存储分配结果到状态管理器失败: {:?}", e);
                     // 不返回错误，因为数据已经保存到数据库了
                 }
             }
@@ -1972,80 +1893,40 @@ async fn execute_batch_allocation(
     args: &ImportExcelAndPrepareBatchCmdArgs,
     state: &AppState,
 ) -> Result<AllocationResult, String> {
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 开始执行批次分配");
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 输入通道定义数量: {}", definitions.len());
-
-    // 1. 首先保存通道定义到数据库 - 这是关键步骤！
-    info!("💾 [EXECUTE_BATCH_ALLOCATION] 步骤1: 保存通道定义到数据库");
-    info!("💾 [EXECUTE_BATCH_ALLOCATION] 总定义数量: {}", definitions.len());
+    // 1. 首先保存通道定义到数据库
 
     let mut saved_definitions_count = 0;
     let mut failed_definitions_count = 0;
 
-    for (index, definition) in definitions.iter().enumerate() {
-        info!("💾 [EXECUTE_BATCH_ALLOCATION] 保存定义 {}/{}: ID={}, Tag={}, 通道标识={}",
-            index + 1, definitions.len(), definition.id, definition.tag, definition.channel_tag_in_module);
-
+    for definition in definitions.iter() {
         match state.persistence_service.save_channel_definition(definition).await {
             Ok(_) => {
                 saved_definitions_count += 1;
-                info!("✅ [EXECUTE_BATCH_ALLOCATION] 成功保存定义: {}", definition.tag);
-
-                // 🔧 立即验证保存是否成功
-                match state.persistence_service.load_channel_definition(&definition.id).await {
-                    Ok(Some(loaded_def)) => {
-                        info!("✅ [EXECUTE_BATCH_ALLOCATION] 立即验证成功: ID={}, Tag={}",
-                            loaded_def.id, loaded_def.tag);
-                    }
-                    Ok(None) => {
-                        error!("❌ [EXECUTE_BATCH_ALLOCATION] 立即验证失败: 保存后立即查询找不到定义 ID={}",
-                            definition.id);
-                    }
-                    Err(e) => {
-                        error!("❌ [EXECUTE_BATCH_ALLOCATION] 立即验证出错: ID={} - {}",
-                            definition.id, e);
-                    }
-                }
             }
             Err(e) => {
                 failed_definitions_count += 1;
-                warn!("⚠️ [EXECUTE_BATCH_ALLOCATION] 保存通道定义失败: {} - {}", definition.tag, e);
-                // 详细记录失败的定义信息
-                warn!("⚠️ [EXECUTE_BATCH_ALLOCATION] 失败定义详情: ID={}, 通道标识={}, 模块类型={:?}, 变量名={}",
-                    definition.id, definition.channel_tag_in_module, definition.module_type, definition.variable_name);
-                // 继续处理其他定义，不因为单个定义失败而中断整个流程
+                warn!("保存通道定义失败: {} - {}", definition.tag, e);
             }
         }
     }
 
-    info!("✅ [EXECUTE_BATCH_ALLOCATION] 数据库保存完成: 成功={}, 失败={}", saved_definitions_count, failed_definitions_count);
-
     // 2. 获取测试PLC配置
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤2: 获取测试PLC配置");
     let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
-        Ok(config) => {
-            info!("✅ [EXECUTE_BATCH_ALLOCATION] 成功获取测试PLC配置: {} 个通道映射",
-                  config.comparison_tables.len());
-            config
-        }
+        Ok(config) => config,
         Err(e) => {
-            warn!("⚠️ [EXECUTE_BATCH_ALLOCATION] 获取数据库测试PLC配置失败: {}, 使用默认配置", e);
+            warn!("获取数据库测试PLC配置失败: {}, 使用默认配置", e);
             match create_default_test_plc_config().await {
                 Ok(config) => config,
                 Err(e) => {
-                    error!("❌ [EXECUTE_BATCH_ALLOCATION] 创建默认测试PLC配置失败: {}", e);
+                    error!("创建默认测试PLC配置失败: {}", e);
                     return Err(format!("创建默认测试PLC配置失败: {}", e));
                 }
             }
         }
     };
 
-    // 3. 使用已验证的通道分配服务
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤3: 调用通道分配服务");
+    // 3. 执行通道分配
     let allocation_service = ChannelAllocationService::new();
-
-    // 4. 执行分配
-    info!("🔄 [EXECUTE_BATCH_ALLOCATION] 步骤4: 执行通道分配");
     let batch_allocation_result = allocation_service
         .allocate_channels(
             definitions.to_vec(),
@@ -2055,22 +1936,11 @@ async fn execute_batch_allocation(
         )
         .await
         .map_err(|e| {
-            error!("❌ [EXECUTE_BATCH_ALLOCATION] 通道分配失败: {:?}", e);
+            error!("通道分配失败: {:?}", e);
             format!("通道分配失败: {}", e)
         })?;
 
-    info!("✅ [EXECUTE_BATCH_ALLOCATION] 批次分配成功");
-    info!("✅ [EXECUTE_BATCH_ALLOCATION] 生成批次数量: {}", batch_allocation_result.batches.len());
-    info!("✅ [EXECUTE_BATCH_ALLOCATION] 分配实例数量: {}", batch_allocation_result.allocated_instances.len());
-
-    // 5. 记录详细的分配结果
-    for (i, batch) in batch_allocation_result.batches.iter().enumerate() {
-        info!("📊 [EXECUTE_BATCH_ALLOCATION] 批次{}: ID={}, 名称={}, 点位数={}",
-              i + 1, batch.batch_id, batch.batch_name, batch.total_points);
-    }
-
-    // 6. 转换为期望的AllocationResult格式
-    info!("🔧 [EXECUTE_BATCH_ALLOCATION] 创建AllocationResult，包含{}个通道定义", definitions.len());
+    // 4. 转换为期望的AllocationResult格式
     let allocation_result = AllocationResult {
         batches: batch_allocation_result.batches,
         allocated_instances: batch_allocation_result.allocated_instances,
@@ -2095,16 +1965,8 @@ async fn execute_batch_allocation(
             stations: Vec::new(), // 可以根据需要填充
             estimated_test_duration_minutes: 30, // 默认估计时间
         },
-        /// 🔧 修复：包含通道定义，用于保存到数据库
         channel_definitions: Some(definitions.to_vec()),
     };
-
-    // 🔍 验证AllocationResult中的通道定义
-    if let Some(ref channel_definitions) = allocation_result.channel_definitions {
-        info!("✅ [EXECUTE_BATCH_ALLOCATION] AllocationResult包含{}个通道定义", channel_definitions.len());
-    } else {
-        error!("❌ [EXECUTE_BATCH_ALLOCATION] AllocationResult中没有通道定义！");
-    }
 
     Ok(allocation_result)
 }
@@ -2116,16 +1978,8 @@ async fn store_allocation_to_state_manager(
     allocation_result: &AllocationResult,
     state: &AppState,
 ) -> Result<(), String> {
-    info!("💾 [STORE_TO_STATE_MANAGER] 开始存储分配结果到状态管理器");
-    info!("💾 [STORE_TO_STATE_MANAGER] 批次数量: {}", allocation_result.batches.len());
-    info!("💾 [STORE_TO_STATE_MANAGER] 实例数量: {}", allocation_result.allocated_instances.len());
-
-    // 🔍 调试：检查通道定义字段状态
+    // 保存通道定义到数据库
     if let Some(ref channel_definitions) = allocation_result.channel_definitions {
-        info!("🔍 [STORE_TO_STATE_MANAGER] 分配结果包含{}个通道定义", channel_definitions.len());
-
-        // 🔧 直接在这里保存通道定义到数据库，避免clone问题
-        info!("💾 [STORE_TO_STATE_MANAGER] 开始保存{}个通道定义到数据库", channel_definitions.len());
         let mut saved_count = 0;
         let mut failed_count = 0;
 
@@ -2136,28 +1990,26 @@ async fn store_allocation_to_state_manager(
                 }
                 Err(e) => {
                     failed_count += 1;
-                    error!("❌ [STORE_TO_STATE_MANAGER] 保存通道定义失败: ID={}, Tag={} - {}",
+                    error!("保存通道定义失败: ID={}, Tag={} - {}",
                         definition.id, definition.tag, e);
                 }
             }
         }
 
-        if failed_count == 0 {
-            info!("✅ [STORE_TO_STATE_MANAGER] 通道定义保存完成: 成功保存{}个", saved_count);
-        } else {
-            error!("⚠️ [STORE_TO_STATE_MANAGER] 通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
+        if failed_count > 0 {
+            error!("通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
         }
     } else {
-        warn!("⚠️ [STORE_TO_STATE_MANAGER] 分配结果中没有通道定义数据！");
+        warn!("分配结果中没有通道定义数据！");
     }
 
     // 1. 存储批次分配结果到状态管理器
     match state.channel_state_manager.store_batch_allocation_result(allocation_result.clone()).await {
         Ok(_) => {
-            info!("✅ [STORE_TO_STATE_MANAGER] 成功存储分配结果到状态管理器");
+            // 存储成功
         }
         Err(e) => {
-            error!("❌ [STORE_TO_STATE_MANAGER] 存储分配结果到状态管理器失败: {:?}", e);
+            error!("存储分配结果到状态管理器失败: {:?}", e);
             return Err(format!("存储分配结果到状态管理器失败: {}", e));
         }
     }
@@ -2166,9 +2018,6 @@ async fn store_allocation_to_state_manager(
     for batch in &allocation_result.batches {
         let mut session_batch_ids = state.session_batch_ids.lock().await;
         session_batch_ids.insert(batch.batch_id.clone());
-        info!("📝 [STORE_TO_STATE_MANAGER] 批次 {} 已添加到会话跟踪", batch.batch_id);
     }
-
-    info!("✅ [STORE_TO_STATE_MANAGER] 所有数据已成功存储到状态管理器");
     Ok(())
 }

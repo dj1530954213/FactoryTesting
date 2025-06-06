@@ -64,11 +64,7 @@ pub trait IChannelStateManager: Send + Sync {
     async fn get_instance_state(&self, instance_id: &str) -> AppResult<ChannelTestInstance>;
 
     /// 更新测试结果
-    async fn update_test_result(
-        &self,
-        instance_id: &str,
-        outcome: RawTestOutcome,
-    ) -> AppResult<()>;
+    async fn update_test_result(&self, outcome: RawTestOutcome) -> AppResult<()>;
 
     /// 更新实例整体状态
     async fn update_overall_status(
@@ -85,6 +81,12 @@ pub trait IChannelStateManager: Send + Sync {
 
     /// 获取通道定义
     async fn get_channel_definition(&self, definition_id: &str) -> Option<ChannelPointDefinition>;
+
+    /// 🔧 获取内存缓存中的测试实例
+    async fn get_cached_test_instance(&self, instance_id: &str) -> Option<ChannelTestInstance>;
+
+    /// 🔧 获取所有缓存的测试实例
+    async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance>;
 }
 
 /// 通道状态管理器实现
@@ -93,6 +95,8 @@ pub struct ChannelStateManager {
     persistence_service: Arc<dyn IPersistenceService>,
     /// 通道定义内存缓存
     channel_definitions_cache: Arc<std::sync::RwLock<HashMap<String, ChannelPointDefinition>>>,
+    /// 🔧 测试实例内存缓存 - 关键修复
+    test_instances_cache: Arc<std::sync::RwLock<HashMap<String, ChannelTestInstance>>>,
 }
 
 impl ChannelStateManager {
@@ -101,6 +105,7 @@ impl ChannelStateManager {
         Self {
             persistence_service,
             channel_definitions_cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            test_instances_cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
     }
 
@@ -112,15 +117,21 @@ impl ChannelStateManager {
         let mut has_manual_tests = false;
         let mut manual_tests_completed = true;
 
+        info!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
+
         // 遍历所有子测试结果
         for (sub_test_item, result) in &instance.sub_test_results {
+            info!("🔍 [EVALUATE_STATUS] 检查子测试: {:?} -> {:?}", sub_test_item, result.status);
+
             match result.status {
                 SubTestStatus::Failed => {
+                    info!("🔍 [EVALUATE_STATUS] 发现失败测试: {:?}", sub_test_item);
                     any_failed = true;
                     all_required_passed = false;
                 }
                 SubTestStatus::NotTested => {
                     if self.is_required_test(sub_test_item) {
+                        info!("🔍 [EVALUATE_STATUS] 必需测试未完成: {:?}", sub_test_item);
                         all_required_passed = false;
                     }
                     if self.is_manual_test(sub_test_item) {
@@ -128,6 +139,7 @@ impl ChannelStateManager {
                     }
                 }
                 SubTestStatus::Passed => {
+                    info!("🔍 [EVALUATE_STATUS] 测试通过: {:?}", sub_test_item);
                     if *sub_test_item == SubTestItem::HardPoint {
                         hard_point_completed = true;
                     }
@@ -145,18 +157,33 @@ impl ChannelStateManager {
             }
         }
 
+        info!("🔍 [EVALUATE_STATUS] 状态评估结果:");
+        info!("   - any_failed: {}", any_failed);
+        info!("   - all_required_passed: {}", all_required_passed);
+        info!("   - hard_point_completed: {}", hard_point_completed);
+        info!("   - has_manual_tests: {}", has_manual_tests);
+        info!("   - manual_tests_completed: {}", manual_tests_completed);
+
         // 根据状态机规则更新整体状态
-        instance.overall_status = if any_failed {
+        let new_status = if any_failed {
+            info!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
             OverallTestStatus::TestCompletedFailed
         } else if all_required_passed {
+            info!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
             OverallTestStatus::TestCompletedPassed
         } else if hard_point_completed && has_manual_tests && !manual_tests_completed {
+            info!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
             OverallTestStatus::HardPointTestCompleted
         } else if hard_point_completed {
+            info!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
             OverallTestStatus::HardPointTestCompleted
         } else {
+            info!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
             OverallTestStatus::NotTested
         };
+
+        instance.overall_status = new_status;
+        info!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
 
         // 如果测试完成，更新时间戳
         if matches!(instance.overall_status, 
@@ -266,8 +293,46 @@ impl IChannelStateManager for ChannelStateManager {
         instance: &mut ChannelTestInstance,
         outcome: RawTestOutcome,
     ) -> AppResult<()> {
+        info!("🔍 [APPLY_OUTCOME] 开始应用测试结果: {} -> {:?} ({})",
+              instance.instance_id, outcome.sub_test_item, outcome.success);
+
+        // 🔧 修复：如果 sub_test_results 是空的，先初始化它
+        if instance.sub_test_results.is_empty() {
+            warn!("🔧 [APPLY_OUTCOME] 检测到空的 sub_test_results，正在修复...");
+
+            // 尝试获取通道定义来正确初始化
+            if let Some(definition) = self.get_channel_definition(&instance.definition_id).await {
+                // 🔧 使用现有的 initialize_sub_test_results 方法
+                instance.sub_test_results = self.initialize_sub_test_results(&definition.module_type);
+                info!("🔧 [APPLY_OUTCOME] 已根据通道定义初始化 {} 个子测试项", instance.sub_test_results.len());
+            } else {
+                // 如果找不到定义，至少添加当前测试项
+                instance.sub_test_results.insert(
+                    outcome.sub_test_item.clone(),
+                    SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None)
+                );
+                info!("🔧 [APPLY_OUTCOME] 已添加当前测试项: {:?}", outcome.sub_test_item);
+            }
+        }
+
+        // 🔧 调试：检查 sub_test_results 的状态
+        info!("🔍 [APPLY_OUTCOME] sub_test_results 包含 {} 个项目:", instance.sub_test_results.len());
+        for (item, result) in &instance.sub_test_results {
+            info!("   - {:?}: {:?}", item, result.status);
+        }
+
+        // 检查是否存在对应的子测试项，如果不存在则动态添加
+        if !instance.sub_test_results.contains_key(&outcome.sub_test_item) {
+            warn!("🔧 [APPLY_OUTCOME] 动态添加缺失的子测试项: {:?}", outcome.sub_test_item);
+            instance.sub_test_results.insert(
+                outcome.sub_test_item.clone(),
+                SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None)
+            );
+        }
+
         // 更新对应的子测试结果
         if let Some(sub_result) = instance.sub_test_results.get_mut(&outcome.sub_test_item) {
+            info!("🔍 [APPLY_OUTCOME] 找到对应的子测试项: {:?}", outcome.sub_test_item);
             sub_result.status = if outcome.success {
                 SubTestStatus::Passed
             } else {
@@ -277,12 +342,15 @@ impl IChannelStateManager for ChannelStateManager {
             sub_result.actual_value = outcome.raw_value_read.clone();
             sub_result.expected_value = outcome.eng_value_calculated.clone();
             sub_result.details = outcome.message.clone();
+            info!("🔍 [APPLY_OUTCOME] 子测试状态已更新为: {:?}", sub_result.status);
+        } else {
+            error!("❌ [APPLY_OUTCOME] 这不应该发生：仍然找不到子测试项: {:?}", outcome.sub_test_item);
         }
 
         // 重新评估整体状态
         self.evaluate_overall_status(instance);
 
-        info!("应用测试结果: {} -> {:?} ({})", 
+        info!("应用测试结果: {} -> {:?} ({})",
               instance.instance_id, outcome.sub_test_item, outcome.success);
         Ok(())
     }
@@ -380,12 +448,30 @@ impl IChannelStateManager for ChannelStateManager {
         definition_id: &str,
         batch_id: &str,
     ) -> AppResult<ChannelTestInstance> {
-        let instance = ChannelTestInstance::new(
-            definition_id.to_string(),
-            batch_id.to_string(),
-        );
+        // 🔧 修复：获取通道定义以便正确初始化 sub_test_results
+        let definition = match self.get_channel_definition(definition_id).await {
+            Some(def) => def,
+            None => {
+                // 如果找不到定义，创建一个默认的实例（向后兼容）
+                warn!("⚠️ [STATE_MANAGER] 未找到通道定义: {}，创建默认实例", definition_id);
+                let mut instance = ChannelTestInstance::new(
+                    definition_id.to_string(),
+                    batch_id.to_string(),
+                );
+                // 至少初始化硬点测试项
+                instance.sub_test_results.insert(
+                    SubTestItem::HardPoint,
+                    SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None)
+                );
+                info!("创建默认测试实例: {}", instance.instance_id);
+                return Ok(instance);
+            }
+        };
 
-        info!("创建测试实例: {}", instance.instance_id);
+        // 🔧 使用正确的初始化方法
+        let instance = self.initialize_channel_test_instance(definition, batch_id.to_string()).await?;
+
+        info!("创建测试实例: {} (已正确初始化sub_test_results)", instance.instance_id);
         Ok(instance)
     }
 
@@ -396,13 +482,90 @@ impl IChannelStateManager for ChannelStateManager {
     }
 
     /// 更新测试结果
-    async fn update_test_result(
-        &self,
-        instance_id: &str,
-        outcome: RawTestOutcome,
-    ) -> AppResult<()> {
-        info!("更新测试结果: {} -> {:?}", instance_id, outcome.success);
-        // TODO: 实现具体的结果更新逻辑
+    async fn update_test_result(&self, outcome: RawTestOutcome) -> AppResult<()> {
+        let instance_id = outcome.channel_instance_id.clone();
+        info!("🔍 [STATE_MANAGER] 尝试更新测试结果: {} -> {:?}", instance_id, outcome.success);
+
+        // 🔧 添加详细的ID调试信息
+        info!("🔍 [STATE_MANAGER] 详细ID信息:");
+        info!("   - instance_id: {}", instance_id);
+        info!("   - instance_id长度: {}", instance_id.len());
+        info!("   - instance_id字节: {:?}", instance_id.as_bytes());
+        info!("   - 测试项目: {:?}", outcome.sub_test_item);
+        info!("   - 测试结果: {}", outcome.success);
+
+        // 🔧 第一步：尝试从内存缓存获取测试实例
+        let mut instance_from_cache = {
+            let cache = self.test_instances_cache.read().unwrap();
+            let cached_result = cache.get(&instance_id).cloned();
+            info!("🔍 [STATE_MANAGER] 内存缓存查询结果: {}", if cached_result.is_some() { "找到" } else { "未找到" });
+            cached_result
+        };
+
+        // 🔧 第二步：如果缓存中没有，从数据库加载
+        if instance_from_cache.is_none() {
+            info!("🔍 [STATE_MANAGER] 准备从数据库查询实例ID: {}", instance_id);
+            match self.persistence_service.load_test_instance(&instance_id).await {
+                Ok(Some(instance)) => {
+                    info!("✅ [STATE_MANAGER] 从数据库加载测试实例: {} (定义ID: {})", instance_id, instance.definition_id);
+
+                    // 将实例添加到缓存
+                    {
+                        let mut cache = self.test_instances_cache.write().unwrap();
+                        cache.insert(instance_id.to_string(), instance.clone());
+                    }
+
+                    instance_from_cache = Some(instance);
+                }
+                Ok(None) => {
+                    warn!("⚠️ [STATE_MANAGER] 数据库中未找到测试实例: {}", instance_id);
+
+                    // 🔧 添加调试信息：列出数据库中的所有实例ID
+                    match self.persistence_service.load_all_test_instances().await {
+                        Ok(all_instances) => {
+                            warn!("🔍 [STATE_MANAGER] 数据库中共有 {} 个测试实例", all_instances.len());
+                            if all_instances.len() <= 20 {
+                                for (i, inst) in all_instances.iter().enumerate() {
+                                    warn!("   {}. 实例ID: {} (长度: {})", i + 1, inst.instance_id, inst.instance_id.len());
+                                    if inst.instance_id.contains(&instance_id[0..20]) {
+                                        warn!("      ⚠️ 部分匹配的实例！");
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("❌ [STATE_MANAGER] 查询所有测试实例失败: {}", e);
+                        }
+                    }
+
+                    return Err(AppError::not_found_error("测试实例", &format!("实例ID: {}", instance_id)));
+                }
+                Err(e) => {
+                    error!("❌ [STATE_MANAGER] 加载测试实例失败: {} - {}", instance_id, e);
+                    return Err(e);
+                }
+            }
+        } else {
+            info!("✅ [STATE_MANAGER] 从内存缓存获取测试实例: {}", instance_id);
+        }
+
+        // 🔧 第三步：更新测试实例状态
+        if let Some(mut instance) = instance_from_cache {
+            // 应用测试结果
+            self.apply_raw_outcome(&mut instance, outcome).await?;
+
+            // 🔧 第四步：同时更新内存缓存和数据库
+            {
+                let mut cache = self.test_instances_cache.write().unwrap();
+                cache.insert(instance_id.to_string(), instance.clone());
+            }
+
+            // 保存到数据库
+            self.persistence_service.save_test_instance(&instance).await?;
+
+            info!("✅ [STATE_MANAGER] 成功更新测试结果: {} -> {:?}", instance_id, instance.overall_status);
+        }
+
         Ok(())
     }
 
@@ -422,16 +585,11 @@ impl IChannelStateManager for ChannelStateManager {
         &self,
         allocation_result: crate::commands::data_management::AllocationResult,
     ) -> AppResult<()> {
-        info!("🔥 [STATE_MANAGER] 存储批次分配结果到状态管理器");
-        info!("🔥 [STATE_MANAGER] 批次数量: {}", allocation_result.batches.len());
-        info!("🔥 [STATE_MANAGER] 分配实例数量: {}", allocation_result.allocated_instances.len());
-
-        // 🔧 修复：首先保存通道定义到数据库
-        info!("🔥 [STATE_MANAGER] 步骤1: 保存通道定义到数据库");
+        // 首先保存通道定义到数据库
 
         // 从分配结果中获取所有通道定义
         if let Some(ref channel_definitions) = allocation_result.channel_definitions {
-            info!("🔥 [STATE_MANAGER] 开始保存{}个通道定义到数据库", channel_definitions.len());
+
 
             let mut saved_count = 0;
             let mut failed_count = 0;
@@ -450,7 +608,7 @@ impl IChannelStateManager for ChannelStateManager {
                 }
             }
 
-            info!("✅ [STATE_MANAGER] 通道定义保存完成: 成功={}, 失败={}", saved_count, failed_count);
+    
 
             if failed_count > 0 {
                 warn!("⚠️ [STATE_MANAGER] 有{}个通道定义保存失败，但继续处理", failed_count);
@@ -460,7 +618,6 @@ impl IChannelStateManager for ChannelStateManager {
         }
 
         // 步骤2: 将通道定义存储到内存缓存中
-        info!("🔥 [STATE_MANAGER] 步骤2: 将通道定义存储到内存缓存");
 
         // 从测试实例中提取所有相关的通道定义ID
         let definition_ids: std::collections::HashSet<String> = allocation_result.allocated_instances
@@ -468,7 +625,7 @@ impl IChannelStateManager for ChannelStateManager {
             .map(|instance| instance.definition_id.clone())
             .collect();
 
-        info!("🔥 [STATE_MANAGER] 需要缓存{}个通道定义", definition_ids.len());
+
 
         // 从数据库加载这些通道定义并存储到缓存中
         let mut loaded_definitions = Vec::new();
@@ -493,8 +650,7 @@ impl IChannelStateManager for ChannelStateManager {
             }
         }
 
-        info!("🔥 [STATE_MANAGER] 通道定义加载完成: 成功={}, 未找到={}, 错误={}",
-            loaded_count, not_found_count, error_count);
+
 
         // 将加载的定义存储到缓存中（避免跨await持有锁）
         {
@@ -502,11 +658,10 @@ impl IChannelStateManager for ChannelStateManager {
             for (definition_id, definition) in loaded_definitions {
                 cache.insert(definition_id, definition);
             }
-            info!("🔥 [STATE_MANAGER] 内存缓存完成，缓存中共有{}个通道定义", cache.len());
+
         }
 
         // 将批次信息保存到持久化服务
-        info!("🔥 [STATE_MANAGER] 步骤3: 保存{}个批次信息到数据库", allocation_result.batches.len());
         let mut batch_saved_count = 0;
         let mut batch_failed_count = 0;
 
@@ -519,25 +674,29 @@ impl IChannelStateManager for ChannelStateManager {
             }
         }
 
-        info!("🔥 [STATE_MANAGER] 批次信息保存完成: 成功={}, 失败={}", batch_saved_count, batch_failed_count);
-
-        // 将测试实例保存到持久化服务
-        info!("🔥 [STATE_MANAGER] 步骤4: 保存{}个测试实例到数据库", allocation_result.allocated_instances.len());
+        // 🔧 将测试实例保存到持久化服务和内存缓存
         let mut instance_saved_count = 0;
         let mut instance_failed_count = 0;
 
         for instance in &allocation_result.allocated_instances {
+            // 保存到数据库
             if let Err(e) = self.persistence_service.save_test_instance(instance).await {
                 instance_failed_count += 1;
-                error!("🔥 [STATE_MANAGER] 保存测试实例失败: {} - {}", instance.instance_id, e);
+                error!("🔥 [STATE_MANAGER] 保存测试实例到数据库失败: {} - {}", instance.instance_id, e);
             } else {
                 instance_saved_count += 1;
+
+                // 🔧 同时保存到内存缓存
+                {
+                    let mut cache = self.test_instances_cache.write().unwrap();
+                    cache.insert(instance.instance_id.clone(), instance.clone());
+                }
+
+                info!("✅ [STATE_MANAGER] 测试实例已保存到数据库和缓存: {}", instance.instance_id);
             }
         }
 
-        info!("🔥 [STATE_MANAGER] 测试实例保存完成: 成功={}, 失败={}", instance_saved_count, instance_failed_count);
 
-        info!("🔥 [STATE_MANAGER] 批次分配结果存储完成");
         Ok(())
     }
 
@@ -547,7 +706,6 @@ impl IChannelStateManager for ChannelStateManager {
         {
             let cache = self.channel_definitions_cache.read().unwrap();
             if let Some(definition) = cache.get(definition_id) {
-                debug!("✅ [STATE_MANAGER] 从内存缓存获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
                 return Some(definition.clone());
             }
         }
@@ -555,8 +713,6 @@ impl IChannelStateManager for ChannelStateManager {
         // 如果缓存中没有，则从数据库获取并缓存
         match self.persistence_service.load_channel_definition(definition_id).await {
             Ok(Some(definition)) => {
-                debug!("✅ [STATE_MANAGER] 从数据库获取通道定义: ID={}, Tag={}", definition_id, definition.tag);
-
                 // 将定义存储到缓存中
                 {
                     let mut cache = self.channel_definitions_cache.write().unwrap();
@@ -566,7 +722,6 @@ impl IChannelStateManager for ChannelStateManager {
                 Some(definition)
             }
             Ok(None) => {
-                debug!("⚠️ [STATE_MANAGER] 通道定义不存在: {}", definition_id);
                 None
             }
             Err(e) => {
@@ -574,5 +729,17 @@ impl IChannelStateManager for ChannelStateManager {
                 None
             }
         }
+    }
+
+    /// 🔧 获取内存缓存中的测试实例
+    async fn get_cached_test_instance(&self, instance_id: &str) -> Option<ChannelTestInstance> {
+        let cache = self.test_instances_cache.read().unwrap();
+        cache.get(instance_id).cloned()
+    }
+
+    /// 🔧 获取所有缓存的测试实例
+    async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance> {
+        let cache = self.test_instances_cache.read().unwrap();
+        cache.values().cloned().collect()
     }
 }

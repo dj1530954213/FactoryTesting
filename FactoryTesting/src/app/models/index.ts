@@ -17,10 +17,18 @@ export enum PointDataType {
 
 export enum OverallTestStatus {
   NotTested = 'NotTested',
+  Skipped = 'Skipped',
+  WiringConfirmationRequired = 'WiringConfirmationRequired',
+  WiringConfirmed = 'WiringConfirmed',
+  HardPointTestInProgress = 'HardPointTestInProgress',
   HardPointTesting = 'HardPointTesting',
-  AlarmTesting = 'AlarmTesting', 
+  HardPointTestCompleted = 'HardPointTestCompleted',
+  ManualTestInProgress = 'ManualTestInProgress',
+  ManualTesting = 'ManualTesting',
+  AlarmTesting = 'AlarmTesting',
   TestCompletedPassed = 'TestCompletedPassed',
-  TestCompletedFailed = 'TestCompletedFailed'
+  TestCompletedFailed = 'TestCompletedFailed',
+  Retesting = 'Retesting'
 }
 
 export enum SubTestItem {
@@ -223,10 +231,18 @@ export const POINT_DATA_TYPE_LABELS: { [key in PointDataType]: string } = {
 
 export const OVERALL_TEST_STATUS_LABELS: { [key in OverallTestStatus]: string } = {
   [OverallTestStatus.NotTested]: '未测试',
+  [OverallTestStatus.Skipped]: '跳过测试',
+  [OverallTestStatus.WiringConfirmationRequired]: '需要接线确认',
+  [OverallTestStatus.WiringConfirmed]: '接线已确认',
+  [OverallTestStatus.HardPointTestInProgress]: '硬点测试进行中',
   [OverallTestStatus.HardPointTesting]: '硬点测试中',
+  [OverallTestStatus.HardPointTestCompleted]: '硬点测试已完成',
+  [OverallTestStatus.ManualTestInProgress]: '手动测试进行中',
+  [OverallTestStatus.ManualTesting]: '手动测试中',
   [OverallTestStatus.AlarmTesting]: '报警测试中',
   [OverallTestStatus.TestCompletedPassed]: '测试完成并通过',
-  [OverallTestStatus.TestCompletedFailed]: '测试完成并失败'
+  [OverallTestStatus.TestCompletedFailed]: '测试完成并失败',
+  [OverallTestStatus.Retesting]: '重新测试中'
 };
 
 export const SUB_TEST_ITEM_LABELS: { [key in SubTestItem]: string } = {

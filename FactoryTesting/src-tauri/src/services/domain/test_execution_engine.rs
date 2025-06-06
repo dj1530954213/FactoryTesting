@@ -5,7 +5,8 @@
 use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
 use crate::services::infrastructure::IPlcCommunicationService;
 use crate::services::domain::specific_test_executors::{
-    ISpecificTestStepExecutor, AIHardPointPercentExecutor, AIAlarmTestExecutor, DIStateReadExecutor
+    ISpecificTestStepExecutor, AIHardPointPercentExecutor,
+    DIHardPointTestExecutor, DOHardPointTestExecutor, AOHardPointTestExecutor
 };
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
@@ -97,59 +98,22 @@ impl TestExecutionEngine {
 
         match definition.module_type {
             ModuleType::AI | ModuleType::AINone => {
-                // AI点测试序列
-                if definition.test_rig_plc_address.is_some() {
-                    // 硬点测试 - 多个百分比点
-                    let percentages = [0.0, 0.25, 0.5, 0.75, 1.0];
-                    for percentage in percentages {
-                        executors.push(Box::new(AIHardPointPercentExecutor::new()));
-                    }
-                }
-
-                // 报警测试
-                if definition.sll_set_point_address.is_some() {
-                    executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::LowLowAlarm,
-                        2000, // 2秒触发延时
-                        1000  // 1秒复位延时
-                    )));
-                }
-                if definition.sl_set_point_address.is_some() {
-                    executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::LowAlarm,
-                        2000,
-                        1000
-                    )));
-                }
-                if definition.sh_set_point_address.is_some() {
-                    executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::HighAlarm,
-                        2000,
-                        1000
-                    )));
-                }
-                if definition.shh_set_point_address.is_some() {
-                    executors.push(Box::new(AIAlarmTestExecutor::new(
-                        SubTestItem::HighHighAlarm,
-                        2000,
-                        1000
-                    )));
-                }
+                // AI点硬点测试：测试PLC的AO通道输出 → 被测PLC的AI通道采集
+                // AI点硬点测试不需要时间间隔参数
+                executors.push(Box::new(AIHardPointPercentExecutor::new()));
+                //TODO:(DJ)这里没有项下面的3个测试项添加测试的时间间隔。我需要编写方式保持一致
             },
             ModuleType::DI | ModuleType::DINone => {
-                // DI点测试序列
-                executors.push(Box::new(DIStateReadExecutor::new(
-                    None, // 不指定期望值，只读取当前状态
-                    500   // 500ms读取延时
-                )));
+                // DI点硬点测试：测试PLC的DO通道输出 → 被测PLC的DI通道检测
+                executors.push(Box::new(DIHardPointTestExecutor::new(3000))); // 3秒间隔
             },
             ModuleType::DO | ModuleType::DONone => {
-                // TODO: 实现DO点测试执行器
-                debug!("DO点测试执行器尚未实现: {}", definition.tag);
+                // DO点硬点测试：被测PLC的DO通道输出 → 测试PLC的DI通道检测
+                executors.push(Box::new(DOHardPointTestExecutor::new(3000))); // 3秒间隔
             },
             ModuleType::AO | ModuleType::AONone => {
-                // TODO: 实现AO点测试执行器
-                debug!("AO点测试执行器尚未实现: {}", definition.tag);
+                // AO点硬点测试：被测PLC的AO通道输出 → 测试PLC的AI通道采集
+                executors.push(Box::new(AOHardPointTestExecutor::new(3000))); // 3秒间隔
             },
             ModuleType::Communication => {
                 // TODO: 实现通信模块测试执行器

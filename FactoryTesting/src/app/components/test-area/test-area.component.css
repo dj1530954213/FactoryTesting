@@ -57,6 +57,37 @@
   font-size: 12px;
 }
 
+/* 测试进度容器样式 */
+.test-progress-container {
+  min-width: 280px;
+  padding: 8px 12px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  border-radius: 6px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #389e0d;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-percentage {
+  font-size: 12px;
+  color: #389e0d;
+  font-weight: 600;
+}
+
 .batch-selection-section h3 {
   margin-bottom: 16px;
   color: #1890ff;
@@ -188,6 +219,209 @@
 
 .stat-value.skipped {
   color: #8c8c8c;
+}
+
+/* 测试进度区域 */
+.test-progress-section {
+  margin-bottom: 16px;
+}
+
+.progress-card {
+  background: linear-gradient(135deg, #f6ffed 0%, #f0f9ff 100%);
+  border: 1px solid #b7eb8f;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.progress-card ::ng-deep .ant-card-head {
+  background: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid #d9f7be;
+  padding: 8px 16px;
+}
+
+.progress-card ::ng-deep .ant-card-head-title {
+  color: #389e0d;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.progress-card ::ng-deep .ant-card-body {
+  padding: 12px 16px;
+}
+
+.progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.progress-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.progress-header h4 {
+  margin: 0;
+  color: #262626;
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-percentage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.percentage-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1890ff;
+}
+
+.progress-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: #595959;
+}
+
+.current-test {
+  color: #1890ff;
+  font-weight: 500;
+  background: #e6f7ff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #91d5ff;
+  font-size: 11px;
+}
+
+.completion-status {
+  color: #52c41a;
+  font-weight: 600;
+  background: #f6ffed;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #b7eb8f;
+  font-size: 11px;
+}
+
+.progress-stats {
+  background: rgba(255, 255, 255, 0.7);
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #e6f7ff;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 6px;
+  max-width: 100%;
+}
+
+.progress-stats .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 4px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 3px;
+  border: 1px solid #f0f0f0;
+  min-height: 40px;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.progress-stats .stat-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.progress-stats .stat-icon {
+  font-size: 14px;
+  margin-bottom: 1px;
+}
+
+.progress-stats .stat-label {
+  font-size: 10px;
+  color: #8c8c8c;
+  margin-bottom: 1px;
+  text-align: center;
+  line-height: 1.1;
+}
+
+.progress-stats .stat-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #262626;
+}
+
+.progress-stats .stat-item.success .stat-value {
+  color: #52c41a;
+}
+
+.progress-stats .stat-item.failed .stat-value {
+  color: #ff4d4f;
+}
+
+.progress-stats .stat-item.pending .stat-value {
+  color: #faad14;
+}
+
+.progress-stats .stat-item.testing .stat-value {
+  color: #1890ff;
+}
+
+.recent-results {
+  background: rgba(255, 255, 255, 0.7);
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #e6f7ff;
+}
+
+.recent-header {
+  font-size: 11px;
+  color: #8c8c8c;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.result-tag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 通道详情区域 */
@@ -325,8 +559,21 @@
   font-weight: 500;
 }
 
-.no-error {
+.success-message {
   color: #52c41a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.testing-message {
+  color: #1890ff;
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.no-error {
+  color: #8c8c8c;
   font-size: 12px;
   font-style: italic;
 }

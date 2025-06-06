@@ -78,16 +78,13 @@ impl DataImportService {
         file_path: &str,
         replace_existing: bool,
     ) -> Result<ImportResult, AppError> {
-        info!("开始从Excel文件导入数据: {}", file_path);
-
         let mut result = ImportResult::new();
 
         // 1. 如果需要替换现有数据，先清空数据库
         if replace_existing {
-            info!("清空现有通道定义数据...");
             match self.clear_all_data().await {
-                Ok(deleted_count) => {
-                    info!("成功清空{}条现有数据", deleted_count);
+                Ok(_deleted_count) => {
+                    // 清空成功，不记录日志
                 }
                 Err(e) => {
                     error!("清空现有数据失败: {:?}", e);
@@ -106,7 +103,7 @@ impl DataImportService {
         };
 
         result.total_rows = definitions.len();
-        info!("从Excel文件解析出{}个通道定义", definitions.len());
+
 
         // 3. 验证数据
         let validated_definitions = self.validate_definitions(definitions, &mut result).await?;
@@ -114,13 +111,7 @@ impl DataImportService {
         // 4. 导入到数据库
         self.import_to_database(validated_definitions, false, &mut result).await?; // 由于已经清空，这里不需要再检查重复
 
-        info!(
-            "数据导入完成: 总计{}行，成功{}行，失败{}行，成功率{:.1}%",
-            result.total_rows,
-            result.successful_imports,
-            result.failed_imports,
-            result.success_rate()
-        );
+
 
         Ok(result)
     }
@@ -131,7 +122,7 @@ impl DataImportService {
         definitions: Vec<ChannelPointDefinition>,
         result: &mut ImportResult,
     ) -> Result<Vec<ChannelPointDefinition>, AppError> {
-        info!("开始验证通道定义数据...");
+
 
         let mut validated = Vec::new();
         let mut tag_set = std::collections::HashSet::new();
@@ -186,8 +177,6 @@ impl DataImportService {
         replace_existing: bool,
         result: &mut ImportResult,
     ) -> Result<(), AppError> {
-        info!("开始导入数据到数据库...");
-
         for definition in definitions {
             match self.import_single_definition(&definition, replace_existing).await {
                 Ok(_) => {
@@ -278,7 +267,7 @@ impl DataImportService {
             .await
             .map_err(|e| AppError::persistence_error(format!("删除数据失败: {}", e)))?;
 
-        info!("清空通道定义数据，删除{}条记录", result.rows_affected);
+
         Ok(result.rows_affected)
     }
 }

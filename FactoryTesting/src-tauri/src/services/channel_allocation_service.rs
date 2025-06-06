@@ -133,44 +133,18 @@ impl ChannelAllocationService {
         product_model: Option<String>,
         serial_number: Option<String>,
     ) -> Result<BatchAllocationResult, AppError> {
-        log::info!("===== 开始统一分配通道 =====");
-        log::info!("总通道定义数: {}", definitions.len());
-
-        // 输出详细的输入信息
-        log::info!("=== 输入通道定义详情 ===");
-        for (i, def) in definitions.iter().enumerate().take(10) {
-            log::info!("通道[{}]: ID={}, Tag={}, Type={:?}, 供电={}",
-                i + 1, def.id, def.tag, def.module_type, def.power_supply_type);
-        }
-        if definitions.len() > 10 {
-            log::info!("... 还有 {} 个通道", definitions.len() - 10);
-        }
 
         log::info!("=== 测试PLC配置详情 ===");
         log::info!("PLC品牌: {}, IP: {}", test_plc_config.brand_type, test_plc_config.ip_address);
         log::info!("测试PLC通道映射表数量: {}", test_plc_config.comparison_tables.len());
-        for (i, table) in test_plc_config.comparison_tables.iter().enumerate().take(10) {
-            log::info!("映射[{}]: {} -> {} ({:?}, {})",
-                i + 1, table.channel_address, table.communication_address,
-                table.channel_type, if table.is_powered { "有源" } else { "无源" });
-        }
-        if test_plc_config.comparison_tables.len() > 10 {
-            log::info!("... 还有 {} 个映射", test_plc_config.comparison_tables.len() - 10);
-        }
+
 
         // 步骤1: 按照有源/无源分组被测通道
         let channel_groups = self.group_channels_by_power_type(&definitions);
 
         // 步骤2: 计算测试PLC的实际通道容量
         let test_channel_counts = self.calculate_test_channel_counts(&test_plc_config);
-        log::info!("测试PLC通道容量统计:");
-        log::info!("  AO无源(测试AI有源): {}", test_channel_counts.ao_powered_false_count);
-        log::info!("  AO有源(测试AI无源): {}", test_channel_counts.ao_powered_true_count);
-        log::info!("  AI有源(测试AO无源): {}", test_channel_counts.ai_powered_true_count);
-        log::info!("  DO无源(测试DI有源): {}", test_channel_counts.do_powered_false_count);
-        log::info!("  DO有源(测试DI无源): {}", test_channel_counts.do_powered_true_count);
-        log::info!("  DI无源(测试DO有源): {}", test_channel_counts.di_powered_false_count);
-        log::info!("  DI有源(测试DO无源): {}", test_channel_counts.di_powered_true_count);
+
 
         // 步骤3: 创建分配序列（按优先级）
         let mut allocation_sequence = Vec::new();
@@ -192,16 +166,7 @@ impl ChannelAllocationService {
         // DO无源 → DI有源
         allocation_sequence.extend(channel_groups.do_powered_false.clone());
 
-        log::info!("=== 分配序列统计 ===");
-        log::info!("AI有源→AO无源: {} 个通道", channel_groups.ai_powered_true.len());
-        log::info!("AI无源→AO有源: {} 个通道", channel_groups.ai_powered_false.len());
-        log::info!("AO有源→AI无源: {} 个通道", channel_groups.ao_powered_true.len());
-        log::info!("AO无源→AI有源: {} 个通道", channel_groups.ao_powered_false.len());
-        log::info!("DI有源→DO无源: {} 个通道", channel_groups.di_powered_true.len());
-        log::info!("DI无源→DO有源: {} 个通道", channel_groups.di_powered_false.len());
-        log::info!("DO有源→DI无源: {} 个通道", channel_groups.do_powered_true.len());
-        log::info!("DO无源→DI有源: {} 个通道", channel_groups.do_powered_false.len());
-        log::info!("总计: {} 个通道需要分配", allocation_sequence.len());
+
 
         // 步骤4: 执行正确的批次分配（每个批次重新使用完整的测试PLC通道池）
         let mut batches = Vec::new();
@@ -299,16 +264,7 @@ impl ChannelAllocationService {
         let max_channels_per_batch = self.calculate_max_channels_per_batch(test_plc_config);
         log::info!("每批次最大通道数限制: {}", max_channels_per_batch);
 
-        // 显示当前测试PLC通道池状态
-        log::info!("=== 当前测试PLC通道池状态 ===");
-        log::info!("AO无源池: {} 个通道", test_channel_pools.ao_powered_false.len());
-        log::info!("AO有源池: {} 个通道", test_channel_pools.ao_powered_true.len());
-        log::info!("AI有源池: {} 个通道", test_channel_pools.ai_powered_true.len());
-        log::info!("AI无源池: {} 个通道", test_channel_pools.ai_powered_false.len());
-        log::info!("DO无源池: {} 个通道", test_channel_pools.do_powered_false.len());
-        log::info!("DO有源池: {} 个通道", test_channel_pools.do_powered_true.len());
-        log::info!("DI无源池: {} 个通道", test_channel_pools.di_powered_false.len());
-        log::info!("DI有源池: {} 个通道", test_channel_pools.di_powered_true.len());
+
 
         // 按类型分配通道，限制每批次最大通道数
 
@@ -346,7 +302,7 @@ impl ChannelAllocationService {
                 serial_number.clone(),
             )?;
 
-            log::info!("  AI有源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+
             batch_instances.push(instance);
             used_channel_ids.push(def.id.clone());
 
@@ -451,7 +407,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  AO无源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -486,7 +442,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DI有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -556,7 +512,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DO有源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -654,15 +610,7 @@ impl ChannelAllocationService {
             }
         }
 
-        log::info!("=== 测试PLC通道池统计 ===");
-        log::info!("AO无源池: {} 个通道", pools.ao_powered_false.len());
-        log::info!("AO有源池: {} 个通道", pools.ao_powered_true.len());
-        log::info!("AI有源池: {} 个通道", pools.ai_powered_true.len());
-        log::info!("AI无源池: {} 个通道", pools.ai_powered_false.len());
-        log::info!("DO无源池: {} 个通道", pools.do_powered_false.len());
-        log::info!("DO有源池: {} 个通道", pools.do_powered_true.len());
-        log::info!("DI无源池: {} 个通道", pools.di_powered_false.len());
-        log::info!("DI有源池: {} 个通道", pools.di_powered_true.len());
+
 
         pools
     }
@@ -715,15 +663,7 @@ impl ChannelAllocationService {
             }
         }
 
-        log::info!("=== 测试PLC通道统计结果 ===");
-        log::info!("AO无源(用于测试AI有源): {}", counts.ao_powered_false_count);
-        log::info!("AO有源(用于测试AI无源): {}", counts.ao_powered_true_count);
-        log::info!("AI无源(用于测试AO有源): {}", counts.ai_powered_false_count);
-        log::info!("AI有源(用于测试AO无源): {}", counts.ai_powered_true_count);
-        log::info!("DO无源(用于测试DI有源): {}", counts.do_powered_false_count);
-        log::info!("DO有源(用于测试DI无源): {}", counts.do_powered_true_count);
-        log::info!("DI无源(用于测试DO有源): {}", counts.di_powered_false_count);
-        log::info!("DI有源(用于测试DO无源): {}", counts.di_powered_true_count);
+
 
         counts
     }
@@ -971,9 +911,6 @@ impl IChannelAllocationService for ChannelAllocationService {
         product_model: Option<String>,
         serial_number: Option<String>,
     ) -> Result<BatchAllocationResult, AppError> {
-        log::info!("[ChannelAllocation] ===== 开始通道分配 =====");
-        log::info!("[ChannelAllocation] 输入: {} 个定义, 产品型号: {:?}, 序列号: {:?}",
-                  definitions.len(), product_model, serial_number);
 
         // 调用统一分配方法
         let result = self.allocate_channels_unified(definitions, test_plc_config, product_model, serial_number)?;
@@ -1093,7 +1030,8 @@ mod tests {
         if matches!(module_type, ModuleType::AI | ModuleType::AO) {
             definition.range_lower_limit = Some(0.0);
             definition.range_upper_limit = Some(100.0);
-            definition.test_rig_plc_address = Some(format!("DB2.DBD{}", id.len() * 4));
+            // 不再生成虚拟地址，测试台架地址将通过通道分配时从测试PLC配置表获取
+            definition.test_rig_plc_address = None;
         }
 
         definition

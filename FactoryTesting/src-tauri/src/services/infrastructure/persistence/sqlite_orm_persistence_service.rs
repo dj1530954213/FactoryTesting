@@ -196,7 +196,6 @@ impl BaseService for SqliteOrmPersistenceService {
         self.db_conn.ping().await.map_err(|db_err| {
             AppError::persistence_error(format!("数据库健康检查失败 (ping): {}", db_err))
         })?;
-        log::debug!("数据库连接健康。");
         Ok(())
     }
 }
@@ -205,8 +204,6 @@ impl BaseService for SqliteOrmPersistenceService {
 impl PersistenceService for SqliteOrmPersistenceService {
     // --- ChannelPointDefinition ---
     async fn save_channel_definition(&self, definition: &ChannelPointDefinition) -> AppResult<()> {
-        log::debug!("🔍 [SAVE_DEFINITION] 开始保存通道定义: ID={}, Tag={}", definition.id, definition.tag);
-
         // 验证UUID格式
         if definition.id.is_empty() || definition.id.len() < 36 {
             let error_msg = format!("无效的UUID格式: '{}'", definition.id);
@@ -225,33 +222,24 @@ impl PersistenceService for SqliteOrmPersistenceService {
             })?;
 
         if existing.is_some() {
-            log::debug!("🔄 [SAVE_DEFINITION] 记录已存在，执行更新操作: {}", definition.tag);
             // 记录已存在，执行更新操作
             let mut active_model: entities::channel_point_definition::ActiveModel = definition.into();
             // 确保ID不变
             active_model.id = Set(definition.id.clone());
             active_model.updated_time = Set(chrono::Utc::now().to_rfc3339());
 
-            let update_result = active_model.update(self.db_conn.as_ref())
+            active_model.update(self.db_conn.as_ref())
                 .await
                 .map_err(|e| {
                     let error_msg = format!("更新通道点位定义失败: {} - {}", definition.tag, e);
                     log::error!("❌ [SAVE_DEFINITION] {}", error_msg);
                     AppError::persistence_error(error_msg)
                 })?;
-
-            log::info!("✅ [SAVE_DEFINITION] 成功更新通道点位定义: {}", definition.tag);
-            log::debug!("🔍 [SAVE_DEFINITION] 更新结果: {:?}", update_result.id);
         } else {
-            log::debug!("➕ [SAVE_DEFINITION] 记录不存在，执行插入操作: {}", definition.tag);
             // 记录不存在，执行插入操作
             let active_model: entities::channel_point_definition::ActiveModel = definition.into();
 
-            // 详细记录要插入的数据
-            log::debug!("🔍 [SAVE_DEFINITION] 插入数据详情: ID={}, Tag={}, ModuleType={}, PowerType={}",
-                definition.id, definition.tag, definition.module_type, definition.power_supply_type);
-
-            let insert_result = entities::channel_point_definition::Entity::insert(active_model)
+            entities::channel_point_definition::Entity::insert(active_model)
                 .exec(self.db_conn.as_ref())
                 .await
                 .map_err(|e| {
@@ -261,18 +249,12 @@ impl PersistenceService for SqliteOrmPersistenceService {
                         definition.id, definition.tag, definition.module_type);
                     AppError::persistence_error(error_msg)
                 })?;
-
-            log::info!("✅ [SAVE_DEFINITION] 成功插入新通道点位定义: {}", definition.tag);
-            log::debug!("🔍 [SAVE_DEFINITION] 插入结果: {:?}", insert_result.last_insert_id);
         }
 
-        log::debug!("✅ [SAVE_DEFINITION] 保存通道定义完成: {}", definition.tag);
         Ok(())
     }
 
     async fn load_channel_definition(&self, id: &str) -> AppResult<Option<ChannelPointDefinition>> {
-        log::debug!("🔍 [LOAD_DEFINITION] 查询通道定义: ID={}", id);
-
         let model = entities::channel_point_definition::Entity::find_by_id(id.to_string())
             .one(self.db_conn.as_ref())
             .await
@@ -282,18 +264,10 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 AppError::persistence_error(error_msg)
             })?;
 
-        if let Some(ref model) = model {
-            log::debug!("✅ [LOAD_DEFINITION] 找到通道定义: ID={}, Tag={}", model.id, model.tag);
-        } else {
-            log::debug!("⚠️ [LOAD_DEFINITION] 未找到通道定义: ID={}", id);
-        }
-
         Ok(model.map(|m| (&m).into())) // 使用 From trait 转换
     }
 
     async fn load_all_channel_definitions(&self) -> AppResult<Vec<ChannelPointDefinition>> {
-        log::debug!("🔍 [LOAD_ALL_DEFINITIONS] 查询所有通道定义");
-
         let models = entities::channel_point_definition::Entity::find()
             .all(self.db_conn.as_ref())
             .await
@@ -302,15 +276,6 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 log::error!("❌ [LOAD_ALL_DEFINITIONS] {}", error_msg);
                 AppError::persistence_error(error_msg)
             })?;
-
-        log::info!("✅ [LOAD_ALL_DEFINITIONS] 从数据库加载了 {} 个通道定义", models.len());
-
-        if models.is_empty() {
-            log::warn!("⚠️ [LOAD_ALL_DEFINITIONS] 数据库中没有通道定义数据");
-        } else {
-            log::debug!("🔍 [LOAD_ALL_DEFINITIONS] 前3个定义: {:?}",
-                models.iter().take(3).map(|m| format!("ID={}, Tag={}", m.id, m.tag)).collect::<Vec<_>>());
-        }
 
         Ok(models.iter().map(|m| m.into()).collect()) // 使用 From trait 转换
     }
@@ -345,8 +310,6 @@ impl PersistenceService for SqliteOrmPersistenceService {
             active_model.update(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("更新测试批次失败: {}", e)))?;
-
-            log::debug!("更新测试批次: {}", batch.batch_id);
         } else {
             // 记录不存在，执行插入操作
             let active_model: entities::test_batch_info::ActiveModel = batch.into();
@@ -354,8 +317,6 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .exec(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("插入测试批次失败: {}", e)))?;
-
-            log::debug!("插入新测试批次: {}", batch.batch_id);
         }
 
         Ok(())
@@ -407,8 +368,6 @@ impl PersistenceService for SqliteOrmPersistenceService {
             active_model.update(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("更新测试实例失败: {}", e)))?;
-
-            log::debug!("更新测试实例: {}", instance.instance_id);
         } else {
             // 记录不存在，执行插入操作
             let active_model: entities::channel_test_instance::ActiveModel = instance.into();
@@ -416,19 +375,55 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .exec(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("插入测试实例失败: {}", e)))?;
-
-            log::debug!("插入新测试实例: {}", instance.instance_id);
         }
 
         Ok(())
     }
 
     async fn load_test_instance(&self, instance_id: &str) -> AppResult<Option<ChannelTestInstance>> {
+        // 🔧 添加详细的调试日志
+        error!("🔍 [PERSISTENCE] 查询测试实例:");
+        error!("   - 查询的instance_id: {}", instance_id);
+        error!("   - instance_id长度: {}", instance_id.len());
+        error!("   - instance_id字节: {:?}", instance_id.as_bytes());
+
         let model = entities::channel_test_instance::Entity::find_by_id(instance_id.to_string())
             .one(self.db_conn.as_ref())
             .await
             .map_err(|e| AppError::persistence_error(format!("加载测试实例失败: {}", e)))?;
+
+        match &model {
+            Some(m) => {
+                error!("✅ [PERSISTENCE] 找到测试实例: {}", m.instance_id);
+                error!("   - 数据库中的instance_id: {}", m.instance_id);
+                error!("   - 数据库中的definition_id: {}", m.definition_id);
+                error!("   - 数据库中的test_batch_id: {}", m.test_batch_id);
+            },
+            None => {
+                error!("❌ [PERSISTENCE] 未找到测试实例: {}", instance_id);
+            },
+        }
+
         Ok(model.map(|m| (&m).into()))
+    }
+
+    async fn load_all_test_instances(&self) -> AppResult<Vec<ChannelTestInstance>> {
+        let models = entities::channel_test_instance::Entity::find()
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载所有测试实例失败: {}", e)))?;
+
+        // 🔧 添加详细的调试日志
+        error!("🔍 [PERSISTENCE] 数据库中的所有测试实例:");
+        error!("   - 总数: {}", models.len());
+        for (i, model) in models.iter().enumerate() {
+            error!("   {}. instance_id: {} (长度: {})", i + 1, model.instance_id, model.instance_id.len());
+            error!("      definition_id: {}", model.definition_id);
+            error!("      test_batch_id: {}", model.test_batch_id);
+            error!("      overall_status: {}", model.overall_status);
+        }
+
+        Ok(models.iter().map(|m| m.into()).collect())
     }
 
     async fn load_test_instances_by_batch(&self, batch_id: &str) -> AppResult<Vec<ChannelTestInstance>> {
@@ -494,14 +489,10 @@ impl PersistenceService for SqliteOrmPersistenceService {
     async fn save_test_plc_channel(&self, channel: &crate::models::test_plc_config::TestPlcChannelConfig) -> AppResult<()> {
         use sea_orm::{ActiveModelTrait, Set};
 
-        debug!("开始保存测试PLC通道配置: ID={:?}, 地址={}", channel.id, channel.channel_address);
-
         let active_model: entities::test_plc_channel_config::ActiveModel = channel.into();
 
         // 检查是否有ID，如果有ID则尝试更新，否则插入
         if let Some(id) = &channel.id {
-            debug!("通道配置有ID，检查是否存在: {}", id);
-
             // 检查记录是否存在
             let existing = entities::test_plc_channel_config::Entity::find_by_id(id.clone())
                 .one(self.db_conn.as_ref())
@@ -512,7 +503,6 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 })?;
 
             if existing.is_some() {
-                debug!("记录存在，执行更新操作");
                 // 记录存在，执行更新
                 active_model.update(self.db_conn.as_ref())
                     .await
@@ -520,9 +510,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
                         error!("更新测试PLC通道配置失败: {}", e);
                         AppError::persistence_error(format!("更新测试PLC通道配置失败: {}", e))
                     })?;
-                info!("测试PLC通道配置更新成功: {}", channel.channel_address);
             } else {
-                debug!("记录不存在，执行插入操作");
                 // 记录不存在，执行插入
                 active_model.insert(self.db_conn.as_ref())
                     .await
@@ -530,10 +518,8 @@ impl PersistenceService for SqliteOrmPersistenceService {
                         error!("插入测试PLC通道配置失败: {}", e);
                         AppError::persistence_error(format!("插入测试PLC通道配置失败: {}", e))
                     })?;
-                info!("测试PLC通道配置插入成功: {}", channel.channel_address);
             }
         } else {
-            debug!("通道配置无ID，执行插入操作");
             // 没有ID，执行插入
             active_model.insert(self.db_conn.as_ref())
                 .await
@@ -541,10 +527,8 @@ impl PersistenceService for SqliteOrmPersistenceService {
                     error!("插入新测试PLC通道配置失败: {}", e);
                     AppError::persistence_error(format!("插入新测试PLC通道配置失败: {}", e))
                 })?;
-            info!("新测试PLC通道配置插入成功: {}", channel.channel_address);
         }
 
-        debug!("测试PLC通道配置保存操作完成");
         Ok(())
     }
 
@@ -753,14 +737,11 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
             return Ok(());
         }
 
-        log::info!("开始批量保存 {} 个测试实例", instances.len());
-
         // 逐个保存，使用 save_test_instance 的 upsert 逻辑
         for instance in instances {
             self.save_test_instance(instance).await?;
         }
 
-        log::info!("成功批量保存 {} 个测试实例", instances.len());
         Ok(())
     }
     async fn batch_save_test_outcomes(&self, _outcomes: &[RawTestOutcome]) -> AppResult<()> {
