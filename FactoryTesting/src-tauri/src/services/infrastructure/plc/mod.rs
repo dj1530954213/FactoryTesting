@@ -5,9 +5,14 @@ pub mod plc_communication_service;
 
 /// Modbus PLC服务实现
 pub mod modbus_plc_service;
+
+/// Mock PLC服务实现
+pub mod mock_plc_service;
+
 // pub mod s7_plc_service;
 // pub mod opcua_plc_service;
 
 // 重新导出主要接口和类型
 pub use plc_communication_service::*;
 pub use modbus_plc_service::{ModbusPlcService, ModbusConfig};
+pub use mock_plc_service::MockPlcService;

@@ -23,6 +23,9 @@ pub use plc::{
     PlcDataType,
     PlcConnectionStatus,
     PlcCommunicationStats,
+    MockPlcService,
+    ModbusPlcService,
+    ModbusConfig,
 };
 
 // 重新导出持久化相关接口和实现

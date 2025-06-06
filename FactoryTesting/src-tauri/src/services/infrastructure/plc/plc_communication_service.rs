@@ -136,7 +136,18 @@ pub trait PlcCommunicationService: BaseService {
     // 基础数据类型读取方法
     
     /// 读取布尔值
-    async fn read_bool(&self, address: &str) -> AppResult<bool>;
+    async fn read_bool(&self, address: &str) -> AppResult<bool> {
+        log::info!("🔍 [PLC_READ_BOOL] 地址: {}", address);
+        let result = self.read_bool_impl(address).await;
+        match &result {
+            Ok(value) => log::info!("✅ [PLC_READ_BOOL] 地址: {}, 值: {}", address, value),
+            Err(e) => log::error!("❌ [PLC_READ_BOOL] 地址: {}, 错误: {}", address, e),
+        }
+        result
+    }
+
+    /// 读取布尔值的实际实现
+    async fn read_bool_impl(&self, address: &str) -> AppResult<bool>;
     
     /// 读取8位有符号整数
     async fn read_int8(&self, address: &str) -> AppResult<i8>;
@@ -163,7 +174,18 @@ pub trait PlcCommunicationService: BaseService {
     async fn read_uint64(&self, address: &str) -> AppResult<u64>;
     
     /// 读取32位浮点数
-    async fn read_float32(&self, address: &str) -> AppResult<f32>;
+    async fn read_float32(&self, address: &str) -> AppResult<f32> {
+        log::info!("🔍 [PLC_READ_F32] 地址: {}", address);
+        let result = self.read_float32_impl(address).await;
+        match &result {
+            Ok(value) => log::info!("✅ [PLC_READ_F32] 地址: {}, 值: {}", address, value),
+            Err(e) => log::error!("❌ [PLC_READ_F32] 地址: {}, 错误: {}", address, e),
+        }
+        result
+    }
+
+    /// 读取32位浮点数的实际实现
+    async fn read_float32_impl(&self, address: &str) -> AppResult<f32>;
     
     /// 读取64位浮点数
     async fn read_float64(&self, address: &str) -> AppResult<f64>;
@@ -177,7 +199,18 @@ pub trait PlcCommunicationService: BaseService {
     // 基础数据类型写入方法
     
     /// 写入布尔值
-    async fn write_bool(&self, address: &str, value: bool) -> AppResult<()>;
+    async fn write_bool(&self, address: &str, value: bool) -> AppResult<()> {
+        log::info!("📝 [PLC_WRITE_BOOL] 地址: {}, 值: {}", address, value);
+        let result = self.write_bool_impl(address, value).await;
+        match &result {
+            Ok(_) => log::info!("✅ [PLC_WRITE_BOOL] 地址: {}, 值: {} - 写入成功", address, value),
+            Err(e) => log::error!("❌ [PLC_WRITE_BOOL] 地址: {}, 值: {}, 错误: {}", address, value, e),
+        }
+        result
+    }
+
+    /// 写入布尔值的实际实现
+    async fn write_bool_impl(&self, address: &str, value: bool) -> AppResult<()>;
     
     /// 写入8位有符号整数
     async fn write_int8(&self, address: &str, value: i8) -> AppResult<()>;
@@ -204,7 +237,18 @@ pub trait PlcCommunicationService: BaseService {
     async fn write_uint64(&self, address: &str, value: u64) -> AppResult<()>;
     
     /// 写入32位浮点数
-    async fn write_float32(&self, address: &str, value: f32) -> AppResult<()>;
+    async fn write_float32(&self, address: &str, value: f32) -> AppResult<()> {
+        log::info!("📝 [PLC_WRITE_F32] 地址: {}, 值: {}", address, value);
+        let result = self.write_float32_impl(address, value).await;
+        match &result {
+            Ok(_) => log::info!("✅ [PLC_WRITE_F32] 地址: {}, 值: {} - 写入成功", address, value),
+            Err(e) => log::error!("❌ [PLC_WRITE_F32] 地址: {}, 值: {}, 错误: {}", address, value, e),
+        }
+        result
+    }
+
+    /// 写入32位浮点数的实际实现
+    async fn write_float32_impl(&self, address: &str, value: f32) -> AppResult<()>;
     
     /// 写入64位浮点数
     async fn write_float64(&self, address: &str, value: f64) -> AppResult<()>;

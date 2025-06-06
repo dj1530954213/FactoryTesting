@@ -246,7 +246,7 @@ impl PlcCommunicationService for ModbusPlcService {
     }
 
     // --- Basic Data Type Read Methods ---
-    async fn read_bool(&self, address: &str) -> AppResult<bool> {
+    async fn read_bool_impl(&self, address: &str) -> AppResult<bool> {
         // 首先检查是否有活跃的PLC连接管理器连接
         if let Some(manager) = self.get_plc_connection_manager().await {
             return self.read_bool_from_manager(&manager, address).await;
@@ -334,7 +334,7 @@ impl PlcCommunicationService for ModbusPlcService {
         values.get(0).copied().ok_or_else(|| AppError::PlcCommunicationError { message: "读取u16时返回为空".to_string() })
     }
     
-    async fn read_float32(&self, address: &str) -> AppResult<f32> {
+    async fn read_float32_impl(&self, address: &str) -> AppResult<f32> {
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
         let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
@@ -372,7 +372,7 @@ impl PlcCommunicationService for ModbusPlcService {
     }
 
     // --- Basic Data Type Write Methods ---
-    async fn write_bool(&self, address: &str, value: bool) -> AppResult<()> {
+    async fn write_bool_impl(&self, address: &str, value: bool) -> AppResult<()> {
         // 首先检查是否有活跃的PLC连接管理器连接
         if let Some(manager) = self.get_plc_connection_manager().await {
             return self.write_bool_to_manager(&manager, address, value).await;
@@ -459,7 +459,7 @@ impl PlcCommunicationService for ModbusPlcService {
         Ok(())
     }
 
-    async fn write_float32(&self, address: &str, value: f32) -> AppResult<()> {
+    async fn write_float32_impl(&self, address: &str, value: f32) -> AppResult<()> {
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
         let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
