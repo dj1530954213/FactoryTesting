@@ -1,15 +1,15 @@
 {
   "version": 2,
-  "dgSpecHash": "wXa/aYU7bd0=",
+  "dgSpecHash": "r9qcM+S+I98=",
   "success": true,
-  "projectFilePath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.Core\\FatFullVersion.Core.csproj",
+  "projectFilePath": "D:\\GIT\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.Core\\FatFullVersion.Core.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\DELL\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.1\\microsoft.extensions.dependencyinjection.abstractions.8.0.1.nupkg.sha512",
-    "C:\\Users\\DELL\\.nuget\\packages\\microsoft.xaml.behaviors.wpf\\1.1.122\\microsoft.xaml.behaviors.wpf.1.1.122.nupkg.sha512",
-    "C:\\Users\\DELL\\.nuget\\packages\\prism.container.abstractions\\9.0.106\\prism.container.abstractions.9.0.106.nupkg.sha512",
-    "C:\\Users\\DELL\\.nuget\\packages\\prism.core\\9.0.537\\prism.core.9.0.537.nupkg.sha512",
-    "C:\\Users\\DELL\\.nuget\\packages\\prism.events\\9.0.537\\prism.events.9.0.537.nupkg.sha512",
-    "C:\\Users\\DELL\\.nuget\\packages\\prism.wpf\\9.0.537\\prism.wpf.9.0.537.nupkg.sha512"
+    "C:\\Users\\15309\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.1\\microsoft.extensions.dependencyinjection.abstractions.8.0.1.nupkg.sha512",
+    "C:\\Users\\15309\\.nuget\\packages\\microsoft.xaml.behaviors.wpf\\1.1.122\\microsoft.xaml.behaviors.wpf.1.1.122.nupkg.sha512",
+    "C:\\Users\\15309\\.nuget\\packages\\prism.container.abstractions\\9.0.106\\prism.container.abstractions.9.0.106.nupkg.sha512",
+    "C:\\Users\\15309\\.nuget\\packages\\prism.core\\9.0.537\\prism.core.9.0.537.nupkg.sha512",
+    "C:\\Users\\15309\\.nuget\\packages\\prism.events\\9.0.537\\prism.events.9.0.537.nupkg.sha512",
+    "C:\\Users\\15309\\.nuget\\packages\\prism.wpf\\9.0.537\\prism.wpf.9.0.537.nupkg.sha512"
   ],
   "logs": []
 }

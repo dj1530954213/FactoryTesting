@@ -12,12 +12,57 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use crate::domain::services::{
-    IPlcCommunicationService, BaseService,
+    BaseService,
     PlcConnectionConfig, PlcProtocol, ConnectionHandle,
     ReadRequest, WriteRequest, ReadResult, WriteResult,
     PlcDataType, PlcValue, ConnectionStats, ConnectionTestResult
 };
 use crate::utils::error::{AppError, AppResult};
+
+/// PLC通信服务接口
+///
+/// 定义了PLC通信的核心功能，支持连接管理、数据读写和批量操作
+#[async_trait::async_trait]
+pub trait IPlcCommunicationService: BaseService {
+    /// 连接到PLC
+    async fn connect(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionHandle>;
+
+    /// 断开PLC连接
+    async fn disconnect(&self, handle: &ConnectionHandle) -> AppResult<()>;
+
+    /// 检查连接状态
+    async fn is_connected(&self, handle: &ConnectionHandle) -> AppResult<bool>;
+
+    /// 读取布尔值
+    async fn read_bool(&self, handle: &ConnectionHandle, address: &str) -> AppResult<bool>;
+
+    /// 写入布尔值
+    async fn write_bool(&self, handle: &ConnectionHandle, address: &str, value: bool) -> AppResult<()>;
+
+    /// 读取32位浮点数
+    async fn read_f32(&self, handle: &ConnectionHandle, address: &str) -> AppResult<f32>;
+
+    /// 写入32位浮点数
+    async fn write_f32(&self, handle: &ConnectionHandle, address: &str, value: f32) -> AppResult<()>;
+
+    /// 读取32位整数
+    async fn read_i32(&self, handle: &ConnectionHandle, address: &str) -> AppResult<i32>;
+
+    /// 写入32位整数
+    async fn write_i32(&self, handle: &ConnectionHandle, address: &str, value: i32) -> AppResult<()>;
+
+    /// 批量读取
+    async fn batch_read(&self, handle: &ConnectionHandle, requests: &[ReadRequest]) -> AppResult<Vec<ReadResult>>;
+
+    /// 批量写入
+    async fn batch_write(&self, handle: &ConnectionHandle, requests: &[WriteRequest]) -> AppResult<Vec<WriteResult>>;
+
+    /// 获取连接统计信息
+    async fn get_connection_stats(&self, handle: &ConnectionHandle) -> AppResult<ConnectionStats>;
+
+    /// 测试连接
+    async fn test_connection(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionTestResult>;
+}
 
 /// Modbus TCP连接池管理器
 #[derive(Debug)]
@@ -319,31 +364,76 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let connection = self.pool.get_connection(handle).await?;
         let start_time = Utc::now();
 
+        // 获取配置信息
+        let (plc_name, plc_host, plc_port) = {
+            let configs = self.pool.configs.read().await;
+            let config = configs.get(&handle.connection_id)
+                .ok_or_else(|| AppError::not_found_error("PLC配置", &handle.connection_id))?;
+            (config.name.clone(), config.host.clone(), config.port)
+        };
+
         // 解析Modbus地址
         let (register_type, offset) = parse_modbus_address(address)?;
 
+        log::info!("🔍 [PLC_READ_BOOL] 开始读取布尔值: PLC={}({}:{}), 地址={}, 类型={:?}, 偏移={}",
+                   plc_name, plc_host, plc_port, address, register_type, offset);
+
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
-            .ok_or_else(|| AppError::plc_communication_error("连接已断开".to_string()))?;
+            .ok_or_else(|| {
+                log::error!("❌ [PLC_READ_BOOL] PLC连接已断开: PLC={}, 地址={}",
+                           plc_name, address);
+                AppError::plc_communication_error("连接已断开".to_string())
+            })?;
 
         let result = match register_type {
             ModbusRegisterType::Coil => {
                 match context.read_coils(offset, 1).await {
-                    Ok(Ok(values)) => values.first().copied().unwrap_or(false),
-                    Ok(Err(exception)) => return Err(AppError::plc_communication_error(format!("Modbus异常: {:?}", exception))),
-                    Err(e) => return Err(AppError::plc_communication_error(format!("读取线圈失败: {:?}", e))),
+                    Ok(Ok(values)) => {
+                        let value = values.first().copied().unwrap_or(false);
+                        log::info!("✅ [PLC_READ_BOOL] 读取线圈成功: PLC={}, 地址={}, 值={}",
+                                  plc_name, address, value);
+                        value
+                    },
+                    Ok(Err(exception)) => {
+                        log::error!("❌ [PLC_READ_BOOL] Modbus异常: PLC={}, 地址={}, 异常={:?}",
+                                   plc_name, address, exception);
+                        return Err(AppError::plc_communication_error(format!("Modbus异常: {:?}", exception)));
+                    },
+                    Err(e) => {
+                        log::error!("❌ [PLC_READ_BOOL] 读取线圈失败: PLC={}, 地址={}, 错误={:?}",
+                                   plc_name, address, e);
+                        return Err(AppError::plc_communication_error(format!("读取线圈失败: {:?}", e)));
+                    },
                 }
             },
             ModbusRegisterType::DiscreteInput => {
                 match context.read_discrete_inputs(offset, 1).await {
-                    Ok(Ok(values)) => values.first().copied().unwrap_or(false),
-                    Ok(Err(exception)) => return Err(AppError::plc_communication_error(format!("Modbus异常: {:?}", exception))),
-                    Err(e) => return Err(AppError::plc_communication_error(format!("读取离散输入失败: {:?}", e))),
+                    Ok(Ok(values)) => {
+                        let value = values.first().copied().unwrap_or(false);
+                        log::info!("✅ [PLC_READ_BOOL] 读取离散输入成功: PLC={}, 地址={}, 值={}",
+                                  plc_name, address, value);
+                        value
+                    },
+                    Ok(Err(exception)) => {
+                        log::error!("❌ [PLC_READ_BOOL] Modbus异常: PLC={}, 地址={}, 异常={:?}",
+                                   plc_name, address, exception);
+                        return Err(AppError::plc_communication_error(format!("Modbus异常: {:?}", exception)));
+                    },
+                    Err(e) => {
+                        log::error!("❌ [PLC_READ_BOOL] 读取离散输入失败: PLC={}, 地址={}, 错误={:?}",
+                                   plc_name, address, e);
+                        return Err(AppError::plc_communication_error(format!("读取离散输入失败: {:?}", e)));
+                    },
                 }
             },
-            _ => return Err(AppError::plc_communication_error(
-                format!("地址 {} 不是有效的布尔型地址", address)
-            )),
+            _ => {
+                log::error!("❌ [PLC_READ_BOOL] 无效的布尔型地址: PLC={}, 地址={}, 类型={:?}",
+                           plc_name, address, register_type);
+                return Err(AppError::plc_communication_error(
+                    format!("地址 {} 不是有效的布尔型地址", address)
+                ));
+            },
         };
 
         // 更新统计信息
@@ -356,21 +446,49 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let connection = self.pool.get_connection(handle).await?;
         let start_time = Utc::now();
 
+        // 获取配置信息
+        let plc_name = {
+            let configs = self.pool.configs.read().await;
+            let config = configs.get(&handle.connection_id)
+                .ok_or_else(|| AppError::not_found_error("PLC配置", &handle.connection_id))?;
+            config.name.clone()
+        };
+
         // 解析Modbus地址
         let (register_type, offset) = parse_modbus_address(address)?;
 
+        log::info!("🔍 [PLC_WRITE_BOOL] 开始写入布尔值: PLC={}, 地址={}, 类型={:?}, 偏移={}, 值={}",
+                   plc_name, address, register_type, offset, value);
+
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
-            .ok_or_else(|| AppError::plc_communication_error("连接已断开".to_string()))?;
+            .ok_or_else(|| {
+                log::error!("❌ [PLC_WRITE_BOOL] PLC连接已断开: PLC={}, 地址={}",
+                           plc_name, address);
+                AppError::plc_communication_error("连接已断开".to_string())
+            })?;
 
         match register_type {
             ModbusRegisterType::Coil => {
-                context.write_single_coil(offset, value).await
-                    .map_err(|e| AppError::plc_communication_error(format!("写入线圈失败: {}", e)))?;
+                match context.write_single_coil(offset, value).await {
+                    Ok(_) => {
+                        log::info!("✅ [PLC_WRITE_BOOL] 写入线圈成功: PLC={}, 地址={}, 值={}",
+                                  plc_name, address, value);
+                    },
+                    Err(e) => {
+                        log::error!("❌ [PLC_WRITE_BOOL] 写入线圈失败: PLC={}, 地址={}, 值={}, 错误={}",
+                                   plc_name, address, value, e);
+                        return Err(AppError::plc_communication_error(format!("写入线圈失败: {}", e)));
+                    }
+                }
             },
-            _ => return Err(AppError::plc_communication_error(
-                format!("地址 {} 不是有效的可写布尔型地址", address)
-            )),
+            _ => {
+                log::error!("❌ [PLC_WRITE_BOOL] 无效的可写布尔型地址: PLC={}, 地址={}, 类型={:?}",
+                           plc_name, address, register_type);
+                return Err(AppError::plc_communication_error(
+                    format!("地址 {} 不是有效的可写布尔型地址", address)
+                ));
+            },
         }
 
         // 更新统计信息

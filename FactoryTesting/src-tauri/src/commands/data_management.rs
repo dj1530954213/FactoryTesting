@@ -40,6 +40,16 @@ pub struct ParseExcelResponse {
     pub total_count: usize,
 }
 
+/// Excel解析响应（用于allocate_channels_cmd）
+#[derive(Debug, Serialize)]
+pub struct ExcelParseResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub definitions: Vec<ChannelPointDefinition>,
+    pub suggested_batch_info: Option<TestBatchInfo>,
+    pub allocation_summary: Option<crate::services::application::batch_allocation_service::AllocationSummary>,
+}
+
 /// 创建批次请求
 #[derive(Debug, Deserialize)]
 pub struct CreateBatchRequest {
@@ -804,139 +814,24 @@ pub async fn import_excel_and_allocate_channels_cmd(
 
     log::info!("成功转换 {} 个通道定义", definitions.len());
 
-    // 3. 创建默认测试PLC配置
-    let test_plc_config = create_default_test_plc_config().await?;
-
-    // 4. 执行通道分配
-    let persistence_service = &state.persistence_service;
-    let db_conn = persistence_service.get_database_connection();
-    let allocation_service = crate::services::application::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
-
-    let result = allocation_service
-        .create_test_batch(
-            "自动分配批次".to_string(),
-            product_model,
-            None, // operator_name
-            crate::services::application::batch_allocation_service::AllocationStrategy::Smart,
-            None, // filter_criteria
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-
-    log::info!(
-        "通道分配完成，生成批次: {}，{} 个实例",
-        result.batch_info.batch_name,
-        result.test_instances.len()
-    );
-
-    // 转换为期望的返回格式
+    // 🔧 修复：只返回解析结果，不创建批次
     Ok(AllocationResult {
-        batches: vec![result.batch_info],
-        allocated_instances: result.test_instances,
-        allocation_summary: result.allocation_summary,
-        channel_definitions: Some(definitions),
+        batches: Vec::new(), // 不创建批次
+        allocated_instances: Vec::new(), // 不创建实例
+        allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary {
+            total_channels: definitions.len(),
+            ai_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::AI).count(),
+            ao_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::AO).count(),
+            di_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::DI).count(),
+            do_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::DO).count(),
+            stations: definitions.iter().map(|d| d.station_name.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect(),
+            estimated_test_duration_minutes: 0,
+        },
+        channel_definitions: Some(definitions), // 只返回解析的定义
     })
 }
 
-/// 创建默认测试PLC配置的辅助函数
-async fn create_default_test_plc_config() -> Result<crate::services::TestPlcConfig, String> {
-    log::info!("创建默认测试PLC配置 - 基于正确分配数据的映射规则");
-    let mut comparison_tables = Vec::new();
-
-    // ===== 根据correct_allocation_data.json的正确分配规则创建测试PLC通道映射 =====
-
-    // ===== AI测试需要的AO通道 =====
-    // AI有源 → AO无源 (AO1_X)
-    for channel in 1..=8 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("AO1_{}", channel),
-            communication_address: format!("AO1.{}", channel),
-            channel_type: crate::models::ModuleType::AO,
-            is_powered: false, // AO无源，用于测试AI有源
-        });
-    }
-
-    // AI无源 → AO有源 (AO2_X)
-    for channel in 1..=8 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("AO2_{}", channel),
-            communication_address: format!("AO2.{}", channel),
-            channel_type: crate::models::ModuleType::AO,
-            is_powered: true, // AO有源，用于测试AI无源
-        });
-    }
-
-    // ===== AO测试需要的AI通道 =====
-    // AO无源 → AI有源 (AI1_X)
-    for channel in 1..=8 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("AI1_{}", channel),
-            communication_address: format!("AI1.{}", channel),
-            channel_type: crate::models::ModuleType::AI,
-            is_powered: true, // AI有源，用于测试AO无源
-        });
-    }
-
-    // AO有源 → AI无源 (AI2_X) - 暂时不需要，因为在正确数据中AO有源数量很少
-
-    // ===== DI测试需要的DO通道 =====
-    // DI有源 → DO无源 (DO1_X)
-    for channel in 1..=16 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("DO1_{}", channel),
-            communication_address: format!("DO1.{}", channel),
-            channel_type: crate::models::ModuleType::DO,
-            is_powered: false, // DO无源，用于测试DI有源
-        });
-    }
-
-    // DI无源 → DO有源 (DO2_X)
-    for channel in 1..=16 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("DO2_{}", channel),
-            communication_address: format!("DO2.{}", channel),
-            channel_type: crate::models::ModuleType::DO,
-            is_powered: true, // DO有源，用于测试DI无源
-        });
-    }
-
-    // ===== DO测试需要的DI通道 =====
-    // DO有源 → DI无源 (DI1_X)
-    for channel in 1..=16 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("DI1_{}", channel),
-            communication_address: format!("DI1.{}", channel),
-            channel_type: crate::models::ModuleType::DI,
-            is_powered: false, // DI无源，用于测试DO有源
-        });
-    }
-
-    // DO无源 → DI有源 (DI2_X)
-    for channel in 1..=16 {
-        comparison_tables.push(crate::services::ComparisonTable {
-            channel_address: format!("DI2_{}", channel),
-            communication_address: format!("DI2.{}", channel),
-            channel_type: crate::models::ModuleType::DI,
-            is_powered: true, // DI有源，用于测试DO无源
-        });
-    }
-
-    log::info!("创建默认测试PLC配置完成，总通道数: {}", comparison_tables.len());
-    log::info!("通道分布详情:");
-    log::info!("  AO无源(测试AI有源): {} 个 -> {}", 8, "AO1_1..AO1_8");
-    log::info!("  AO有源(测试AI无源): {} 个 -> {}", 8, "AO2_1..AO2_8");
-    log::info!("  AI有源(测试AO无源): {} 个 -> {}", 8, "AI1_1..AI1_8");
-    log::info!("  DO无源(测试DI有源): {} 个 -> {}", 16, "DO1_1..DO1_16");
-    log::info!("  DO有源(测试DI无源): {} 个 -> {}", 16, "DO2_1..DO2_16");
-    log::info!("  DI无源(测试DO有源): {} 个 -> {}", 16, "DI1_1..DI1_16");
-    log::info!("  DI有源(测试DO无源): {} 个 -> {}", 16, "DI2_1..DI2_16");
-
-    Ok(crate::services::TestPlcConfig {
-        brand_type: "Micro850".to_string(),
-        ip_address: "127.0.0.1".to_string(),
-        comparison_tables,
-    })
-}
+// 🔧 修复：删除默认配置创建函数，强制用户配置真实的测试PLC
 
 /// 解析Excel文件并创建批次的参数
 #[derive(Debug, Deserialize)]
@@ -1308,22 +1203,15 @@ pub async fn create_batch_and_persist_data_cmd(
             config
         }
         Err(e) => {
-            log::warn!("[CreateBatchData] 获取数据库测试PLC配置失败: {}, 使用默认配置", e);
-            // 如果无法获取数据库配置，则创建默认配置
-            match create_default_test_plc_config().await {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("创建默认测试PLC配置失败: {}", e);
-                    return Ok(CreateBatchAndPersistDataResponse {
-                        success: false,
-                        message: format!("创建默认测试PLC配置失败: {}", e),
-                        batch_id: None,
-                        all_batches: Vec::new(),
-                        saved_definitions_count: 0,
-                        created_instances_count: 0,
-                    });
-                }
-            }
+            error!("[CreateBatchData] 获取数据库测试PLC配置失败: {}", e);
+            return Ok(CreateBatchAndPersistDataResponse {
+                success: false,
+                message: format!("获取测试PLC配置失败: {}，请先配置测试PLC", e),
+                batch_id: None,
+                all_batches: Vec::new(),
+                saved_definitions_count: 0,
+                created_instances_count: 0,
+            });
         }
     };
 
@@ -1914,14 +1802,8 @@ async fn execute_batch_allocation(
     let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
         Ok(config) => config,
         Err(e) => {
-            warn!("获取数据库测试PLC配置失败: {}, 使用默认配置", e);
-            match create_default_test_plc_config().await {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("创建默认测试PLC配置失败: {}", e);
-                    return Err(format!("创建默认测试PLC配置失败: {}", e));
-                }
-            }
+            error!("获取数据库测试PLC配置失败: {}", e);
+            return Err(format!("获取测试PLC配置失败: {}，请先配置测试PLC", e));
         }
     };
 

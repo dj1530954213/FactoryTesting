@@ -247,14 +247,69 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Read Methods ---
     async fn read_bool_impl(&self, address: &str) -> AppResult<bool> {
-        // 首先检查是否有活跃的PLC连接管理器连接
+        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
         if let Some(manager) = self.get_plc_connection_manager().await {
-            return self.read_bool_from_manager(&manager, address).await;
+            // 检查是否有匹配的连接
+            if let Ok(result) = self.read_bool_from_manager(&manager, address).await {
+                return Ok(result);
+            }
+            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
+            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
+        }
+
+        // 🔧 修复：确保在独立连接模式下能够自动连接
+        {
+            let status = self.connection_status.lock().await;
+            if !matches!(*status, PlcConnectionStatus::Connected) {
+                drop(status);
+                log::debug!("🔗 [ModbusPlcService] 独立连接模式，尝试自动连接: IP={}", self.config.ip_address);
+                // 需要可变引用来连接，但这里是不可变引用，所以我们需要另一种方法
+                // 我们将在下面的代码中处理这个问题
+            }
         }
 
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
-        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
+
+        // 🔧 修复：如果没有连接，尝试建立连接
+        if client_ctx_guard.is_none() {
+            drop(client_ctx_guard);
+            log::debug!("🔗 [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+
+            // 建立连接
+            let socket_addr = self.get_socket_addr()?;
+            let slave = self.get_slave();
+
+            match tokio::time::timeout(
+                Duration::from_millis(self.config.connection_timeout_ms),
+                tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
+            ).await {
+                Ok(Ok(ctx)) => {
+                    log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
+                    let mut client_ctx_guard = self.client_context.lock().await;
+                    *client_ctx_guard = Some(ctx);
+                    let mut status_guard = self.connection_status.lock().await;
+                    *status_guard = PlcConnectionStatus::Connected;
+                },
+                Ok(Err(e)) => {
+                    log::error!("❌ [ModbusPlcService] 独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    return Err(AppError::PlcCommunicationError {
+                        message: format!("连接失败: {}", e)
+                    });
+                },
+                Err(_) => {
+                    log::error!("❌ [ModbusPlcService] 独立连接超时: IP={}", self.config.ip_address);
+                    return Err(AppError::PlcCommunicationError {
+                        message: "连接超时".to_string()
+                    });
+                }
+            }
+
+            // 重新获取连接
+            client_ctx_guard = self.client_context.lock().await;
+        }
+
+        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "连接失败".to_string() })?;
         
         let start_time = chrono::Utc::now();
         
@@ -335,9 +390,59 @@ impl PlcCommunicationService for ModbusPlcService {
     }
     
     async fn read_float32_impl(&self, address: &str) -> AppResult<f32> {
+        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
+        if let Some(manager) = self.get_plc_connection_manager().await {
+            // 检查是否有匹配的连接
+            if let Ok(result) = self.read_float32_from_manager(&manager, address).await {
+                return Ok(result);
+            }
+            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
+            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
+        }
+
+        // 🔧 修复：确保在独立连接模式下能够自动连接
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
-        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
+
+        // 🔧 修复：如果没有连接，尝试建立连接
+        if client_ctx_guard.is_none() {
+            drop(client_ctx_guard);
+            log::debug!("🔗 [ModbusPlcService] Float32读取检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+
+            // 建立连接
+            let socket_addr = self.get_socket_addr()?;
+            let slave = self.get_slave();
+
+            match tokio::time::timeout(
+                Duration::from_millis(self.config.connection_timeout_ms),
+                tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
+            ).await {
+                Ok(Ok(ctx)) => {
+                    log::debug!("✅ [ModbusPlcService] Float32读取独立连接建立成功: IP={}", self.config.ip_address);
+                    let mut client_ctx_guard = self.client_context.lock().await;
+                    *client_ctx_guard = Some(ctx);
+                    let mut status_guard = self.connection_status.lock().await;
+                    *status_guard = PlcConnectionStatus::Connected;
+                },
+                Ok(Err(e)) => {
+                    log::error!("❌ [ModbusPlcService] Float32读取独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    return Err(AppError::PlcCommunicationError {
+                        message: format!("连接失败: {}", e)
+                    });
+                },
+                Err(_) => {
+                    log::error!("❌ [ModbusPlcService] Float32读取独立连接超时: IP={}", self.config.ip_address);
+                    return Err(AppError::PlcCommunicationError {
+                        message: "连接超时".to_string()
+                    });
+                }
+            }
+
+            // 重新获取连接
+            client_ctx_guard = self.client_context.lock().await;
+        }
+
+        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "连接失败".to_string() })?;
 
         let start_time = chrono::Utc::now();
         let modbus_io_result = match addr_type {
@@ -350,13 +455,13 @@ impl PlcCommunicationService for ModbusPlcService {
             Ok(modbus_protocol_result) => { // Inner Result
                 match modbus_protocol_result {
                     Ok(v) => v,
-                    Err(e_code) => return Err(AppError::PlcCommunicationError{ 
-                        message: format!("Modbus协议错误 (读取f32的寄存器): {:?}", e_code) 
+                    Err(e_code) => return Err(AppError::PlcCommunicationError{
+                        message: format!("Modbus协议错误 (读取f32的寄存器): {:?}", e_code)
                     }),
                 }
             },
-            Err(io_err) => return Err(AppError::PlcCommunicationError{ 
-                message: format!("Modbus IO错误 (读取f32的寄存器): {}", io_err) 
+            Err(io_err) => return Err(AppError::PlcCommunicationError{
+                message: format!("Modbus IO错误 (读取f32的寄存器): {}", io_err)
             }),
         };
 
@@ -373,14 +478,59 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Write Methods ---
     async fn write_bool_impl(&self, address: &str, value: bool) -> AppResult<()> {
-        // 首先检查是否有活跃的PLC连接管理器连接
+        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
         if let Some(manager) = self.get_plc_connection_manager().await {
-            return self.write_bool_to_manager(&manager, address, value).await;
+            // 检查是否有匹配的连接
+            if let Ok(result) = self.write_bool_to_manager(&manager, address, value).await {
+                return Ok(result);
+            }
+            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
+            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
         }
 
+        // 🔧 修复：确保在独立连接模式下能够自动连接
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
-        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
+
+        // 🔧 修复：如果没有连接，尝试建立连接
+        if client_ctx_guard.is_none() {
+            drop(client_ctx_guard);
+            log::debug!("🔗 [ModbusPlcService] 写入操作检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+
+            // 建立连接
+            let socket_addr = self.get_socket_addr()?;
+            let slave = self.get_slave();
+
+            match tokio::time::timeout(
+                Duration::from_millis(self.config.connection_timeout_ms),
+                tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
+            ).await {
+                Ok(Ok(ctx)) => {
+                    log::debug!("✅ [ModbusPlcService] 写入操作独立连接建立成功: IP={}", self.config.ip_address);
+                    let mut client_ctx_guard = self.client_context.lock().await;
+                    *client_ctx_guard = Some(ctx);
+                    let mut status_guard = self.connection_status.lock().await;
+                    *status_guard = PlcConnectionStatus::Connected;
+                },
+                Ok(Err(e)) => {
+                    log::error!("❌ [ModbusPlcService] 写入操作独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    return Err(AppError::PlcCommunicationError {
+                        message: format!("连接失败: {}", e)
+                    });
+                },
+                Err(_) => {
+                    log::error!("❌ [ModbusPlcService] 写入操作独立连接超时: IP={}", self.config.ip_address);
+                    return Err(AppError::PlcCommunicationError {
+                        message: "连接超时".to_string()
+                    });
+                }
+            }
+
+            // 重新获取连接
+            client_ctx_guard = self.client_context.lock().await;
+        }
+
+        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "连接失败".to_string() })?;
 
         if addr_type != '0' { 
             return Err(AppError::PlcCommunicationError { message: format!("地址 {} 不是有效的可写线圈地址", address) });
@@ -460,14 +610,64 @@ impl PlcCommunicationService for ModbusPlcService {
     }
 
     async fn write_float32_impl(&self, address: &str, value: f32) -> AppResult<()> {
+        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
+        if let Some(manager) = self.get_plc_connection_manager().await {
+            // 检查是否有匹配的连接
+            if let Ok(result) = self.write_float32_to_manager(&manager, address, value).await {
+                return Ok(result);
+            }
+            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
+            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
+        }
+
+        // 🔧 修复：确保在独立连接模式下能够自动连接
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
-        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "未连接".to_string() })?;
+
+        // 🔧 修复：如果没有连接，尝试建立连接
+        if client_ctx_guard.is_none() {
+            drop(client_ctx_guard);
+            log::debug!("🔗 [ModbusPlcService] Float32写入检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+
+            // 建立连接
+            let socket_addr = self.get_socket_addr()?;
+            let slave = self.get_slave();
+
+            match tokio::time::timeout(
+                Duration::from_millis(self.config.connection_timeout_ms),
+                tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
+            ).await {
+                Ok(Ok(ctx)) => {
+                    log::debug!("✅ [ModbusPlcService] Float32写入独立连接建立成功: IP={}", self.config.ip_address);
+                    let mut client_ctx_guard = self.client_context.lock().await;
+                    *client_ctx_guard = Some(ctx);
+                    let mut status_guard = self.connection_status.lock().await;
+                    *status_guard = PlcConnectionStatus::Connected;
+                },
+                Ok(Err(e)) => {
+                    log::error!("❌ [ModbusPlcService] Float32写入独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    return Err(AppError::PlcCommunicationError {
+                        message: format!("连接失败: {}", e)
+                    });
+                },
+                Err(_) => {
+                    log::error!("❌ [ModbusPlcService] Float32写入独立连接超时: IP={}", self.config.ip_address);
+                    return Err(AppError::PlcCommunicationError {
+                        message: "连接超时".to_string()
+                    });
+                }
+            }
+
+            // 重新获取连接
+            client_ctx_guard = self.client_context.lock().await;
+        }
+
+        let ctx = client_ctx_guard.as_mut().ok_or_else(|| AppError::PlcCommunicationError { message: "连接失败".to_string() })?;
 
         if addr_type != '4' {
             return Err(AppError::PlcCommunicationError { message: format!("地址 {} 不是有效的可写保持寄存器地址 (用于f32)", address) });
         }
-        
+
         let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
         let registers_to_write = [reg1, reg2];
 
@@ -478,13 +678,13 @@ impl PlcCommunicationService for ModbusPlcService {
             Ok(modbus_protocol_result) => { // Inner Result
                 match modbus_protocol_result {
                     Ok(_) => {},
-                    Err(e_code) => return Err(AppError::PlcCommunicationError{ 
-                        message: format!("Modbus协议错误 (写入f32): {:?}", e_code) 
+                    Err(e_code) => return Err(AppError::PlcCommunicationError{
+                        message: format!("Modbus协议错误 (写入f32): {:?}", e_code)
                     }),
                 }
             },
-            Err(io_err) => return Err(AppError::PlcCommunicationError{ 
-                message: format!("Modbus IO错误 (写入f32): {}", io_err) 
+            Err(io_err) => return Err(AppError::PlcCommunicationError{
+                message: format!("Modbus IO错误 (写入f32): {}", io_err)
             }),
         };
 
@@ -584,9 +784,17 @@ impl ModbusPlcService {
         // 获取连接
         let connections = manager.connections.read().await;
 
-        // 查找第一个已连接的PLC
-        for (_, connection) in connections.iter() {
-            if connection.state == PlcConnectionState::Connected {
+        // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接，而不是使用第一个找到的连接
+        let target_ip = &self.config.ip_address;
+        log::debug!("🔍 [ModbusPlcService] 查找PLC连接: IP={}, 地址={}", target_ip, address);
+
+        for (connection_id, connection) in connections.iter() {
+            // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
+            if connection.config.ip_address == *target_ip &&
+               connection.config.port == self.config.port as i32 &&
+               connection.state == PlcConnectionState::Connected {
+                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接: ID={}, IP={}", connection_id, target_ip);
+
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;
 
@@ -595,36 +803,64 @@ impl ModbusPlcService {
 
                     return match addr_type {
                         '0' => { // 线圈
+                            log::debug!("📖 [ModbusPlcService] 读取线圈: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
                             match context.read_coils(reg_offset, 1).await {
-                                Ok(Ok(values)) => Ok(values.first().copied().unwrap_or(false)),
-                                Ok(Err(exception)) => Err(AppError::PlcCommunicationError {
-                                    message: format!("Modbus异常: {:?}", exception)
-                                }),
-                                Err(e) => Err(AppError::PlcCommunicationError {
-                                    message: format!("读取线圈失败: {:?}", e)
-                                }),
+                                Ok(Ok(values)) => {
+                                    let value = values.first().copied().unwrap_or(false);
+                                    log::debug!("✅ [ModbusPlcService] 线圈读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(value)
+                                },
+                                Ok(Err(exception)) => {
+                                    log::error!("❌ [ModbusPlcService] Modbus异常: IP={}, 地址={}, 异常={:?}", target_ip, address, exception);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("Modbus异常: {:?}", exception)
+                                    })
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 读取线圈失败: IP={}, 地址={}, 错误={:?}", target_ip, address, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("读取线圈失败: {:?}", e)
+                                    })
+                                },
                             }
                         },
                         '1' => { // 离散输入
+                            log::debug!("📖 [ModbusPlcService] 读取离散输入: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
                             match context.read_discrete_inputs(reg_offset, 1).await {
-                                Ok(Ok(values)) => Ok(values.first().copied().unwrap_or(false)),
-                                Ok(Err(exception)) => Err(AppError::PlcCommunicationError {
-                                    message: format!("Modbus异常: {:?}", exception)
-                                }),
-                                Err(e) => Err(AppError::PlcCommunicationError {
-                                    message: format!("读取离散输入失败: {:?}", e)
-                                }),
+                                Ok(Ok(values)) => {
+                                    let value = values.first().copied().unwrap_or(false);
+                                    log::debug!("✅ [ModbusPlcService] 离散输入读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(value)
+                                },
+                                Ok(Err(exception)) => {
+                                    log::error!("❌ [ModbusPlcService] Modbus异常: IP={}, 地址={}, 异常={:?}", target_ip, address, exception);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("Modbus异常: {:?}", exception)
+                                    })
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 读取离散输入失败: IP={}, 地址={}, 错误={:?}", target_ip, address, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("读取离散输入失败: {:?}", e)
+                                    })
+                                },
                             }
                         },
-                        _ => Err(AppError::PlcCommunicationError {
-                            message: format!("地址 {} 不是有效的布尔型地址", address)
-                        }),
+                        _ => {
+                            log::error!("❌ [ModbusPlcService] 无效的布尔型地址: IP={}, 地址={}", target_ip, address);
+                            Err(AppError::PlcCommunicationError {
+                                message: format!("地址 {} 不是有效的布尔型地址", address)
+                            })
+                        },
                     };
                 }
             }
         }
 
-        Err(AppError::PlcCommunicationError { message: "未找到可用的PLC连接".to_string() })
+        log::error!("❌ [ModbusPlcService] 未找到可用的PLC连接: IP={}", target_ip);
+        Err(AppError::PlcCommunicationError {
+            message: format!("未找到IP为 {} 的可用PLC连接", target_ip)
+        })
     }
 
     /// 向PLC连接管理器写入布尔值
@@ -639,9 +875,17 @@ impl ModbusPlcService {
         // 获取连接
         let connections = manager.connections.read().await;
 
-        // 查找第一个已连接的PLC
-        for (_, connection) in connections.iter() {
-            if connection.state == PlcConnectionState::Connected {
+        // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接，而不是使用第一个找到的连接
+        let target_ip = &self.config.ip_address;
+        log::debug!("🔍 [ModbusPlcService] 查找PLC连接进行写入: IP={}, 地址={}, 值={}", target_ip, address, value);
+
+        for (connection_id, connection) in connections.iter() {
+            // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
+            if connection.config.ip_address == *target_ip &&
+               connection.config.port == self.config.port as i32 &&
+               connection.state == PlcConnectionState::Connected {
+                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接进行写入: ID={}, IP={}", connection_id, target_ip);
+
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;
 
@@ -650,20 +894,202 @@ impl ModbusPlcService {
 
                     return match addr_type {
                         '0' => { // 线圈
-                            context.write_single_coil(reg_offset, value).await
-                                .map_err(|e| AppError::PlcCommunicationError {
-                                    message: format!("写入线圈失败: {}", e)
-                                })?;
-                            Ok(())
+                            log::debug!("📝 [ModbusPlcService] 写入线圈: IP={}, 地址={}, 偏移={}, 值={}", target_ip, address, reg_offset, value);
+                            match context.write_single_coil(reg_offset, value).await {
+                                Ok(_) => {
+                                    log::debug!("✅ [ModbusPlcService] 线圈写入成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(())
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 写入线圈失败: IP={}, 地址={}, 值={}, 错误={:?}", target_ip, address, value, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("写入线圈失败: {}", e)
+                                    })
+                                }
+                            }
                         },
-                        _ => Err(AppError::PlcCommunicationError {
-                            message: format!("地址 {} 不是有效的可写布尔型地址", address)
-                        }),
+                        _ => {
+                            log::error!("❌ [ModbusPlcService] 无效的可写布尔型地址: IP={}, 地址={}", target_ip, address);
+                            Err(AppError::PlcCommunicationError {
+                                message: format!("地址 {} 不是有效的可写布尔型地址", address)
+                            })
+                        },
                     };
                 }
             }
         }
 
-        Err(AppError::PlcCommunicationError { message: "未找到可用的PLC连接".to_string() })
+        log::error!("❌ [ModbusPlcService] 未找到可用的PLC连接进行写入: IP={}", target_ip);
+        Err(AppError::PlcCommunicationError {
+            message: format!("未找到IP为 {} 的可用PLC连接", target_ip)
+        })
+    }
+
+    /// 从PLC连接管理器读取32位浮点数
+    async fn read_float32_from_manager(
+        &self,
+        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        address: &str,
+    ) -> AppResult<f32> {
+        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+
+        // 获取连接
+        let connections = manager.connections.read().await;
+
+        // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接
+        let target_ip = &self.config.ip_address;
+        log::debug!("🔍 [ModbusPlcService] 查找PLC连接读取Float32: IP={}, 地址={}", target_ip, address);
+
+        for (connection_id, connection) in connections.iter() {
+            // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
+            if connection.config.ip_address == *target_ip &&
+               connection.config.port == self.config.port as i32 &&
+               connection.state == PlcConnectionState::Connected {
+                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接读取Float32: ID={}, IP={}", connection_id, target_ip);
+
+                if let Some(context_arc) = &connection.context {
+                    let mut context = context_arc.lock().await;
+
+                    // 解析地址并读取
+                    let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
+
+                    return match addr_type {
+                        '4' => { // 保持寄存器
+                            log::debug!("📖 [ModbusPlcService] 读取保持寄存器Float32: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
+                            match context.read_holding_registers(reg_offset, 2).await {
+                                Ok(Ok(values)) => {
+                                    if values.len() < 2 {
+                                        log::error!("❌ [ModbusPlcService] Float32寄存器数量不足: IP={}, 地址={}", target_ip, address);
+                                        return Err(AppError::PlcCommunicationError {
+                                            message: "读取f32时返回的寄存器数量不足".to_string()
+                                        });
+                                    }
+                                    let value = ByteOrderConverter::registers_to_float(values[0], values[1], self.config.byte_order);
+                                    log::debug!("✅ [ModbusPlcService] Float32读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(value)
+                                },
+                                Ok(Err(exception)) => {
+                                    log::error!("❌ [ModbusPlcService] Modbus异常读取Float32: IP={}, 地址={}, 异常={:?}", target_ip, address, exception);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("Modbus异常: {:?}", exception)
+                                    })
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 读取保持寄存器Float32失败: IP={}, 地址={}, 错误={:?}", target_ip, address, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("读取保持寄存器失败: {:?}", e)
+                                    })
+                                },
+                            }
+                        },
+                        '3' => { // 输入寄存器
+                            log::debug!("📖 [ModbusPlcService] 读取输入寄存器Float32: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
+                            match context.read_input_registers(reg_offset, 2).await {
+                                Ok(Ok(values)) => {
+                                    if values.len() < 2 {
+                                        log::error!("❌ [ModbusPlcService] Float32寄存器数量不足: IP={}, 地址={}", target_ip, address);
+                                        return Err(AppError::PlcCommunicationError {
+                                            message: "读取f32时返回的寄存器数量不足".to_string()
+                                        });
+                                    }
+                                    let value = ByteOrderConverter::registers_to_float(values[0], values[1], self.config.byte_order);
+                                    log::debug!("✅ [ModbusPlcService] Float32读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(value)
+                                },
+                                Ok(Err(exception)) => {
+                                    log::error!("❌ [ModbusPlcService] Modbus异常读取Float32: IP={}, 地址={}, 异常={:?}", target_ip, address, exception);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("Modbus异常: {:?}", exception)
+                                    })
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 读取输入寄存器Float32失败: IP={}, 地址={}, 错误={:?}", target_ip, address, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("读取输入寄存器失败: {:?}", e)
+                                    })
+                                },
+                            }
+                        },
+                        _ => {
+                            log::error!("❌ [ModbusPlcService] 无效的Float32地址: IP={}, 地址={}", target_ip, address);
+                            Err(AppError::PlcCommunicationError {
+                                message: format!("地址 {} 不是有效的32位寄存器地址", address)
+                            })
+                        },
+                    };
+                }
+            }
+        }
+
+        log::error!("❌ [ModbusPlcService] 未找到可用的PLC连接读取Float32: IP={}", target_ip);
+        Err(AppError::PlcCommunicationError {
+            message: format!("未找到IP为 {} 的可用PLC连接", target_ip)
+        })
+    }
+
+    /// 向PLC连接管理器写入32位浮点数
+    async fn write_float32_to_manager(
+        &self,
+        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        address: &str,
+        value: f32,
+    ) -> AppResult<()> {
+        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+
+        // 获取连接
+        let connections = manager.connections.read().await;
+
+        // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接
+        let target_ip = &self.config.ip_address;
+        log::debug!("🔍 [ModbusPlcService] 查找PLC连接写入Float32: IP={}, 地址={}, 值={}", target_ip, address, value);
+
+        for (connection_id, connection) in connections.iter() {
+            // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
+            if connection.config.ip_address == *target_ip &&
+               connection.config.port == self.config.port as i32 &&
+               connection.state == PlcConnectionState::Connected {
+                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接写入Float32: ID={}, IP={}", connection_id, target_ip);
+
+                if let Some(context_arc) = &connection.context {
+                    let mut context = context_arc.lock().await;
+
+                    // 解析地址并写入
+                    let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
+
+                    return match addr_type {
+                        '4' => { // 保持寄存器
+                            log::debug!("📝 [ModbusPlcService] 写入保持寄存器Float32: IP={}, 地址={}, 偏移={}, 值={}", target_ip, address, reg_offset, value);
+
+                            let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
+                            let registers_to_write = [reg1, reg2];
+
+                            match context.write_multiple_registers(reg_offset, &registers_to_write).await {
+                                Ok(_) => {
+                                    log::debug!("✅ [ModbusPlcService] Float32写入成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    Ok(())
+                                },
+                                Err(e) => {
+                                    log::error!("❌ [ModbusPlcService] 写入保持寄存器Float32失败: IP={}, 地址={}, 值={}, 错误={:?}", target_ip, address, value, e);
+                                    Err(AppError::PlcCommunicationError {
+                                        message: format!("写入保持寄存器失败: {}", e)
+                                    })
+                                }
+                            }
+                        },
+                        _ => {
+                            log::error!("❌ [ModbusPlcService] 无效的可写Float32地址: IP={}, 地址={}", target_ip, address);
+                            Err(AppError::PlcCommunicationError {
+                                message: format!("地址 {} 不是有效的可写保持寄存器地址", address)
+                            })
+                        },
+                    };
+                }
+            }
+        }
+
+        log::error!("❌ [ModbusPlcService] 未找到可用的PLC连接写入Float32: IP={}", target_ip);
+        Err(AppError::PlcCommunicationError {
+            message: format!("未找到IP为 {} 的可用PLC连接", target_ip)
+        })
     }
 }

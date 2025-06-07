@@ -637,17 +637,9 @@ impl DatabaseMigration {
                     }
                 }
                 Ok(None) => {
-                    // 没有找到对应的批次ID，尝试创建默认批次
-                    match Self::create_default_batch_for_orphaned_definition(db, &definition_id, &tag, &station_name).await {
-                        Ok(batch_id) => {
-                            log::info!("✅ 为孤立通道定义 {} 创建默认批次: {}", tag, batch_id);
-                            recovered_count += 1;
-                        }
-                        Err(e) => {
-                            log::warn!("❌ 为通道定义 {} 创建默认批次失败: {}", tag, e);
-                            failed_count += 1;
-                        }
-                    }
+                    // 🔧 修复：不再自动创建默认批次，只记录孤立的通道定义
+                    log::debug!("🔍 发现孤立通道定义: {} ({}), 跳过自动批次创建", tag, definition_id);
+                    failed_count += 1; // 计入失败数，但不尝试创建
                 }
                 Err(e) => {
                     log::warn!("❌ 查找通道定义 {} 的批次ID失败: {}", tag, e);

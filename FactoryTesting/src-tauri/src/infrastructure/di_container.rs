@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 use crate::domain::services::*;
+use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::AppError;
 
 /// 应用服务容器接口
@@ -200,7 +201,17 @@ impl ServiceContainer for AppServiceContainer {
     }
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
-        Arc::new(crate::infrastructure::ModbusTcpPlcService::new())
+        // 使用默认配置创建Modbus PLC服务
+        let config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+            ip_address: "192.168.1.100".to_string(),
+            port: 502,
+            slave_id: 1,
+            byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+            connection_timeout_ms: 5000,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+        };
+        Arc::new(crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(config))
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
@@ -254,7 +265,16 @@ impl ServiceContainer for MockServiceContainer {
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
         // 在Mock容器中也使用真实的Modbus PLC服务
-        Arc::new(crate::infrastructure::ModbusTcpPlcService::new())
+        let config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+            ip_address: "192.168.1.100".to_string(),
+            port: 502,
+            slave_id: 1,
+            byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+            connection_timeout_ms: 5000,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+        };
+        Arc::new(crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(config))
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {

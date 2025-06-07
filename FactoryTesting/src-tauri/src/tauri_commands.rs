@@ -20,11 +20,11 @@ use crate::services::domain::{
 };
 use crate::services::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
-    IPlcCommunicationService,
     excel::ExcelImporter,
     persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig},
     SimpleEventPublisher
 };
+use crate::services::infrastructure::IPlcCommunicationService;
 use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
@@ -115,36 +115,56 @@ impl AppState {
             service.initialize().await?;
         }
 
+        // 创建测试PLC配置服务（需要先创建，因为后面要用到）
+        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
+            TestPlcConfigService::new(persistence_service.clone())
+        );
+
         // 创建通道状态管理器
         let channel_state_manager: Arc<dyn IChannelStateManager> = Arc::new(
             ChannelStateManager::new(persistence_service.clone())
         );
 
-        // 创建PLC服务（暂时使用原来的方式，确保应用能启动）
+        // 🔧 修复：从数据库读取PLC连接配置，不使用硬编码IP
+        let plc_connections = test_plc_config_service.get_plc_connections().await
+            .map_err(|e| format!("获取PLC连接配置失败: {}", e))?;
+
+        let test_plc_connection = plc_connections.iter()
+            .find(|conn| conn.is_test_plc && conn.is_enabled)
+            .ok_or_else(|| "没有找到启用的测试PLC连接配置".to_string())?;
+
+        let target_plc_connection = plc_connections.iter()
+            .find(|conn| !conn.is_test_plc && conn.is_enabled)
+            .ok_or_else(|| "没有找到启用的被测PLC连接配置".to_string())?;
+
+        log::info!("🔗 使用数据库PLC配置 - 测试PLC: {}:{}, 被测PLC: {}:{}",
+            test_plc_connection.ip_address, test_plc_connection.port,
+            target_plc_connection.ip_address, target_plc_connection.port);
+
         let test_rig_config = crate::services::infrastructure::plc::ModbusConfig {
-            ip_address: "192.168.1.100".to_string(),
-            port: 502,
+            ip_address: test_plc_connection.ip_address.clone(),
+            port: test_plc_connection.port as u16,
             slave_id: 1,
             byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
-            connection_timeout_ms: 5000,
+            connection_timeout_ms: test_plc_connection.timeout as u64,
             read_timeout_ms: 3000,
             write_timeout_ms: 3000,
         };
         let target_config = crate::services::infrastructure::plc::ModbusConfig {
-            ip_address: "192.168.1.101".to_string(),
-            port: 502,
+            ip_address: target_plc_connection.ip_address.clone(),
+            port: target_plc_connection.port as u16,
             slave_id: 1,
             byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
-            connection_timeout_ms: 5000,
+            connection_timeout_ms: target_plc_connection.timeout as u64,
             read_timeout_ms: 3000,
             write_timeout_ms: 3000,
         };
 
         let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::services::infrastructure::plc::ModbusPlcService::new(test_rig_config)
+            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(test_rig_config)
         );
         let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::services::infrastructure::plc::ModbusPlcService::new(target_config)
+            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(target_config)
         );
 
         // 创建测试执行引擎
@@ -166,10 +186,7 @@ impl AppState {
             ChannelAllocationService::new()
         );
 
-        // 创建测试PLC配置服务
-        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
-            TestPlcConfigService::new(persistence_service.clone())
-        );
+        // test_plc_config_service 已在上面创建
 
 
 
