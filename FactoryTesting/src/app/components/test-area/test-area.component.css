@@ -553,6 +553,17 @@
 }
 
 /* 错误信息样式 */
+.error-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 40px;
+}
+
+.error-text {
+  flex: 1;
+}
+
 .error-message {
   color: #ff4d4f;
   font-size: 12px;
@@ -576,6 +587,25 @@
   color: #8c8c8c;
   font-size: 12px;
   font-style: italic;
+}
+
+.error-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.error-detail-btn {
+  padding: 0 4px;
+  height: 24px;
+  font-size: 12px;
+  color: #1890ff;
+  border: none;
+  background: transparent;
+}
+
+.error-detail-btn:hover {
+  color: #40a9ff;
+  background: #f0f8ff;
 }
 
 /* 按钮组样式 */

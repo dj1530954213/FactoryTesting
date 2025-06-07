@@ -407,8 +407,8 @@ pub async fn create_test_data(
             format!("DB1.DBD{}", i * 4),
         );
         def.power_supply_type = "有源".to_string();
-        def.range_lower_limit = Some(0.0);
-        def.range_upper_limit = Some(100.0);
+        def.range_low_limit = Some(0.0);
+        def.range_high_limit = Some(100.0);
         // 不再生成虚拟地址
         def.test_rig_plc_address = None;
         definitions.push(def);
@@ -428,8 +428,8 @@ pub async fn create_test_data(
             format!("DB1.DBD{}", 100 + i * 4),
         );
         def.power_supply_type = "无源".to_string();
-        def.range_lower_limit = Some(4.0);
-        def.range_upper_limit = Some(20.0);
+        def.range_low_limit = Some(4.0);
+        def.range_high_limit = Some(20.0);
         definitions.push(def);
     }
 
@@ -482,8 +482,8 @@ pub async fn create_test_data(
             format!("DB6.DBD{}", i * 4),
         );
         def.power_supply_type = "无源".to_string();
-        def.range_lower_limit = Some(0.0);
-        def.range_upper_limit = Some(10.0);
+        def.range_low_limit = Some(0.0);
+        def.range_high_limit = Some(10.0);
         definitions.push(def);
     }
 

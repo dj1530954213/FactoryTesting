@@ -181,8 +181,8 @@ impl From<&crate::models::structs::ChannelPointDefinition> for ActiveModel {
             power_off_protection: Set(definition.power_failure_protection.map(|b| if b { "是".to_string() } else { "否".to_string() })),
 
             // === 量程字段 ===
-            range_low_limit: Set(definition.range_lower_limit.map(|f| f as f64)),
-            range_high_limit: Set(definition.range_upper_limit.map(|f| f as f64)),
+            range_low_limit: Set(definition.range_low_limit.map(|f| f as f64)),
+            range_high_limit: Set(definition.range_high_limit.map(|f| f as f64)),
 
             // === SLL设定字段 ===
             sll_set_value: Set(definition.sll_set_value.map(|f| f as f64)),
@@ -262,8 +262,8 @@ impl From<&Model> for crate::models::structs::ChannelPointDefinition {
             wire_system: model.wire_system.clone().unwrap_or_default(),
             plc_absolute_address: model.plc_absolute_address.clone(),
             plc_communication_address: model.plc_communication_address.clone(),
-            range_lower_limit: model.range_low_limit.map(|v| v as f32),
-            range_upper_limit: model.range_high_limit.map(|v| v as f32),
+            range_low_limit: model.range_low_limit.map(|v| v as f32),
+            range_high_limit: model.range_high_limit.map(|v| v as f32),
             engineering_unit: None,
 
             // SLL 报警设定

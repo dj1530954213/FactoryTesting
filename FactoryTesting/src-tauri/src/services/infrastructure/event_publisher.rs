@@ -16,7 +16,7 @@ pub struct BatchStatistics {
     pub passed: u32,
     pub failed: u32,
 }
-use log::{info, debug, warn, error};
+use log::{info, debug, warn, error, trace};
 
 type AppResult<T> = Result<T, AppError>;
 
@@ -52,7 +52,7 @@ impl SimpleEventPublisher {
                 error!("[EventPublisher] 发布事件到前端失败: {} - {}", event_name, e);
                 return Err(AppError::generic(format!("发布事件失败: {}", e)));
             } else {
-                debug!("[EventPublisher] 成功发布事件到前端: {}", event_name);
+                // 完全移除事件发布成功的冗余日志
             }
         } else {
             warn!("[EventPublisher] 全局AppHandle未设置，无法发布事件到前端: {}", event_name);
@@ -114,10 +114,7 @@ impl EventPublisher for SimpleEventPublisher {
 
     /// 发布测试完成事件
     async fn publish_test_completed(&self, outcome: &RawTestOutcome) -> AppResult<()> {
-        debug!(
-            "[EventPublisher] 测试完成: 实例={}, 成功={}, 项目={:?}",
-            outcome.channel_instance_id, outcome.success, outcome.sub_test_item
-        );
+        // 移除冗余的测试完成DEBUG日志
 
         // 发布事件到前端
         let payload = json!({

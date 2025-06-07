@@ -786,14 +786,14 @@ impl ModbusPlcService {
 
         // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接，而不是使用第一个找到的连接
         let target_ip = &self.config.ip_address;
-        log::debug!("🔍 [ModbusPlcService] 查找PLC连接: IP={}, 地址={}", target_ip, address);
+        // 移除冗余的PLC连接查找日志
 
         for (connection_id, connection) in connections.iter() {
             // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
             if connection.config.ip_address == *target_ip &&
                connection.config.port == self.config.port as i32 &&
                connection.state == PlcConnectionState::Connected {
-                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接: ID={}, IP={}", connection_id, target_ip);
+                // 移除冗余的PLC连接匹配日志
 
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;
@@ -803,11 +803,11 @@ impl ModbusPlcService {
 
                     return match addr_type {
                         '0' => { // 线圈
-                            log::debug!("📖 [ModbusPlcService] 读取线圈: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
+                            // 移除冗余的线圈读取日志
                             match context.read_coils(reg_offset, 1).await {
                                 Ok(Ok(values)) => {
                                     let value = values.first().copied().unwrap_or(false);
-                                    log::debug!("✅ [ModbusPlcService] 线圈读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    // 移除冗余的线圈读取成功日志
                                     Ok(value)
                                 },
                                 Ok(Err(exception)) => {
@@ -877,14 +877,15 @@ impl ModbusPlcService {
 
         // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接，而不是使用第一个找到的连接
         let target_ip = &self.config.ip_address;
-        log::debug!("🔍 [ModbusPlcService] 查找PLC连接进行写入: IP={}, 地址={}, 值={}", target_ip, address, value);
+        // 减少冗余日志 - 只在trace模式下显示连接查找信息
+        log::trace!("🔍 [ModbusPlcService] 查找PLC连接进行写入: IP={}, 地址={}, 值={}", target_ip, address, value);
 
         for (connection_id, connection) in connections.iter() {
             // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
             if connection.config.ip_address == *target_ip &&
                connection.config.port == self.config.port as i32 &&
                connection.state == PlcConnectionState::Connected {
-                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接进行写入: ID={}, IP={}", connection_id, target_ip);
+                log::trace!("✅ [ModbusPlcService] 找到匹配的PLC连接进行写入: ID={}, IP={}", connection_id, target_ip);
 
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;
@@ -894,10 +895,10 @@ impl ModbusPlcService {
 
                     return match addr_type {
                         '0' => { // 线圈
-                            log::debug!("📝 [ModbusPlcService] 写入线圈: IP={}, 地址={}, 偏移={}, 值={}", target_ip, address, reg_offset, value);
+                            // 移除冗余的线圈写入日志
                             match context.write_single_coil(reg_offset, value).await {
                                 Ok(_) => {
-                                    log::debug!("✅ [ModbusPlcService] 线圈写入成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    // 移除冗余的线圈写入成功日志
                                     Ok(())
                                 },
                                 Err(e) => {
@@ -938,14 +939,14 @@ impl ModbusPlcService {
 
         // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接
         let target_ip = &self.config.ip_address;
-        log::debug!("🔍 [ModbusPlcService] 查找PLC连接读取Float32: IP={}, 地址={}", target_ip, address);
+        // 移除冗余的PLC连接查找日志
 
         for (connection_id, connection) in connections.iter() {
             // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
             if connection.config.ip_address == *target_ip &&
                connection.config.port == self.config.port as i32 &&
                connection.state == PlcConnectionState::Connected {
-                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接读取Float32: ID={}, IP={}", connection_id, target_ip);
+                // 移除冗余的PLC连接匹配日志
 
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;
@@ -1041,14 +1042,14 @@ impl ModbusPlcService {
 
         // 🔧 修复：根据当前服务的IP地址查找对应的PLC连接
         let target_ip = &self.config.ip_address;
-        log::debug!("🔍 [ModbusPlcService] 查找PLC连接写入Float32: IP={}, 地址={}, 值={}", target_ip, address, value);
+        // 移除冗余的PLC连接查找日志
 
         for (connection_id, connection) in connections.iter() {
             // 🔧 修复：检查连接的IP地址和端口是否都匹配当前服务的配置
             if connection.config.ip_address == *target_ip &&
                connection.config.port == self.config.port as i32 &&
                connection.state == PlcConnectionState::Connected {
-                log::debug!("✅ [ModbusPlcService] 找到匹配的PLC连接写入Float32: ID={}, IP={}", connection_id, target_ip);
+                // 移除冗余的PLC连接匹配日志
 
                 if let Some(context_arc) = &connection.context {
                     let mut context = context_arc.lock().await;

@@ -63,6 +63,11 @@ pub async fn execute_manual_sub_test_cmd(
         start_time: chrono::Utc::now(),
         end_time: chrono::Utc::now(),
         readings: None,
+        test_result_0_percent: None,
+        test_result_25_percent: None,
+        test_result_50_percent: None,
+        test_result_75_percent: None,
+        test_result_100_percent: None,
         details: args.params.unwrap_or_default(),
     };
     

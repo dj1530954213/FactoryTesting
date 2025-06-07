@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::Utc;
-use log::{info, error, warn, debug};
+use log::{info, error, warn, debug, trace};
 
 /// 通道状态管理器接口
 #[async_trait]
@@ -117,21 +117,21 @@ impl ChannelStateManager {
         let mut has_manual_tests = false;
         let mut manual_tests_completed = true;
 
-        info!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
+        trace!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
 
         // 遍历所有子测试结果
         for (sub_test_item, result) in &instance.sub_test_results {
-            info!("🔍 [EVALUATE_STATUS] 检查子测试: {:?} -> {:?}", sub_test_item, result.status);
+            trace!("🔍 [EVALUATE_STATUS] 检查子测试: {:?} -> {:?}", sub_test_item, result.status);
 
             match result.status {
                 SubTestStatus::Failed => {
-                    info!("🔍 [EVALUATE_STATUS] 发现失败测试: {:?}", sub_test_item);
+                    trace!("🔍 [EVALUATE_STATUS] 发现失败测试: {:?}", sub_test_item);
                     any_failed = true;
                     all_required_passed = false;
                 }
                 SubTestStatus::NotTested => {
                     if self.is_required_test(sub_test_item) {
-                        info!("🔍 [EVALUATE_STATUS] 必需测试未完成: {:?}", sub_test_item);
+                        trace!("🔍 [EVALUATE_STATUS] 必需测试未完成: {:?}", sub_test_item);
                         all_required_passed = false;
                     }
                     if self.is_manual_test(sub_test_item) {
@@ -139,7 +139,7 @@ impl ChannelStateManager {
                     }
                 }
                 SubTestStatus::Passed => {
-                    info!("🔍 [EVALUATE_STATUS] 测试通过: {:?}", sub_test_item);
+                    trace!("🔍 [EVALUATE_STATUS] 测试通过: {:?}", sub_test_item);
                     if *sub_test_item == SubTestItem::HardPoint {
                         hard_point_completed = true;
                     }
@@ -157,33 +157,33 @@ impl ChannelStateManager {
             }
         }
 
-        info!("🔍 [EVALUATE_STATUS] 状态评估结果:");
-        info!("   - any_failed: {}", any_failed);
-        info!("   - all_required_passed: {}", all_required_passed);
-        info!("   - hard_point_completed: {}", hard_point_completed);
-        info!("   - has_manual_tests: {}", has_manual_tests);
-        info!("   - manual_tests_completed: {}", manual_tests_completed);
+        trace!("🔍 [EVALUATE_STATUS] 状态评估结果:");
+        trace!("   - any_failed: {}", any_failed);
+        trace!("   - all_required_passed: {}", all_required_passed);
+        trace!("   - hard_point_completed: {}", hard_point_completed);
+        trace!("   - has_manual_tests: {}", has_manual_tests);
+        trace!("   - manual_tests_completed: {}", manual_tests_completed);
 
         // 根据状态机规则更新整体状态
         let new_status = if any_failed {
-            info!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
+            trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
             OverallTestStatus::TestCompletedFailed
         } else if all_required_passed {
-            info!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
+            trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
             OverallTestStatus::TestCompletedPassed
         } else if hard_point_completed && has_manual_tests && !manual_tests_completed {
-            info!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
+            trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
             OverallTestStatus::HardPointTestCompleted
         } else if hard_point_completed {
-            info!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
+            trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
             OverallTestStatus::HardPointTestCompleted
         } else {
-            info!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
+            trace!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
             OverallTestStatus::NotTested
         };
 
         instance.overall_status = new_status;
-        info!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
+        trace!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
 
         // 如果测试完成，更新时间戳
         if matches!(instance.overall_status, 
@@ -293,7 +293,7 @@ impl IChannelStateManager for ChannelStateManager {
         instance: &mut ChannelTestInstance,
         outcome: RawTestOutcome,
     ) -> AppResult<()> {
-        info!("🔍 [APPLY_OUTCOME] 开始应用测试结果: {} -> {:?} ({})",
+        trace!("🔍 [APPLY_OUTCOME] 开始应用测试结果: {} -> {:?} ({})",
               instance.instance_id, outcome.sub_test_item, outcome.success);
 
         // 🔧 修复：如果 sub_test_results 是空的，先初始化它
@@ -315,10 +315,10 @@ impl IChannelStateManager for ChannelStateManager {
             }
         }
 
-        // 🔧 调试：检查 sub_test_results 的状态
-        info!("🔍 [APPLY_OUTCOME] sub_test_results 包含 {} 个项目:", instance.sub_test_results.len());
+        // 🔧 调试：检查 sub_test_results 的状态 - 完全移除冗余日志
+        trace!("🔍 [APPLY_OUTCOME] sub_test_results 包含 {} 个项目:", instance.sub_test_results.len());
         for (item, result) in &instance.sub_test_results {
-            info!("   - {:?}: {:?}", item, result.status);
+            trace!("   - {:?}: {:?}", item, result.status);
         }
 
         // 检查是否存在对应的子测试项，如果不存在则动态添加
@@ -332,7 +332,7 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 更新对应的子测试结果
         if let Some(sub_result) = instance.sub_test_results.get_mut(&outcome.sub_test_item) {
-            info!("🔍 [APPLY_OUTCOME] 找到对应的子测试项: {:?}", outcome.sub_test_item);
+            trace!("🔍 [APPLY_OUTCOME] 找到对应的子测试项: {:?}", outcome.sub_test_item);
             sub_result.status = if outcome.success {
                 SubTestStatus::Passed
             } else {
@@ -342,9 +342,61 @@ impl IChannelStateManager for ChannelStateManager {
             sub_result.actual_value = outcome.raw_value_read.clone();
             sub_result.expected_value = outcome.eng_value_calculated.clone();
             sub_result.details = outcome.message.clone();
-            info!("🔍 [APPLY_OUTCOME] 子测试状态已更新为: {:?}", sub_result.status);
+            trace!("🔍 [APPLY_OUTCOME] 子测试状态已更新为: {:?}", sub_result.status);
         } else {
             error!("❌ [APPLY_OUTCOME] 这不应该发生：仍然找不到子测试项: {:?}", outcome.sub_test_item);
+        }
+
+        // 🔧 处理硬点测试结果 - 存储百分比数据和硬点读数
+        if outcome.sub_test_item == SubTestItem::HardPoint {
+            // 存储硬点读数到实例中
+            if let Some(readings) = &outcome.readings {
+                instance.hardpoint_readings = Some(readings.clone());
+                trace!("🔍 [APPLY_OUTCOME] 已存储硬点读数数据");
+            }
+
+            // 🔧 处理百分比测试结果 - 优先使用outcome中的直接数据，但总是尝试从readings中提取
+            let mut percentage_data_stored = false;
+
+            if outcome.test_result_0_percent.is_some() {
+                // 直接从outcome中提取百分比测试结果，存储到临时数据中
+                instance.transient_data.insert("test_result_0_percent".to_string(),
+                    serde_json::json!(outcome.test_result_0_percent));
+                instance.transient_data.insert("test_result_25_percent".to_string(),
+                    serde_json::json!(outcome.test_result_25_percent));
+                instance.transient_data.insert("test_result_50_percent".to_string(),
+                    serde_json::json!(outcome.test_result_50_percent));
+                instance.transient_data.insert("test_result_75_percent".to_string(),
+                    serde_json::json!(outcome.test_result_75_percent));
+                instance.transient_data.insert("test_result_100_percent".to_string(),
+                    serde_json::json!(outcome.test_result_100_percent));
+
+                trace!("🔍 [APPLY_OUTCOME] 已从outcome直接存储百分比测试结果");
+                percentage_data_stored = true;
+            }
+
+            // 🔧 总是尝试从readings中提取数据（作为备选或补充）
+            if let Some(readings) = &outcome.readings {
+                if readings.len() >= 5 && !percentage_data_stored {
+                    instance.transient_data.insert("test_result_0_percent".to_string(),
+                        serde_json::json!(readings[0].actual_reading_eng.map(|v| v as f64)));
+                    instance.transient_data.insert("test_result_25_percent".to_string(),
+                        serde_json::json!(readings[1].actual_reading_eng.map(|v| v as f64)));
+                    instance.transient_data.insert("test_result_50_percent".to_string(),
+                        serde_json::json!(readings[2].actual_reading_eng.map(|v| v as f64)));
+                    instance.transient_data.insert("test_result_75_percent".to_string(),
+                        serde_json::json!(readings[3].actual_reading_eng.map(|v| v as f64)));
+                    instance.transient_data.insert("test_result_100_percent".to_string(),
+                        serde_json::json!(readings[4].actual_reading_eng.map(|v| v as f64)));
+
+                    trace!("🔍 [APPLY_OUTCOME] 已从readings提取百分比测试结果到临时数据");
+                    percentage_data_stored = true;
+                }
+            }
+
+            if !percentage_data_stored {
+                warn!("⚠️ [APPLY_OUTCOME] 未能存储百分比测试结果：outcome中无直接数据且readings不足5个");
+            }
         }
 
         // 重新评估整体状态
@@ -484,30 +536,23 @@ impl IChannelStateManager for ChannelStateManager {
     /// 更新测试结果
     async fn update_test_result(&self, outcome: RawTestOutcome) -> AppResult<()> {
         let instance_id = outcome.channel_instance_id.clone();
-        info!("🔍 [STATE_MANAGER] 尝试更新测试结果: {} -> {:?}", instance_id, outcome.success);
-
-        // 🔧 添加详细的ID调试信息
-        info!("🔍 [STATE_MANAGER] 详细ID信息:");
-        info!("   - instance_id: {}", instance_id);
-        info!("   - instance_id长度: {}", instance_id.len());
-        info!("   - instance_id字节: {:?}", instance_id.as_bytes());
-        info!("   - 测试项目: {:?}", outcome.sub_test_item);
-        info!("   - 测试结果: {}", outcome.success);
+        // 完全移除状态管理器的冗余日志
+        trace!("🔍 [STATE_MANAGER] 尝试更新测试结果: {} -> {:?}", instance_id, outcome.success);
 
         // 🔧 第一步：尝试从内存缓存获取测试实例
         let mut instance_from_cache = {
             let cache = self.test_instances_cache.read().unwrap();
             let cached_result = cache.get(&instance_id).cloned();
-            info!("🔍 [STATE_MANAGER] 内存缓存查询结果: {}", if cached_result.is_some() { "找到" } else { "未找到" });
+            trace!("🔍 [STATE_MANAGER] 内存缓存查询结果: {}", if cached_result.is_some() { "找到" } else { "未找到" });
             cached_result
         };
 
         // 🔧 第二步：如果缓存中没有，从数据库加载
         if instance_from_cache.is_none() {
-            info!("🔍 [STATE_MANAGER] 准备从数据库查询实例ID: {}", instance_id);
+            trace!("🔍 [STATE_MANAGER] 准备从数据库查询实例ID: {}", instance_id);
             match self.persistence_service.load_test_instance(&instance_id).await {
                 Ok(Some(instance)) => {
-                    info!("✅ [STATE_MANAGER] 从数据库加载测试实例: {} (定义ID: {})", instance_id, instance.definition_id);
+                    trace!("✅ [STATE_MANAGER] 从数据库加载测试实例: {} (定义ID: {})", instance_id, instance.definition_id);
 
                     // 将实例添加到缓存
                     {
@@ -546,7 +591,7 @@ impl IChannelStateManager for ChannelStateManager {
                 }
             }
         } else {
-            info!("✅ [STATE_MANAGER] 从内存缓存获取测试实例: {}", instance_id);
+            trace!("✅ [STATE_MANAGER] 从内存缓存获取测试实例: {}", instance_id);
         }
 
         // 🔧 第三步：更新测试实例状态
@@ -563,7 +608,7 @@ impl IChannelStateManager for ChannelStateManager {
             // 保存到数据库
             self.persistence_service.save_test_instance(&instance).await?;
 
-            info!("✅ [STATE_MANAGER] 成功更新测试结果: {} -> {:?}", instance_id, instance.overall_status);
+            trace!("✅ [STATE_MANAGER] 成功更新测试结果: {} -> {:?}", instance_id, instance.overall_status);
         }
 
         Ok(())

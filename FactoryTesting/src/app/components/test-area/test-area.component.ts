@@ -42,6 +42,7 @@ import {
   MODULE_TYPE_LABELS,
   POINT_DATA_TYPE_LABELS
 } from '../../models';
+import { ErrorDetailModalComponent } from './error-detail-modal.component';
 
 // 批次测试统计接口
 interface BatchTestStats {
@@ -79,7 +80,8 @@ interface BatchTestStats {
     NzMenuModule,
     NzCollapseModule,
     NzProgressModule,
-    NzModalModule
+    NzModalModule,
+    ErrorDetailModalComponent
   ],
   templateUrl: './test-area.component.html',
   styleUrls: ['./test-area.component.css']
@@ -138,6 +140,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     { label: MODULE_TYPE_LABELS[ModuleType.DI], value: ModuleType.DI, count: 0 },
     { label: MODULE_TYPE_LABELS[ModuleType.DO], value: ModuleType.DO, count: 0 }
   ];
+
+  // 错误详情模态框相关
+  errorDetailModalVisible = false;
+  selectedErrorInstance: ChannelTestInstance | null = null;
+  selectedErrorDefinition: ChannelPointDefinition | null = null;
 
   constructor(
     private tauriApiService: TauriApiService,
@@ -1192,6 +1199,55 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     } else {
       console.log('✅ [TEST_AREA] 没有未持久化的数据，正常加载批次列表');
     }
+  }
+
+  /**
+   * 显示错误详情
+   */
+  showErrorDetail(instance: ChannelTestInstance): void {
+    console.log('🔍 [TEST_AREA] 显示错误详情:', instance.instance_id);
+
+    // 查找对应的通道定义
+    const definition = this.getDefinitionByInstanceId(instance.instance_id);
+    if (!definition) {
+      this.message.error('未找到通道定义信息');
+      return;
+    }
+
+    this.selectedErrorInstance = instance;
+    this.selectedErrorDefinition = definition;
+    this.errorDetailModalVisible = true;
+  }
+
+  /**
+   * 关闭错误详情模态框
+   */
+  closeErrorDetailModal(): void {
+    this.errorDetailModalVisible = false;
+    this.selectedErrorInstance = null;
+    this.selectedErrorDefinition = null;
+  }
+
+  /**
+   * 检查是否有错误详情可显示
+   */
+  hasErrorDetails(instance: ChannelTestInstance): boolean {
+    // 检查是否有错误信息或失败的子测试结果
+    if (instance.error_message && instance.error_message.trim()) {
+      return true;
+    }
+
+    // 检查是否有失败的子测试结果
+    if (instance.sub_test_results) {
+      for (const [_, result] of Object.entries(instance.sub_test_results)) {
+        if (result.status === SubTestStatus.Failed && result.details) {
+          return true;
+        }
+      }
+    }
+
+    // 如果状态是失败但没有具体错误信息，也显示按钮
+    return instance.overall_status === OverallTestStatus.TestCompletedFailed;
   }
 
 

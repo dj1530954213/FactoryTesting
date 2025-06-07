@@ -54,9 +54,9 @@ pub struct ChannelPointDefinition {
 
     // 量程信息（主要用于AI/AO）
     /// 量程下限
-    pub range_lower_limit: Option<f32>,
+    pub range_low_limit: Option<f32>,
     /// 量程上限
-    pub range_upper_limit: Option<f32>,
+    pub range_high_limit: Option<f32>,
     /// 工程单位（例如："mA", "V", "°C"）
     pub engineering_unit: Option<String>,
 
@@ -180,8 +180,8 @@ impl ChannelPointDefinition {
             wire_system: String::from("4线制"),
             plc_absolute_address: None,
             plc_communication_address,
-            range_lower_limit: None,
-            range_upper_limit: None,
+            range_low_limit: None,
+            range_high_limit: None,
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
@@ -252,8 +252,8 @@ impl ChannelPointDefinition {
             wire_system: String::from("4线制"),
             plc_absolute_address: None,
             plc_communication_address,
-            range_lower_limit: None,
-            range_upper_limit: None,
+            range_low_limit: None,
+            range_high_limit: None,
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
@@ -314,8 +314,8 @@ impl Default for ChannelPointDefinition {
             wire_system: String::from("4线制"),
             plc_absolute_address: None,
             plc_communication_address: String::new(),
-            range_lower_limit: None,
-            range_upper_limit: None,
+            range_low_limit: None,
+            range_high_limit: None,
             engineering_unit: None,
             sll_set_value: None,
             sll_set_point_address: None,
@@ -590,6 +590,12 @@ pub struct RawTestOutcome {
     pub end_time: DateTime<Utc>,
     /// 一系列读数，如AI多点测试
     pub readings: Option<Vec<AnalogReadingPoint>>,
+    /// 百分比测试结果 - 存储实际工程量
+    pub test_result_0_percent: Option<f64>,
+    pub test_result_25_percent: Option<f64>,
+    pub test_result_50_percent: Option<f64>,
+    pub test_result_75_percent: Option<f64>,
+    pub test_result_100_percent: Option<f64>,
     /// 更多细节
     #[serde(default)]
     pub details: HashMap<String, serde_json::Value>,
@@ -613,6 +619,11 @@ impl RawTestOutcome {
             start_time: now,
             end_time: now,
             readings: None,
+            test_result_0_percent: None,
+            test_result_25_percent: None,
+            test_result_50_percent: None,
+            test_result_75_percent: None,
+            test_result_100_percent: None,
             details: HashMap::new(),
         }
     }
@@ -649,6 +660,11 @@ impl Default for RawTestOutcome {
             start_time: Utc::now(),
             end_time: Utc::now(),
             readings: None,
+            test_result_0_percent: None,
+            test_result_25_percent: None,
+            test_result_50_percent: None,
+            test_result_75_percent: None,
+            test_result_100_percent: None,
             details: HashMap::new(),
         }
     }

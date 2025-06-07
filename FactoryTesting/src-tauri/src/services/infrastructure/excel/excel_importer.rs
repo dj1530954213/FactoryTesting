@@ -287,8 +287,8 @@ impl ExcelImporter {
 
         // 提取量程信息（仅对模拟量有效）
         if matches!(definition.module_type, ModuleType::AI | ModuleType::AO) {
-            definition.range_lower_limit = get_float(14);
-            definition.range_upper_limit = get_float(15);
+            definition.range_low_limit = get_float(14);
+            definition.range_high_limit = get_float(15);
 
             // 不再生成虚拟地址，测试台架地址将通过通道分配时从测试PLC配置表获取
             definition.test_rig_plc_address = None;

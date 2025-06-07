@@ -45,6 +45,18 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub readings_json: Option<String>,
 
+    // 百分比测试结果字段 - 存储实际工程量
+    #[sea_orm(nullable)]
+    pub test_result_0_percent: Option<f64>,
+    #[sea_orm(nullable)]
+    pub test_result_25_percent: Option<f64>,
+    #[sea_orm(nullable)]
+    pub test_result_50_percent: Option<f64>,
+    #[sea_orm(nullable)]
+    pub test_result_75_percent: Option<f64>,
+    #[sea_orm(nullable)]
+    pub test_result_100_percent: Option<f64>,
+
     // HashMap<String, serde_json::Value> 序列化为 JSON 字符串存储
     #[sea_orm(column_type = "Text", nullable)]
     pub details_json: Option<String>,
@@ -84,6 +96,11 @@ impl From<&crate::models::structs::RawTestOutcome> for ActiveModel {
             start_time: Set(original.start_time),
             end_time: Set(original.end_time),
             readings_json: Set(readings_json),
+            test_result_0_percent: Set(original.test_result_0_percent),
+            test_result_25_percent: Set(original.test_result_25_percent),
+            test_result_50_percent: Set(original.test_result_50_percent),
+            test_result_75_percent: Set(original.test_result_75_percent),
+            test_result_100_percent: Set(original.test_result_100_percent),
             details_json: Set(details_json),
             ..Default::default()
         }
@@ -121,6 +138,11 @@ impl From<&Model> for crate::models::structs::RawTestOutcome {
             start_time: model.start_time,
             end_time: model.end_time,
             readings,
+            test_result_0_percent: model.test_result_0_percent,
+            test_result_25_percent: model.test_result_25_percent,
+            test_result_50_percent: model.test_result_50_percent,
+            test_result_75_percent: model.test_result_75_percent,
+            test_result_100_percent: model.test_result_100_percent,
             details,
         }
     }

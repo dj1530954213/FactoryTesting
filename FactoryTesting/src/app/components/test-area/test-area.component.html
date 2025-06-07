@@ -328,18 +328,36 @@
                   </nz-tag>
                 </td>
                 <td>
-                  <span *ngIf="instance.error_message && instance.error_message.trim()" class="error-message">
-                    {{ instance.error_message }}
-                  </span>
-                  <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedFailed && (!instance.error_message || !instance.error_message.trim())" class="error-message">
-                    测试失败 - 未知错误
-                  </span>
-                  <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedPassed" class="success-message">
-                    测试通过
-                  </span>
-                  <span *ngIf="instance.overall_status === OverallTestStatus.NotTested || instance.overall_status === OverallTestStatus.WiringConfirmed" class="no-error">
-                    未测试
-                  </span>
+                  <div class="error-detail-cell">
+                    <!-- 错误信息显示 -->
+                    <div class="error-text">
+                      <span *ngIf="instance.error_message && instance.error_message.trim()" class="error-message">
+                        {{ instance.error_message }}
+                      </span>
+                      <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedFailed && (!instance.error_message || !instance.error_message.trim())" class="error-message">
+                        测试失败 - 未知错误
+                      </span>
+                      <span *ngIf="instance.overall_status === OverallTestStatus.TestCompletedPassed" class="success-message">
+                        测试通过
+                      </span>
+                      <span *ngIf="instance.overall_status === OverallTestStatus.NotTested || instance.overall_status === OverallTestStatus.WiringConfirmed" class="no-error">
+                        未测试
+                      </span>
+                    </div>
+
+                    <!-- 错误详情按钮 -->
+                    <div class="error-actions" *ngIf="hasErrorDetails(instance)">
+                      <button
+                        nz-button
+                        nzType="link"
+                        nzSize="small"
+                        (click)="showErrorDetail(instance)"
+                        class="error-detail-btn">
+                        <span nz-icon nzType="eye" nzTheme="outline"></span>
+                        查看详情
+                      </button>
+                    </div>
+                  </div>
                   <span *ngIf="instance.overall_status === OverallTestStatus.HardPointTesting || instance.overall_status === OverallTestStatus.AlarmTesting" class="testing-message">
                     测试中...
                   </span>
@@ -393,5 +411,12 @@
     </div>
   </nz-card>
 
+  <!-- 错误详情模态框 -->
+  <app-error-detail-modal
+    [(visible)]="errorDetailModalVisible"
+    [instance]="selectedErrorInstance"
+    [definition]="selectedErrorDefinition"
+    (visibleChange)="closeErrorDetailModal()">
+  </app-error-detail-modal>
 
 </div>

@@ -137,11 +137,10 @@ pub trait PlcCommunicationService: BaseService {
     
     /// 读取布尔值
     async fn read_bool(&self, address: &str) -> AppResult<bool> {
-        log::info!("🔍 [PLC_READ_BOOL] 地址: {}", address);
         let result = self.read_bool_impl(address).await;
         match &result {
-            Ok(value) => log::info!("✅ [PLC_READ_BOOL] 地址: {}, 值: {}", address, value),
-            Err(e) => log::error!("❌ [PLC_READ_BOOL] 地址: {}, 错误: {}", address, e),
+            Ok(value) => log::info!("📖 读取 [{}]: {}", address, value),
+            Err(e) => log::error!("❌ 读取失败 [{}]: {}", address, e),
         }
         result
     }
@@ -175,11 +174,10 @@ pub trait PlcCommunicationService: BaseService {
     
     /// 读取32位浮点数
     async fn read_float32(&self, address: &str) -> AppResult<f32> {
-        log::info!("🔍 [PLC_READ_F32] 地址: {}", address);
         let result = self.read_float32_impl(address).await;
         match &result {
-            Ok(value) => log::info!("✅ [PLC_READ_F32] 地址: {}, 值: {}", address, value),
-            Err(e) => log::error!("❌ [PLC_READ_F32] 地址: {}, 错误: {}", address, e),
+            Ok(value) => log::info!("📖 读取 [{}]: {:.3}", address, value),
+            Err(e) => log::error!("❌ 读取失败 [{}]: {}", address, e),
         }
         result
     }
@@ -200,11 +198,10 @@ pub trait PlcCommunicationService: BaseService {
     
     /// 写入布尔值
     async fn write_bool(&self, address: &str, value: bool) -> AppResult<()> {
-        log::info!("📝 [PLC_WRITE_BOOL] 地址: {}, 值: {}", address, value);
         let result = self.write_bool_impl(address, value).await;
         match &result {
-            Ok(_) => log::info!("✅ [PLC_WRITE_BOOL] 地址: {}, 值: {} - 写入成功", address, value),
-            Err(e) => log::error!("❌ [PLC_WRITE_BOOL] 地址: {}, 值: {}, 错误: {}", address, value, e),
+            Ok(_) => log::info!("📝 写入 [{}]: {}", address, value),
+            Err(e) => log::error!("❌ 写入失败 [{}]: {} - {}", address, value, e),
         }
         result
     }
@@ -238,11 +235,10 @@ pub trait PlcCommunicationService: BaseService {
     
     /// 写入32位浮点数
     async fn write_float32(&self, address: &str, value: f32) -> AppResult<()> {
-        log::info!("📝 [PLC_WRITE_F32] 地址: {}, 值: {}", address, value);
         let result = self.write_float32_impl(address, value).await;
         match &result {
-            Ok(_) => log::info!("✅ [PLC_WRITE_F32] 地址: {}, 值: {} - 写入成功", address, value),
-            Err(e) => log::error!("❌ [PLC_WRITE_F32] 地址: {}, 值: {}, 错误: {}", address, value, e),
+            Ok(_) => log::info!("📝 写入 [{}]: {:.3}", address, value),
+            Err(e) => log::error!("❌ 写入失败 [{}]: {:.3} - {}", address, value, e),
         }
         result
     }

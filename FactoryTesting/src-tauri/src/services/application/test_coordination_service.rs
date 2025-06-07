@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
-use log::{debug, warn, error, info};
+use log::{debug, warn, error, info, trace};
 use chrono::Utc;
 use crate::services::{IChannelAllocationService};
 use crate::services::traits::EventPublisher;
@@ -321,8 +321,7 @@ impl TestCoordinationService {
 
             if let Some(mut receiver) = receiver {
                 while let Some(result) = receiver.recv().await {
-                    debug!("[TestCoordination] 收到测试结果: {} - {}",
-                           result.channel_instance_id, result.success);
+                    // 移除冗余的测试结果接收日志
 
                     // 保存结果到持久化存储
                     if let Err(e) = persistence_service.save_test_outcome(&result).await {
@@ -333,13 +332,13 @@ impl TestCoordinationService {
                     if let Err(e) = channel_state_manager.update_test_result(result.clone()).await {
                         error!("[TestCoordination] 更新通道状态失败: {}", e);
                     } else {
-                        debug!("[TestCoordination] 成功更新通道状态: {}", result.channel_instance_id);
+                        trace!("[TestCoordination] 成功更新通道状态: {}", result.channel_instance_id);
 
                         // ===== 新增：发布测试完成事件到前端 =====
                         if let Err(e) = event_publisher.publish_test_completed(&result).await {
                             error!("[TestCoordination] 发布测试完成事件失败: {}", e);
                         } else {
-                            debug!("[TestCoordination] 成功发布测试完成事件: {}", result.channel_instance_id);
+                            trace!("[TestCoordination] 成功发布测试完成事件: {}", result.channel_instance_id);
                         }
                     }
 
@@ -417,7 +416,7 @@ impl TestCoordinationService {
                                 if let Err(e) = event_publisher_clone.publish_batch_status_changed(&batch_id_clone, &statistics_clone).await {
                                     error!("[TestCoordination] 发布批次状态变化事件失败: {}", e);
                                 } else {
-                                    debug!("[TestCoordination] 成功发布批次状态变化事件: {}", batch_id_clone);
+                                    trace!("[TestCoordination] 成功发布批次状态变化事件: {}", batch_id_clone);
                                 }
                             });
 
@@ -697,7 +696,7 @@ impl ITestCoordinationService for TestCoordinationService {
                 ).await {
                     error!("[TestCoordination] 发布测试开始事件失败: {}", e);
                 } else {
-                    debug!("[TestCoordination] 成功发布测试开始事件: {}", instance.instance_id);
+                    trace!("[TestCoordination] 成功发布测试开始事件: {}", instance.instance_id);
                 }
 
                 let task_id = self.test_execution_engine

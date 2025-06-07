@@ -18,6 +18,7 @@ impl DatabaseMigration {
         Self::migrate_test_batch_info(db).await?;
 
         // 阶段二：创建新表（如果不存在）
+        Self::migrate_raw_test_outcomes(db).await?;
         Self::create_missing_tables(db).await?;
 
         // 阶段三：数据完整性检查和修复
@@ -145,6 +146,22 @@ impl DatabaseMigration {
         }
 
         log::info!("test_batch_info表迁移完成");
+        Ok(())
+    }
+
+    /// 迁移原始测试结果表
+    async fn migrate_raw_test_outcomes(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("开始迁移raw_test_outcomes表...");
+
+        let table_exists = Self::check_table_exists(db, "raw_test_outcomes").await?;
+
+        if !table_exists {
+            Self::create_raw_test_outcomes_table(db).await?;
+        } else {
+            Self::add_raw_test_outcomes_columns(db).await?;
+        }
+
+        log::info!("raw_test_outcomes表迁移完成");
         Ok(())
     }
 
@@ -324,6 +341,14 @@ impl DatabaseMigration {
                 test_plc_channel_tag TEXT,
                 test_plc_communication_address TEXT,
                 test_result_status INTEGER,
+
+                -- 百分比测试结果字段 - 存储实际工程量
+                test_result_0_percent REAL,
+                test_result_25_percent REAL,
+                test_result_50_percent REAL,
+                test_result_75_percent REAL,
+                test_result_100_percent REAL,
+
                 current_operator TEXT,
                 retries_count INTEGER DEFAULT 0,
                 sub_test_results_json TEXT,
@@ -347,12 +372,18 @@ impl DatabaseMigration {
 
         // 需要添加的新列（基于重构后的实体结构）
         let new_columns = vec![
+            ("test_batch_name", "TEXT NOT NULL DEFAULT ''"),
             ("channel_tag", "TEXT NOT NULL DEFAULT ''"),
             ("variable_name", "TEXT NOT NULL DEFAULT ''"),
             ("variable_description", "TEXT NOT NULL DEFAULT ''"),
             ("module_type", "TEXT NOT NULL DEFAULT ''"),
             ("data_type", "TEXT NOT NULL DEFAULT ''"),
             ("plc_communication_address", "TEXT NOT NULL DEFAULT ''"),
+            ("current_step_details", "TEXT"),
+            ("error_message", "TEXT"),
+            ("start_time", "TEXT"),
+            ("final_test_time", "TEXT"),
+            ("total_test_duration_ms", "INTEGER"),
             ("hard_point_status", "INTEGER"),
             ("hard_point_test_result", "TEXT"),
             ("hard_point_error_detail", "TEXT"),
@@ -367,7 +398,16 @@ impl DatabaseMigration {
             ("trend_check", "INTEGER"),
             ("report_check", "INTEGER"),
             ("show_value_status", "INTEGER"),
+            ("test_plc_channel_tag", "TEXT"),
+            ("test_plc_communication_address", "TEXT"),
             ("test_result_status", "INTEGER"),
+            ("current_operator", "TEXT"),
+            ("retries_count", "INTEGER DEFAULT 0"),
+            ("test_result_0_percent", "REAL"),
+            ("test_result_25_percent", "REAL"),
+            ("test_result_50_percent", "REAL"),
+            ("test_result_75_percent", "REAL"),
+            ("test_result_100_percent", "REAL"),
             ("created_time", "TEXT"),
             ("updated_time", "TEXT"),
             ("sub_test_results_json", "TEXT"),
@@ -453,13 +493,21 @@ impl DatabaseMigration {
         // 需要添加的新列（基于重构后的实体结构）
         let new_columns = vec![
             ("batch_name", "TEXT NOT NULL DEFAULT ''"),
+            ("customer_name", "TEXT"),
             ("station_name", "TEXT"),
             ("start_time", "TEXT"),
             ("end_time", "TEXT"),
             ("total_duration_ms", "INTEGER"),
+            ("operator_name", "TEXT"),  // 添加这个字段
             ("created_by", "TEXT"),
             ("overall_status", "TEXT NOT NULL DEFAULT 'NotTested'"),
+            ("status_summary", "TEXT"),  // 添加这个字段
             ("error_message", "TEXT"),
+            ("total_points", "INTEGER DEFAULT 0"),  // 添加这个字段
+            ("tested_points", "INTEGER DEFAULT 0"),  // 添加这个字段
+            ("passed_points", "INTEGER DEFAULT 0"),  // 添加这个字段
+            ("failed_points", "INTEGER DEFAULT 0"),  // 添加这个字段
+            ("skipped_points", "INTEGER DEFAULT 0"),  // 添加这个字段
             ("not_tested_points", "INTEGER DEFAULT 0"),
             ("progress_percentage", "REAL DEFAULT 0.0"),
             ("current_testing_channel", "TEXT"),
@@ -468,6 +516,7 @@ impl DatabaseMigration {
             ("custom_data_json", "TEXT"),
             ("created_time", "TEXT"),
             ("updated_time", "TEXT"),
+            ("last_updated_time", "TEXT"),  // 添加这个字段以兼容实体模型
         ];
 
         for (column_name, column_def) in new_columns {
@@ -549,6 +598,67 @@ impl DatabaseMigration {
             )).await.map_err(|e| AppError::persistence_error(format!("迁移实例时间字段数据失败: {}", e)))?;
 
             log::info!("实例时间字段数据迁移完成");
+        }
+
+        Ok(())
+    }
+
+    /// 创建原始测试结果表
+    async fn create_raw_test_outcomes_table(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("创建raw_test_outcomes表");
+
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS raw_test_outcomes (
+                id TEXT PRIMARY KEY NOT NULL,
+                channel_instance_id TEXT NOT NULL,
+                sub_test_item TEXT NOT NULL,
+                success BOOLEAN NOT NULL,
+                raw_value_read TEXT,
+                eng_value_calculated TEXT,
+                message TEXT,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                readings_json TEXT,
+                test_result_0_percent REAL,
+                test_result_25_percent REAL,
+                test_result_50_percent REAL,
+                test_result_75_percent REAL,
+                test_result_100_percent REAL,
+                details_json TEXT
+            )
+        "#;
+
+        db.execute(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql.to_string()
+        )).await.map_err(|e| AppError::persistence_error(format!("创建raw_test_outcomes表失败: {}", e)))?;
+
+        log::info!("成功创建raw_test_outcomes表");
+        Ok(())
+    }
+
+    /// 添加原始测试结果表的新列
+    async fn add_raw_test_outcomes_columns(db: &DatabaseConnection) -> Result<(), AppError> {
+        let existing_columns = Self::get_existing_columns(db, "raw_test_outcomes").await?;
+
+        // 需要添加的新列
+        let new_columns = vec![
+            ("test_result_0_percent", "REAL"),
+            ("test_result_25_percent", "REAL"),
+            ("test_result_50_percent", "REAL"),
+            ("test_result_75_percent", "REAL"),
+            ("test_result_100_percent", "REAL"),
+        ];
+
+        for (column_name, column_def) in new_columns {
+            if !existing_columns.contains(&column_name.to_string()) {
+                log::info!("添加{}列到raw_test_outcomes表", column_name);
+                let sql = format!("ALTER TABLE raw_test_outcomes ADD COLUMN {} {}", column_name, column_def);
+                db.execute(Statement::from_string(
+                    sea_orm::DatabaseBackend::Sqlite,
+                    sql
+                )).await.map_err(|e| AppError::persistence_error(format!("添加{}列失败: {}", column_name, e)))?;
+            }
         }
 
         Ok(())

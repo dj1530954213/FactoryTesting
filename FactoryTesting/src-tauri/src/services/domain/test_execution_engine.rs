@@ -137,8 +137,7 @@ impl TestExecutionEngine {
         result_sender: mpsc::Sender<RawTestOutcome>,
         task_cancellation_token: CancellationToken,
     ) {
-        info!("[TestEngine] 开始执行测试序列 - 任务: {}, 实例: {}, 点位: {}",
-              task_id, instance.instance_id, definition.tag);
+        info!("🚀 开始测试: {} [{}]", definition.tag, instance.instance_id);
 
         // 更新任务状态为运行中
         {
@@ -165,7 +164,8 @@ impl TestExecutionEngine {
             return;
         }
 
-        info!("[TestEngine] 确定了 {} 个测试步骤 - 任务: {}", executors.len(), task_id);
+        // 减少冗余日志 - 只在debug模式下显示步骤数量
+        debug!("[TestEngine] 确定了 {} 个测试步骤 - 任务: {}", executors.len(), task_id);
 
         let mut step_count = 0;
         let total_steps = executors.len();
@@ -196,6 +196,7 @@ impl TestExecutionEngine {
                 continue;
             }
 
+            // 减少冗余日志 - 只在debug模式下显示步骤执行信息
             debug!("[TestEngine] 执行测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}",
                    task_id, step_count, total_steps, executor.executor_name());
 
@@ -207,6 +208,7 @@ impl TestExecutionEngine {
                 self.plc_service_target.clone(),
             ).await {
                 Ok(outcome) => {
+                    // 减少冗余日志 - 只在debug模式下显示步骤完成信息
                     debug!("[TestEngine] 测试步骤完成 - 任务: {}, 步骤: {}/{}, 结果: {}",
                            task_id, step_count, total_steps, outcome.success);
 
@@ -215,11 +217,12 @@ impl TestExecutionEngine {
                         error!("[TestEngine] 发送测试结果失败 - 任务: {}, 错误: {}", task_id, e);
                     }
 
-                    // 如果是关键步骤失败，可能需要中止后续步骤
-                    if !outcome.success && matches!(outcome.sub_test_item, SubTestItem::HardPoint) {
-                        warn!("[TestEngine] 关键测试步骤失败，中止后续步骤 - 任务: {}", task_id);
+                    // 记录失败状态，但继续执行后续步骤以获得完整测试数据
+                    if !outcome.success {
+                        warn!("[TestEngine] 测试步骤失败，但继续执行以获得完整数据 - 任务: {}, 步骤: {:?}",
+                              task_id, outcome.sub_test_item);
                         has_failure = true;
-                        break;
+                        // 不再break，继续执行后续测试步骤
                     }
                 },
                 Err(e) => {
@@ -240,7 +243,7 @@ impl TestExecutionEngine {
                     }
 
                     has_failure = true;
-                    break;
+                    // 继续执行后续步骤以获得完整测试数据
                 }
             }
         }
@@ -253,8 +256,9 @@ impl TestExecutionEngine {
             }
         }
 
-        info!("[TestEngine] 测试序列完成 - 任务: {}, 状态: {}",
-              task_id, if has_failure { "失败" } else { "成功" });
+        let status_icon = if has_failure { "❌" } else { "✅" };
+        info!("{} 测试完成: {} - {}",
+              status_icon, definition.tag, if has_failure { "失败" } else { "成功" });
     }
 }
 
@@ -270,7 +274,8 @@ impl ITestExecutionEngine for TestExecutionEngine {
         let task_id = Uuid::new_v4().to_string();
         let task_cancellation_token = self.global_cancellation_token.child_token();
 
-        info!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}",
+        // 减少冗余日志 - 只在debug模式下显示任务提交信息
+        debug!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}",
               task_id, instance.instance_id, definition.tag);
 
         // 创建任务记录

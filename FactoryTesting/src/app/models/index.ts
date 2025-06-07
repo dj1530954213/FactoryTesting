@@ -62,6 +62,8 @@ export interface ChannelPointDefinition {
   plc_communication_address: string;
   analog_range_min?: number;
   analog_range_max?: number;
+  range_low_limit?: number;
+  range_high_limit?: number;
   created_at: string;
   updated_at: string;
 }
@@ -97,13 +99,21 @@ export interface TestBatchInfo {
   updated_at: string;
 }
 
+export interface SubTestExecutionResult {
+  status: SubTestStatus;
+  details?: string;
+  expected_value?: string;
+  actual_value?: string;
+  timestamp: string;
+}
+
 export interface ChannelTestInstance {
   instance_id: string;
   definition_id: string;
   test_batch_id: string;
   test_batch_name?: string;
   overall_status: OverallTestStatus;
-  sub_test_results: { [key: string]: SubTestStatus };
+  sub_test_results: { [key: string]: SubTestExecutionResult };
   test_plc_channel_tag?: string;
   test_plc_communication_address?: string;
   error_message?: string;
@@ -115,6 +125,14 @@ export interface ChannelTestInstance {
   total_test_duration_ms?: number;
   current_operator?: string;
   retries_count?: number;
+
+  // 百分比测试结果字段 - 存储实际工程量
+  test_result_0_percent?: number;
+  test_result_25_percent?: number;
+  test_result_50_percent?: number;
+  test_result_75_percent?: number;
+  test_result_100_percent?: number;
+
   created_at: string;
   updated_at: string;
 }

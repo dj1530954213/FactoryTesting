@@ -99,6 +99,22 @@ pub struct Model {
     pub current_operator: Option<String>,   // 当前操作员
     pub retries_count: u32,                 // 重试次数
 
+    // 百分比测试结果字段 - 存储实际工程量
+    #[sea_orm(column_type = "Double", nullable)]
+    pub test_result_0_percent: Option<f64>,
+
+    #[sea_orm(column_type = "Double", nullable)]
+    pub test_result_25_percent: Option<f64>,
+
+    #[sea_orm(column_type = "Double", nullable)]
+    pub test_result_50_percent: Option<f64>,
+
+    #[sea_orm(column_type = "Double", nullable)]
+    pub test_result_75_percent: Option<f64>,
+
+    #[sea_orm(column_type = "Double", nullable)]
+    pub test_result_100_percent: Option<f64>,
+
     // 复杂数据结构（JSON存储）
     #[sea_orm(column_type = "Text", nullable)]
     pub sub_test_results_json: Option<String>, // 子测试结果JSON
@@ -153,6 +169,57 @@ impl ActiveModelBehavior for ActiveModel {
     }
 }
 
+impl ActiveModel {
+    /// 从sub_test_results中提取硬点测试状态
+    fn extract_hard_point_status(sub_test_results: &std::collections::HashMap<SubTestItem, SubTestExecutionResult>) -> Option<i32> {
+        sub_test_results.get(&SubTestItem::HardPoint).map(|result| {
+            match result.status {
+                crate::models::enums::SubTestStatus::NotTested => 0,
+                crate::models::enums::SubTestStatus::Passed => 1,
+                crate::models::enums::SubTestStatus::Failed => 2,
+                crate::models::enums::SubTestStatus::NotApplicable => 3,
+                crate::models::enums::SubTestStatus::Testing => 4,
+                crate::models::enums::SubTestStatus::Skipped => 5,
+            }
+        })
+    }
+
+    /// 从sub_test_results中提取硬点测试结果描述
+    fn extract_hard_point_result(sub_test_results: &std::collections::HashMap<SubTestItem, SubTestExecutionResult>) -> Option<String> {
+        sub_test_results.get(&SubTestItem::HardPoint).and_then(|result| {
+            match result.status {
+                crate::models::enums::SubTestStatus::Passed => Some("硬点测试通过".to_string()),
+                crate::models::enums::SubTestStatus::Failed => Some("硬点测试失败".to_string()),
+                crate::models::enums::SubTestStatus::NotTested => Some("硬点测试未开始".to_string()),
+                crate::models::enums::SubTestStatus::NotApplicable => Some("硬点测试不适用".to_string()),
+                crate::models::enums::SubTestStatus::Testing => Some("硬点测试进行中".to_string()),
+                crate::models::enums::SubTestStatus::Skipped => Some("硬点测试已跳过".to_string()),
+            }
+        })
+    }
+
+    /// 从sub_test_results中提取硬点测试错误详情
+    fn extract_hard_point_error_detail(sub_test_results: &std::collections::HashMap<SubTestItem, SubTestExecutionResult>) -> Option<String> {
+        sub_test_results.get(&SubTestItem::HardPoint).and_then(|result| {
+            if result.status == crate::models::enums::SubTestStatus::Failed {
+                result.details.clone()
+            } else {
+                None
+            }
+        })
+    }
+
+    /// 从sub_test_results中提取硬点测试实际值
+    fn extract_hard_point_actual_value(sub_test_results: &std::collections::HashMap<SubTestItem, SubTestExecutionResult>) -> Option<String> {
+        sub_test_results.get(&SubTestItem::HardPoint).and_then(|result| result.actual_value.clone())
+    }
+
+    /// 从sub_test_results中提取硬点测试期望值
+    fn extract_hard_point_expected_value(sub_test_results: &std::collections::HashMap<SubTestItem, SubTestExecutionResult>) -> Option<String> {
+        sub_test_results.get(&SubTestItem::HardPoint).and_then(|result| result.expected_value.clone())
+    }
+}
+
 impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
     fn from(original: &crate::models::structs::ChannelTestInstance) -> Self {
         let sub_test_results_json = serde_json::to_string(&original.sub_test_results).ok();
@@ -184,13 +251,13 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
             final_test_time: Set(original.final_test_time),
             total_test_duration_ms: Set(original.total_test_duration_ms),
 
-            // 测试结果字段（从sub_test_results中提取）
-            hard_point_status: Set(None),
-            hard_point_test_result: Set(None),
-            hard_point_error_detail: Set(None),
-            actual_value: Set(None),
-            expected_value: Set(None),
-            current_value: Set(None),
+            // 测试结果字段（从sub_test_results中提取硬点测试信息）
+            hard_point_status: Set(Self::extract_hard_point_status(&original.sub_test_results)),
+            hard_point_test_result: Set(Self::extract_hard_point_result(&original.sub_test_results)),
+            hard_point_error_detail: Set(Self::extract_hard_point_error_detail(&original.sub_test_results)),
+            actual_value: Set(Self::extract_hard_point_actual_value(&original.sub_test_results)),
+            expected_value: Set(Self::extract_hard_point_expected_value(&original.sub_test_results)),
+            current_value: Set(None), // 当前值暂时不使用
 
             // 报警状态
             low_low_alarm_status: Set(None),
@@ -210,6 +277,18 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
 
             current_operator: Set(original.current_operator.clone()),
             retries_count: Set(original.retries_count),
+
+            // 百分比测试结果字段 - 从transient_data中提取
+            test_result_0_percent: Set(original.transient_data.get("test_result_0_percent")
+                .and_then(|v| v.as_f64())),
+            test_result_25_percent: Set(original.transient_data.get("test_result_25_percent")
+                .and_then(|v| v.as_f64())),
+            test_result_50_percent: Set(original.transient_data.get("test_result_50_percent")
+                .and_then(|v| v.as_f64())),
+            test_result_75_percent: Set(original.transient_data.get("test_result_75_percent")
+                .and_then(|v| v.as_f64())),
+            test_result_100_percent: Set(original.transient_data.get("test_result_100_percent")
+                .and_then(|v| v.as_f64())),
 
             sub_test_results_json: Set(sub_test_results_json),
             hardpoint_readings_json: Set(hardpoint_readings_json),
@@ -308,6 +387,11 @@ impl Model {
             test_result_status: None,
             current_operator: None,
             retries_count: 0,
+            test_result_0_percent: None,
+            test_result_25_percent: None,
+            test_result_50_percent: None,
+            test_result_75_percent: None,
+            test_result_100_percent: None,
             sub_test_results_json: None,
             hardpoint_readings_json: None,
             transient_data_json: None,
