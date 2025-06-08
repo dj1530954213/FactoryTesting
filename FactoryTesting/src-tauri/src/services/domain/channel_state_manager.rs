@@ -349,10 +349,16 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 🔧 处理硬点测试结果 - 存储百分比数据和硬点读数
         if outcome.sub_test_item == SubTestItem::HardPoint {
-            // 存储硬点读数到实例中
+            // 存储硬点读数到实例中（AI/AO点位）
             if let Some(readings) = &outcome.readings {
                 instance.hardpoint_readings = Some(readings.clone());
                 trace!("🔍 [APPLY_OUTCOME] 已存储硬点读数数据");
+            }
+
+            // 存储数字量测试步骤到实例中（DI/DO点位）
+            if let Some(digital_steps) = &outcome.digital_steps {
+                instance.digital_test_steps = Some(digital_steps.clone());
+                trace!("🔍 [APPLY_OUTCOME] 已存储数字量测试步骤数据");
             }
 
             // 🔧 处理百分比测试结果 - 优先使用outcome中的直接数据，但总是尝试从readings中提取
@@ -607,6 +613,20 @@ impl IChannelStateManager for ChannelStateManager {
 
             // 保存到数据库
             self.persistence_service.save_test_instance(&instance).await?;
+
+            // 🔧 修复：立即验证数据是否正确保存
+            if let Some(ref digital_steps) = instance.digital_test_steps {
+                log::info!("🔍 [STATE_MANAGER] 保存后验证 - digital_test_steps 数量: {}", digital_steps.len());
+
+                // 立即从数据库重新加载验证
+                if let Ok(Some(reloaded_instance)) = self.persistence_service.load_test_instance(&instance_id).await {
+                    if let Some(ref reloaded_steps) = reloaded_instance.digital_test_steps {
+                        log::info!("✅ [STATE_MANAGER] 数据库验证成功 - digital_test_steps 数量: {}", reloaded_steps.len());
+                    } else {
+                        log::error!("❌ [STATE_MANAGER] 数据库验证失败 - digital_test_steps 为空！");
+                    }
+                }
+            }
 
             trace!("✅ [STATE_MANAGER] 成功更新测试结果: {} -> {:?}", instance_id, instance.overall_status);
         }

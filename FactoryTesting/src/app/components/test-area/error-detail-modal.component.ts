@@ -119,7 +119,7 @@ import { ChannelTestInstance, ChannelPointDefinition, SubTestItem, SubTestExecut
               </nz-table>
             </div>
 
-            <!-- DI/DO点位显示简化的测试结果 -->
+            <!-- DI/DO点位显示详细的测试步骤结果 -->
             <div *ngIf="!isAnalogType(definition?.module_type)" class="digital-test-results">
               <nz-table
                 [nzData]="getDigitalTestResults()"
@@ -128,20 +128,46 @@ import { ChannelTestInstance, ChannelPointDefinition, SubTestItem, SubTestExecut
                 nzSize="small">
                 <thead>
                   <tr>
-                    <th>测试项</th>
+                    <!-- 如果有详细步骤数据，显示详细表头 -->
+                    <th *ngIf="hasDetailedSteps()">步骤</th>
+                    <th *ngIf="hasDetailedSteps()">测试描述</th>
+                    <th *ngIf="hasDetailedSteps()">设定值</th>
+                    <th *ngIf="hasDetailedSteps()">期望读取</th>
+                    <th *ngIf="hasDetailedSteps()">实际读取</th>
                     <th>结果</th>
+                    <!-- 如果没有详细步骤数据，显示简化表头 -->
+                    <th *ngIf="!hasDetailedSteps()">测试项</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr *ngFor="let result of getDigitalTestResults()">
-                    <td>
-                      <nz-tag [nzColor]="getTestItemColor(result.testItem)">
-                        {{ getTestItemText(result.testItem) }}
+                    <!-- 详细步骤数据显示 -->
+                    <td *ngIf="hasDetailedSteps()">
+                      <nz-tag [nzColor]="'blue'">步骤{{ result.stepNumber }}</nz-tag>
+                    </td>
+                    <td *ngIf="hasDetailedSteps()">
+                      <span class="step-description">{{ result.stepDescription }}</span>
+                    </td>
+                    <td *ngIf="hasDetailedSteps()">
+                      <nz-tag [nzColor]="result.setValue === '高电平' ? 'green' : 'orange'">
+                        {{ result.setValue }}
                       </nz-tag>
+                    </td>
+                    <td *ngIf="hasDetailedSteps()">
+                      <span class="expected-value">{{ result.expectedReading }}</span>
+                    </td>
+                    <td *ngIf="hasDetailedSteps()">
+                      <span class="actual-value">{{ result.actualReading }}</span>
                     </td>
                     <td>
                       <nz-tag [nzColor]="result.status === 'Passed' ? 'success' : result.status === 'Failed' ? 'error' : 'default'">
                         {{ getSubTestStatusText(result.status) }}
+                      </nz-tag>
+                    </td>
+                    <!-- 简化数据显示 -->
+                    <td *ngIf="!hasDetailedSteps()">
+                      <nz-tag [nzColor]="getTestItemColor(result.testItem)">
+                        {{ getTestItemText(result.testItem) }}
                       </nz-tag>
                     </td>
                   </tr>
@@ -311,6 +337,17 @@ export class ErrorDetailModalComponent implements OnInit, OnChanges {
 
   ngOnChanges() {
     this.updateModalTitle();
+
+    // 添加详细日志
+    if (this.instance && this.definition) {
+      console.log('🔍 [ERROR_DETAIL_MODAL] ngOnChanges 触发');
+      console.log('🔍 [ERROR_DETAIL_MODAL] 接收到实例:', this.instance);
+      console.log('🔍 [ERROR_DETAIL_MODAL] 接收到定义:', this.definition);
+      console.log('🔍 [ERROR_DETAIL_MODAL] 模块类型:', this.definition.module_type);
+      console.log('🔍 [ERROR_DETAIL_MODAL] digital_test_steps:', this.instance.digital_test_steps);
+      console.log('🔍 [ERROR_DETAIL_MODAL] hasDetailedSteps():', this.hasDetailedSteps());
+      console.log('🔍 [ERROR_DETAIL_MODAL] getDigitalTestResults():', this.getDigitalTestResults());
+    }
   }
 
   private updateModalTitle() {
@@ -474,18 +511,65 @@ export class ErrorDetailModalComponent implements OnInit, OnChanges {
    * 获取数字量测试结果（DI/DO点位）
    */
   getDigitalTestResults(): any[] {
-    if (!this.instance?.sub_test_results || this.isAnalogType(this.definition?.module_type)) {
+    console.log('🔍 [ERROR_DETAIL_MODAL] getDigitalTestResults 开始');
+    console.log('🔍 [ERROR_DETAIL_MODAL] this.instance:', this.instance);
+    console.log('🔍 [ERROR_DETAIL_MODAL] this.definition?.module_type:', this.definition?.module_type);
+    console.log('🔍 [ERROR_DETAIL_MODAL] isAnalogType:', this.isAnalogType(this.definition?.module_type));
+
+    if (!this.instance || this.isAnalogType(this.definition?.module_type)) {
+      console.log('🔍 [ERROR_DETAIL_MODAL] 返回空数组 - 无实例或模拟量类型');
       return [];
     }
 
-    return Object.entries(this.instance.sub_test_results)
-      .filter(([testItem, result]) => {
-        // 只显示硬点测试，不显示结果和描述
-        return testItem === 'HardPoint';
-      })
-      .map(([testItem, result]) => ({
-        testItem,
-        status: result.status
+    console.log('🔍 [ERROR_DETAIL_MODAL] this.instance.digital_test_steps:', this.instance.digital_test_steps);
+    console.log('🔍 [ERROR_DETAIL_MODAL] digital_test_steps 类型:', typeof this.instance.digital_test_steps);
+    console.log('🔍 [ERROR_DETAIL_MODAL] digital_test_steps 长度:', this.instance.digital_test_steps?.length);
+
+    // 优先从digital_test_steps获取详细步骤数据
+    if (this.instance.digital_test_steps && this.instance.digital_test_steps.length > 0) {
+      console.log('🔍 [ERROR_DETAIL_MODAL] 使用 digital_test_steps 数据');
+      const results = this.instance.digital_test_steps.map(step => ({
+        stepNumber: step.step_number,
+        stepDescription: step.step_description,
+        setValue: step.set_value ? '高电平' : '低电平',
+        expectedReading: step.expected_reading ? '接通' : '断开',
+        actualReading: step.actual_reading ? '接通' : '断开',
+        status: step.status,
+        timestamp: step.timestamp
       }));
+      console.log('🔍 [ERROR_DETAIL_MODAL] 转换后的结果:', results);
+      return results;
+    }
+
+    console.log('🔍 [ERROR_DETAIL_MODAL] 没有 digital_test_steps，尝试 sub_test_results');
+    console.log('🔍 [ERROR_DETAIL_MODAL] this.instance.sub_test_results:', this.instance.sub_test_results);
+
+    // 如果没有详细步骤数据，回退到简单的子测试结果显示
+    if (this.instance.sub_test_results) {
+      const results = Object.entries(this.instance.sub_test_results)
+        .filter(([testItem, result]) => {
+          // 只显示硬点测试
+          return testItem === 'HardPoint';
+        })
+        .map(([testItem, result]) => ({
+          testItem,
+          status: result.status
+        }));
+      console.log('🔍 [ERROR_DETAIL_MODAL] 使用 sub_test_results 数据:', results);
+      return results;
+    }
+
+    console.log('🔍 [ERROR_DETAIL_MODAL] 没有任何测试数据，返回空数组');
+    return [];
+  }
+
+  /**
+   * 检查是否有详细的测试步骤数据
+   */
+  hasDetailedSteps(): boolean {
+    if (!this.instance || this.isAnalogType(this.definition?.module_type)) {
+      return false;
+    }
+    return !!(this.instance.digital_test_steps && this.instance.digital_test_steps.length > 0);
   }
 }

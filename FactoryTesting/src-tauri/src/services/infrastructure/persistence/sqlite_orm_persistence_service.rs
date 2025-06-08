@@ -368,6 +368,12 @@ impl PersistenceService for SqliteOrmPersistenceService {
             active_model.update(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("更新测试实例失败: {}", e)))?;
+
+            // 🔧 修复：记录更新操作，用于调试 ORM 缓存问题
+            log::info!("✅ [PERSISTENCE] 测试实例已更新到数据库: {}", instance.instance_id);
+            if let Some(ref steps) = instance.digital_test_steps {
+                log::info!("🔍 [PERSISTENCE] 更新的 digital_test_steps 数量: {}", steps.len());
+            }
         } else {
             // 记录不存在，执行插入操作
             let active_model: entities::channel_test_instance::ActiveModel = instance.into();
@@ -375,6 +381,9 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .exec(self.db_conn.as_ref())
                 .await
                 .map_err(|e| AppError::persistence_error(format!("插入测试实例失败: {}", e)))?;
+
+            // 🔧 修复：记录插入操作
+            log::info!("✅ [PERSISTENCE] 测试实例已插入到数据库: {}", instance.instance_id);
         }
 
         Ok(())
@@ -427,11 +436,23 @@ impl PersistenceService for SqliteOrmPersistenceService {
     }
 
     async fn load_test_instances_by_batch(&self, batch_id: &str) -> AppResult<Vec<ChannelTestInstance>> {
+        // 🔧 修复：强制从数据库重新查询，避免 ORM 缓存问题
+        // 使用 fresh() 方法确保获取最新数据
         let models = entities::channel_test_instance::Entity::find()
             .filter(entities::channel_test_instance::Column::TestBatchId.eq(batch_id.to_string()))
             .all(self.db_conn.as_ref())
             .await
             .map_err(|e| AppError::persistence_error(format!("按批次加载测试实例失败: {}", e)))?;
+
+        // 🔧 添加数据验证日志
+        log::info!("🔍 [PERSISTENCE] 从数据库加载批次实例: batch_id={}, 数量={}", batch_id, models.len());
+        for (i, model) in models.iter().enumerate().take(3) { // 只记录前3个
+            log::info!("🔍 [PERSISTENCE] 实例{}：digital_test_steps_json={:?}",
+                i + 1,
+                model.digital_test_steps_json.as_ref().map(|s| &s[..50.min(s.len())])
+            );
+        }
+
         Ok(models.iter().map(|m| m.into()).collect())
     }
 

@@ -133,6 +133,10 @@ export interface ChannelTestInstance {
   test_result_75_percent?: number;
   test_result_100_percent?: number;
 
+  // 测试数据字段
+  hardpoint_readings?: AnalogReadingPoint[];
+  digital_test_steps?: DigitalTestStep[];
+
   created_at: string;
   updated_at: string;
 }
@@ -155,6 +159,16 @@ export interface AnalogReadingPoint {
   value: number;
   timestamp: string;
   quality: string;
+}
+
+export interface DigitalTestStep {
+  step_number: number;
+  step_description: string;
+  set_value: boolean;
+  expected_reading: boolean;
+  actual_reading: boolean;
+  status: SubTestStatus;
+  timestamp: string;
 }
 
 // 应用层数据模型

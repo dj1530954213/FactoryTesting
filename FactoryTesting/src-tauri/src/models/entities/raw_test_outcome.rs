@@ -138,6 +138,7 @@ impl From<&Model> for crate::models::structs::RawTestOutcome {
             start_time: model.start_time,
             end_time: model.end_time,
             readings,
+            digital_steps: None, // TODO: 从JSON字段反序列化
             test_result_0_percent: model.test_result_0_percent,
             test_result_25_percent: model.test_result_25_percent,
             test_result_50_percent: model.test_result_50_percent,

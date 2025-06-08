@@ -353,6 +353,7 @@ impl DatabaseMigration {
                 retries_count INTEGER DEFAULT 0,
                 sub_test_results_json TEXT,
                 hardpoint_readings_json TEXT,
+                digital_test_steps_json TEXT,
                 transient_data_json TEXT
             )
         "#;
@@ -412,6 +413,7 @@ impl DatabaseMigration {
             ("updated_time", "TEXT"),
             ("sub_test_results_json", "TEXT"),
             ("hardpoint_readings_json", "TEXT"),
+            ("digital_test_steps_json", "TEXT"),
             ("transient_data_json", "TEXT"),
         ];
 

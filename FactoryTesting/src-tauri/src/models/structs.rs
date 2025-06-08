@@ -420,6 +420,26 @@ pub struct AnalogReadingPoint {
     pub error_percentage: Option<f32>,
 }
 
+/// 数字量测试步骤结构体
+/// 用于DI/DO测试中记录测试步骤的详细数据
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DigitalTestStep {
+    /// 步骤编号（1, 2, 3等）
+    pub step_number: u32,
+    /// 步骤描述
+    pub step_description: String,
+    /// 设定值（true/false）
+    pub set_value: bool,
+    /// 期望读取值（true/false）
+    pub expected_reading: bool,
+    /// 实际读取值（true/false）
+    pub actual_reading: bool,
+    /// 该步骤的测试状态
+    pub status: SubTestStatus,
+    /// 时间戳
+    pub timestamp: DateTime<Utc>,
+}
+
 /// 通道测试实例结构体
 /// 代表一个ChannelPointDefinition在某次特定测试执行中的实例
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -452,8 +472,11 @@ pub struct ChannelTestInstance {
     #[serde(default)]
     pub sub_test_results: HashMap<SubTestItem, SubTestExecutionResult>,
 
-    /// 硬接线测试中的特定数据
+    /// 硬接线测试中的特定数据（模拟量测试）
     pub hardpoint_readings: Option<Vec<AnalogReadingPoint>>,
+
+    /// 数字量测试步骤数据（数字量测试）
+    pub digital_test_steps: Option<Vec<DigitalTestStep>>,
 
     /// 手动测试时的临时输入值
     pub manual_test_current_value_input: Option<String>,
@@ -494,6 +517,7 @@ impl ChannelTestInstance {
             total_test_duration_ms: None,
             sub_test_results: HashMap::new(),
             hardpoint_readings: None,
+            digital_test_steps: None,
             manual_test_current_value_input: None,
             manual_test_current_value_output: None,
             test_plc_channel_tag: None,
@@ -590,6 +614,8 @@ pub struct RawTestOutcome {
     pub end_time: DateTime<Utc>,
     /// 一系列读数，如AI多点测试
     pub readings: Option<Vec<AnalogReadingPoint>>,
+    /// 数字量测试步骤，如DI/DO测试
+    pub digital_steps: Option<Vec<DigitalTestStep>>,
     /// 百分比测试结果 - 存储实际工程量
     pub test_result_0_percent: Option<f64>,
     pub test_result_25_percent: Option<f64>,
@@ -619,6 +645,7 @@ impl RawTestOutcome {
             start_time: now,
             end_time: now,
             readings: None,
+            digital_steps: None,
             test_result_0_percent: None,
             test_result_25_percent: None,
             test_result_50_percent: None,
@@ -660,6 +687,7 @@ impl Default for RawTestOutcome {
             start_time: Utc::now(),
             end_time: Utc::now(),
             readings: None,
+            digital_steps: None,
             test_result_0_percent: None,
             test_result_25_percent: None,
             test_result_50_percent: None,
@@ -706,3 +734,4 @@ impl Default for AppSettings {
         }
     }
 }
+

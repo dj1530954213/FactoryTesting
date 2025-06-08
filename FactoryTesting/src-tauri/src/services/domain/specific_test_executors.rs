@@ -4,7 +4,7 @@
 
 use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem,
-    AnalogReadingPoint, ModuleType, SubTestStatus
+    AnalogReadingPoint, DigitalTestStep, ModuleType, SubTestStatus
 };
 use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
@@ -190,6 +190,7 @@ impl AIHardPointPercentExecutor {
             start_time: Utc::now(),
             end_time: Utc::now(),
             readings: Some(readings),
+            digital_steps: None,
             test_result_0_percent,
             test_result_25_percent,
             test_result_50_percent,
@@ -473,6 +474,9 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         info!("🔧 DI硬点测试开始 - 测试PLC DO: {}, 被测PLC DI: {}",
               test_rig_do_address, target_di_address);
 
+        // 创建数字量测试步骤记录
+        let mut digital_steps = Vec::new();
+
         // 步骤1: 测试PLC DO输出低电平
         info!("📝 写入测试PLC DO [{}]: false (低电平)", test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, false).await
@@ -486,14 +490,32 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         let di_state_1 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤1结果
+        let step1_status = if di_state_1 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 1,
+            step_description: "测试PLC DO输出低电平，检查被测PLC DI显示断开".to_string(),
+            set_value: false,
+            expected_reading: false,
+            actual_reading: di_state_1,
+            status: step1_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if di_state_1 {
             let error_msg = format!("❌ DI硬点测试失败: DO低电平时DI应为false，实际为true");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 低电平测试通过: DO=false, DI={}", di_state_1);
 
@@ -510,14 +532,32 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         let di_state_2 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤2结果
+        let step2_status = if !di_state_2 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 2,
+            step_description: "测试PLC DO输出高电平，检查被测PLC DI显示接通".to_string(),
+            set_value: true,
+            expected_reading: true,
+            actual_reading: di_state_2,
+            status: step2_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if !di_state_2 {
             let error_msg = format!("❌ DI硬点测试失败: DO高电平时DI应为true，实际为false");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 高电平测试通过: DO=true, DI={}", di_state_2);
 
@@ -534,14 +574,32 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         let di_state_3 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤3结果
+        let step3_status = if di_state_3 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 3,
+            step_description: "测试PLC DO复位低电平，检查被测PLC DI显示断开".to_string(),
+            set_value: false,
+            expected_reading: false,
+            actual_reading: di_state_3,
+            status: step3_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if di_state_3 {
             let error_msg = format!("❌ DI硬点测试失败: 复位后DI应为false，实际为true");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 复位测试通过: DO=false, DI={}", di_state_3);
 
@@ -558,6 +616,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         outcome.message = Some(success_msg);
         outcome.start_time = start_time;
         outcome.end_time = end_time;
+        outcome.digital_steps = Some(digital_steps);
         outcome.raw_value_read = Some(format!("状态序列: {} → {} → {}", di_state_1, di_state_2, di_state_3));
 
         Ok(outcome)
@@ -626,6 +685,9 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         info!("🔧 DO硬点测试开始 - 被测PLC DO: {}, 测试PLC DI: {}",
               target_do_address, test_rig_di_address);
 
+        // 创建数字量测试步骤记录
+        let mut digital_steps = Vec::new();
+
         // 步骤1: 被测PLC DO输出低电平
         info!("📝 写入被测PLC DO [{}]: false (低电平)", target_do_address);
         plc_service_target.write_bool(target_do_address, false).await
@@ -639,14 +701,32 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let di_state_1 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤1结果
+        let step1_status = if di_state_1 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 1,
+            step_description: "被测PLC DO输出低电平，检查测试PLC DI显示断开".to_string(),
+            set_value: false,
+            expected_reading: false,
+            actual_reading: di_state_1,
+            status: step1_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if di_state_1 {
             let error_msg = format!("❌ DO硬点测试失败: DO低电平时测试PLC DI应为false，实际为true");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 低电平测试通过: DO=false, DI={}", di_state_1);
 
@@ -663,14 +743,32 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let di_state_2 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤2结果
+        let step2_status = if !di_state_2 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 2,
+            step_description: "被测PLC DO输出高电平，检查测试PLC DI显示接通".to_string(),
+            set_value: true,
+            expected_reading: true,
+            actual_reading: di_state_2,
+            status: step2_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if !di_state_2 {
             let error_msg = format!("❌ DO硬点测试失败: DO高电平时测试PLC DI应为true，实际为false");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 高电平测试通过: DO=true, DI={}", di_state_2);
 
@@ -687,14 +785,32 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let di_state_3 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
 
+        // 记录步骤3结果
+        let step3_status = if di_state_3 {
+            SubTestStatus::Failed
+        } else {
+            SubTestStatus::Passed
+        };
+        digital_steps.push(DigitalTestStep {
+            step_number: 3,
+            step_description: "被测PLC DO复位低电平，检查测试PLC DI显示断开".to_string(),
+            set_value: false,
+            expected_reading: false,
+            actual_reading: di_state_3,
+            status: step3_status.clone(),
+            timestamp: Utc::now(),
+        });
+
         if di_state_3 {
             let error_msg = format!("❌ DO硬点测试失败: 复位后测试PLC DI应为false，实际为true");
             info!("{}", error_msg);
-            return Ok(RawTestOutcome::failure(
+            let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
                 error_msg,
-            ));
+            );
+            outcome.digital_steps = Some(digital_steps);
+            return Ok(outcome);
         }
         info!("✅ 复位测试通过: DO=false, DI={}", di_state_3);
 
@@ -711,6 +827,7 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         outcome.message = Some(success_msg);
         outcome.start_time = start_time;
         outcome.end_time = end_time;
+        outcome.digital_steps = Some(digital_steps);
         outcome.raw_value_read = Some(format!("状态序列: {} → {} → {}", di_state_1, di_state_2, di_state_3));
 
         Ok(outcome)

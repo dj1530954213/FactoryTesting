@@ -7,7 +7,7 @@ use sea_orm::ActiveValue::Set;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use crate::models::structs::{default_id, SubTestExecutionResult, AnalogReadingPoint}; // 引入所需结构体
+use crate::models::structs::{default_id, SubTestExecutionResult, AnalogReadingPoint, DigitalTestStep}; // 引入所需结构体
 use crate::models::enums::{OverallTestStatus, SubTestItem}; // 引入所需枚举
 
 /// 通道测试实例实体
@@ -121,6 +121,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub hardpoint_readings_json: Option<String>, // 硬点读数JSON
     #[sea_orm(column_type = "Text", nullable)]
+    pub digital_test_steps_json: Option<String>, // 数字量测试步骤JSON
+    #[sea_orm(column_type = "Text", nullable)]
     pub transient_data_json: Option<String>, // 临时数据JSON
 }
 
@@ -223,7 +225,18 @@ impl ActiveModel {
 impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
     fn from(original: &crate::models::structs::ChannelTestInstance) -> Self {
         let sub_test_results_json = serde_json::to_string(&original.sub_test_results).ok();
-        let hardpoint_readings_json = serde_json::to_string(&original.hardpoint_readings).ok();
+
+        // 🔧 修复：正确处理 Option 类型的序列化，避免 None 被序列化为 "null" 字符串
+        let hardpoint_readings_json = match &original.hardpoint_readings {
+            Some(readings) => serde_json::to_string(readings).ok(),
+            None => None,
+        };
+
+        let digital_test_steps_json = match &original.digital_test_steps {
+            Some(steps) => serde_json::to_string(steps).ok(),
+            None => None,
+        };
+
         let transient_data_json = serde_json::to_string(&original.transient_data).ok();
         let now = Utc::now();
 
@@ -292,6 +305,7 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
 
             sub_test_results_json: Set(sub_test_results_json),
             hardpoint_readings_json: Set(hardpoint_readings_json),
+            digital_test_steps_json: Set(digital_test_steps_json),
             transient_data_json: Set(transient_data_json),
         }
     }
@@ -299,16 +313,62 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
 
 impl From<&Model> for crate::models::structs::ChannelTestInstance {
     fn from(model: &Model) -> Self {
+        // 添加详细的转换日志 - 使用 error! 确保能看到
+        log::error!("🔍 [ENTITY_CONVERSION] 转换测试实例: {}", model.instance_id);
+        log::error!("🔍 [ENTITY_CONVERSION] 模块类型: {}", model.module_type);
+        log::error!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 原始数据: {:?}", model.digital_test_steps_json);
+
         let sub_test_results: HashMap<SubTestItem, SubTestExecutionResult> = model.sub_test_results_json.as_ref()
             .and_then(|json| serde_json::from_str(json).ok())
             .unwrap_or_default();
+        // 🔧 修复：正确处理 hardpoint_readings 的反序列化，避免 "null" 字符串问题
         let hardpoint_readings: Option<Vec<AnalogReadingPoint>> = model.hardpoint_readings_json.as_ref()
-            .and_then(|json| serde_json::from_str(json).ok());
+            .and_then(|json_str| {
+                if json_str.trim() == "null" {
+                    None
+                } else {
+                    serde_json::from_str(json_str).ok()
+                }
+            });
+
+        // 🔧 修复：详细记录数字量测试步骤的转换过程，正确处理 "null" 字符串
+        let digital_test_steps: Option<Vec<DigitalTestStep>> = match model.digital_test_steps_json.as_ref() {
+            Some(json_str) => {
+                log::info!("🔍 [ENTITY_CONVERSION] 尝试解析 digital_test_steps_json: {}", json_str);
+
+                // 🔧 修复：如果是字符串 "null"，直接返回 None
+                if json_str.trim() == "null" {
+                    log::info!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 是字符串 'null'，返回 None");
+                    None
+                } else {
+                    match serde_json::from_str(json_str) {
+                        Ok(steps) => {
+                            log::info!("✅ [ENTITY_CONVERSION] 成功解析 digital_test_steps，步骤数: {:?}",
+                                if let Some(ref s) = steps {
+                                    Some((s as &Vec<DigitalTestStep>).len())
+                                } else {
+                                    None
+                                });
+                            steps
+                        }
+                        Err(e) => {
+                            log::error!("❌ [ENTITY_CONVERSION] 解析 digital_test_steps_json 失败: {} - JSON: {}", e, json_str);
+                            None
+                        }
+                    }
+                }
+            }
+            None => {
+                log::info!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 为 None");
+                None
+            }
+        };
+
         let transient_data: HashMap<String, serde_json::Value> = model.transient_data_json.as_ref()
             .and_then(|json| serde_json::from_str(json).ok())
             .unwrap_or_default();
 
-        crate::models::structs::ChannelTestInstance {
+        let result = crate::models::structs::ChannelTestInstance {
             instance_id: model.instance_id.clone(),
             definition_id: model.definition_id.clone(),
             test_batch_id: model.test_batch_id.clone(),
@@ -323,6 +383,7 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             total_test_duration_ms: model.total_test_duration_ms,
             sub_test_results,
             hardpoint_readings,
+            digital_test_steps: digital_test_steps.clone(),
             manual_test_current_value_input: None, // 新实体结构中没有这个字段
             manual_test_current_value_output: None, // 新实体结构中没有这个字段
             current_operator: model.current_operator.clone(),
@@ -330,7 +391,13 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             transient_data,
             test_plc_channel_tag: model.test_plc_channel_tag.clone(),
             test_plc_communication_address: model.test_plc_communication_address.clone(),
-        }
+        };
+
+        // 记录最终转换结果
+        log::info!("✅ [ENTITY_CONVERSION] 转换完成 - digital_test_steps 最终结果: {:?}",
+            result.digital_test_steps.as_ref().map(|steps| steps.len()));
+
+        result
     }
 }
 
@@ -394,6 +461,7 @@ impl Model {
             test_result_100_percent: None,
             sub_test_results_json: None,
             hardpoint_readings_json: None,
+            digital_test_steps_json: None,
             transient_data_json: None,
         }
     }

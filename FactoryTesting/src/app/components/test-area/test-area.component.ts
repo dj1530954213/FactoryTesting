@@ -25,7 +25,7 @@ import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { DataStateService } from '../../services/data-state.service';
 import { BatchSelectionService } from '../../services/batch-selection.service';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { listen } from '@tauri-apps/api/event';
 import {
   TestBatchInfo,
@@ -356,8 +356,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 回退到定时器轮询方式
    */
   private setupPollingFallback(): void {
-    console.log('🔄 [TEST_AREA] 使用定时器轮询作为回退方案');
+    console.log('🔄 [TEST_AREA] 定时器轮询已禁用，避免无限循环');
 
+    // 暂时禁用定时器轮询，避免无限循环
+    // TODO: 重新设计轮询机制，只在必要时启用
+    /*
     const intervalId = setInterval(async () => {
       if (this.selectedBatch && this.isAutoTesting) {
         // 移除频繁的日志输出，避免控制台噪音
@@ -370,6 +373,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.subscriptions.add({
       unsubscribe: () => clearInterval(intervalId)
     });
+    */
   }
 
   /**
@@ -828,7 +832,23 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     try {
       // 调用真实的后端API获取批次详情
       console.log('📊 [TEST_AREA] 调用后端API: getBatchDetails()');
-      const details = await this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id).toPromise();
+
+      // 🔧 修复：添加重试机制，确保获取到最新数据
+      let details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
+
+      // 如果第一次获取的数据中有 digital_test_steps 为空的情况，等待一下再重试
+      if (details && details.instances) {
+        const hasEmptyDigitalSteps = details.instances.some(instance =>
+          !instance.digital_test_steps || instance.digital_test_steps.length === 0
+        );
+
+        if (hasEmptyDigitalSteps) {
+          console.log('🔄 [TEST_AREA] 检测到空的 digital_test_steps，等待500ms后重试...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
+          console.log('🔄 [TEST_AREA] 重试后的数据:', details);
+        }
+      }
 
       console.log('📊 [TEST_AREA] 后端返回的详情数据:', details);
 
@@ -1205,7 +1225,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 显示错误详情
    */
   showErrorDetail(instance: ChannelTestInstance): void {
+    console.log('🔍 [TEST_AREA] DJDJDJDJ');
     console.log('🔍 [TEST_AREA] 显示错误详情:', instance.instance_id);
+    console.log('🔍 [TEST_AREA] 实例完整数据:', instance);
+    console.log('🔍 [TEST_AREA] digital_test_steps 字段:', instance.digital_test_steps);
+    console.log('🔍 [TEST_AREA] digital_test_steps 长度:', instance.digital_test_steps?.length);
 
     // 查找对应的通道定义
     const definition = this.getDefinitionByInstanceId(instance.instance_id);
@@ -1213,6 +1237,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.message.error('未找到通道定义信息');
       return;
     }
+
+    console.log('🔍 [TEST_AREA] 找到定义:', definition);
+    console.log('🔍 [TEST_AREA] 定义模块类型:', definition.module_type);
 
     this.selectedErrorInstance = instance;
     this.selectedErrorDefinition = definition;
@@ -1232,22 +1259,33 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 检查是否有错误详情可显示
    */
   hasErrorDetails(instance: ChannelTestInstance): boolean {
+    console.log('------------------------');
+    console.log('🔍 [TEST_AREA] hasErrorDetails 检查:', instance.instance_id);
+    console.log('🔍 [TEST_AREA] error_messageaa:', instance.error_message);
+    console.log('🔍 [TEST_AREA] overall_status:', instance.overall_status);
+    console.log('🔍 [TEST_AREA] sub_test_results:', instance.sub_test_results);
+
     // 检查是否有错误信息或失败的子测试结果
     if (instance.error_message && instance.error_message.trim()) {
+      console.log('🔍 [TEST_AREA] 有错误信息，返回 true');
       return true;
     }
 
     // 检查是否有失败的子测试结果
     if (instance.sub_test_results) {
-      for (const [_, result] of Object.entries(instance.sub_test_results)) {
+      for (const [testItem, result] of Object.entries(instance.sub_test_results)) {
+        console.log(`🔍 [TEST_AREA] 检查子测试 ${testItem}:`, result);
         if (result.status === SubTestStatus.Failed && result.details) {
+          console.log('🔍 [TEST_AREA] 找到失败的子测试，返回 true');
           return true;
         }
       }
     }
 
     // 如果状态是失败但没有具体错误信息，也显示按钮
-    return instance.overall_status === OverallTestStatus.TestCompletedFailed;
+    const shouldShow = instance.overall_status === OverallTestStatus.TestCompletedFailed;
+    console.log('🔍 [TEST_AREA] 最终判断结果:', shouldShow);
+    return shouldShow;
   }
 
 

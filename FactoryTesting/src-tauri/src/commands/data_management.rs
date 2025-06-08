@@ -630,13 +630,41 @@ pub async fn get_batch_status_cmd(
     info!("✅ [GET_BATCH_STATUS] 总点位: {}, 已测试: {}, 通过: {}, 失败: {}",
           total_points, tested_points, passed_points, failed_points);
 
-    Ok(BatchDetailsPayload {
+    // 🔍 序列化前检查数据
+    for (i, instance) in instances.iter().take(3).enumerate() {
+        if instance.digital_test_steps.is_some() {
+            error!("🔍 [SERIALIZATION_CHECK] 实例{} 序列化前 digital_test_steps: {:?}",
+                   i + 1, instance.digital_test_steps.as_ref().map(|steps| steps.len()));
+        } else {
+            error!("🔍 [SERIALIZATION_CHECK] 实例{} 序列化前 digital_test_steps: None", i + 1);
+        }
+    }
+
+    let payload = BatchDetailsPayload {
         batch_info,
         instances,
         definitions,
         allocation_summary,
         progress,
-    })
+    };
+
+    // 🔍 尝试序列化检查
+    match serde_json::to_string(&payload) {
+        Ok(json_str) => {
+            error!("🔍 [SERIALIZATION_CHECK] 序列化成功，JSON长度: {}", json_str.len());
+            // 检查JSON中是否包含digital_test_steps
+            if json_str.contains("digital_test_steps") {
+                error!("🔍 [SERIALIZATION_CHECK] JSON包含 digital_test_steps 字段");
+            } else {
+                error!("❌ [SERIALIZATION_CHECK] JSON不包含 digital_test_steps 字段");
+            }
+        }
+        Err(e) => {
+            error!("❌ [SERIALIZATION_CHECK] 序列化失败: {}", e);
+        }
+    }
+
+    Ok(payload)
 }
 
 /// 准备批次测试实例的参数

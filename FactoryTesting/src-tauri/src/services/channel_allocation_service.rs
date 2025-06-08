@@ -695,6 +695,7 @@ impl ChannelAllocationService {
             total_test_duration_ms: None,
             sub_test_results: HashMap::new(),
             hardpoint_readings: None,
+            digital_test_steps: None,
             manual_test_current_value_input: None,
             manual_test_current_value_output: None,
             test_plc_channel_tag: Some(test_channel.channel_address.clone()),

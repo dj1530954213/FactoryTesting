@@ -71,6 +71,7 @@ impl TestDataGenerator {
             start_time: now,
             end_time: now,
             readings: None,
+            digital_steps: None,
             test_result_0_percent: None,
             test_result_25_percent: None,
             test_result_50_percent: None,

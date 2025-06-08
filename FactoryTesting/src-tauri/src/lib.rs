@@ -42,7 +42,21 @@ use commands::test_plc_config::{
 ///
 /// 这个函数现在会启动 Tauri 应用程序
 pub fn run() {
-    // 初始化日志系统 - 过滤掉数据库查询日志
+    // 初始化日志系统 - 同时输出到控制台和文件
+    use std::fs::OpenOptions;
+    use std::io::{Write, BufWriter};
+    use std::sync::{Arc, Mutex};
+
+    // 创建日志文件
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("fat_test_debug.log")
+        .expect("无法创建日志文件");
+
+    let file_writer = Arc::new(Mutex::new(BufWriter::new(log_file)));
+
+    // 使用简单的控制台日志，同时写入文件
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Debug) // 应用默认级别
         .filter_module("sqlx", log::LevelFilter::Warn) // 过滤sqlx查询日志
@@ -52,8 +66,28 @@ pub fn run() {
         .filter_module("tokio_modbus", log::LevelFilter::Warn) // 过滤tokio_modbus的DEBUG日志
         .filter_module("app::services", log::LevelFilter::Debug) // 确保业务服务日志显示
         .filter_module("app::tauri_commands", log::LevelFilter::Debug) // 确保命令日志显示
+        .filter_module("app::models", log::LevelFilter::Debug) // 确保模型转换日志显示
         .format_timestamp_secs() // 添加时间戳
         .format_module_path(false) // 简化模块路径显示
+        .format(move |buf, record| {
+            use std::io::Write;
+            let formatted = format!("[{}] [{}] {}\n",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                record.args()
+            );
+
+            // 写入控制台
+            write!(buf, "{}", formatted)?;
+
+            // 同时写入文件
+            if let Ok(mut writer) = file_writer.lock() {
+                let _ = writer.write_all(formatted.as_bytes());
+                let _ = writer.flush();
+            }
+
+            Ok(())
+        })
         .init();
 
     log::info!("=== FAT_TEST 工厂测试系统启动 ===");
