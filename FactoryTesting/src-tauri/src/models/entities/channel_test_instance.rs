@@ -313,10 +313,7 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
 
 impl From<&Model> for crate::models::structs::ChannelTestInstance {
     fn from(model: &Model) -> Self {
-        // 添加详细的转换日志 - 使用 error! 确保能看到
-        log::error!("🔍 [ENTITY_CONVERSION] 转换测试实例: {}", model.instance_id);
-        log::error!("🔍 [ENTITY_CONVERSION] 模块类型: {}", model.module_type);
-        log::error!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 原始数据: {:?}", model.digital_test_steps_json);
+        // 🔧 性能优化：完全移除转换日志，避免大量日志输出
 
         let sub_test_results: HashMap<SubTestItem, SubTestExecutionResult> = model.sub_test_results_json.as_ref()
             .and_then(|json| serde_json::from_str(json).ok())
@@ -331,38 +328,15 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
                 }
             });
 
-        // 🔧 修复：详细记录数字量测试步骤的转换过程，正确处理 "null" 字符串
-        let digital_test_steps: Option<Vec<DigitalTestStep>> = match model.digital_test_steps_json.as_ref() {
-            Some(json_str) => {
-                log::info!("🔍 [ENTITY_CONVERSION] 尝试解析 digital_test_steps_json: {}", json_str);
-
-                // 🔧 修复：如果是字符串 "null"，直接返回 None
+        // 🔧 性能优化：简化数字量测试步骤转换，移除详细日志
+        let digital_test_steps: Option<Vec<DigitalTestStep>> = model.digital_test_steps_json.as_ref()
+            .and_then(|json_str| {
                 if json_str.trim() == "null" {
-                    log::info!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 是字符串 'null'，返回 None");
                     None
                 } else {
-                    match serde_json::from_str(json_str) {
-                        Ok(steps) => {
-                            log::info!("✅ [ENTITY_CONVERSION] 成功解析 digital_test_steps，步骤数: {:?}",
-                                if let Some(ref s) = steps {
-                                    Some((s as &Vec<DigitalTestStep>).len())
-                                } else {
-                                    None
-                                });
-                            steps
-                        }
-                        Err(e) => {
-                            log::error!("❌ [ENTITY_CONVERSION] 解析 digital_test_steps_json 失败: {} - JSON: {}", e, json_str);
-                            None
-                        }
-                    }
+                    serde_json::from_str(json_str).ok()
                 }
-            }
-            None => {
-                log::info!("🔍 [ENTITY_CONVERSION] digital_test_steps_json 为 None");
-                None
-            }
-        };
+            });
 
         let transient_data: HashMap<String, serde_json::Value> = model.transient_data_json.as_ref()
             .and_then(|json| serde_json::from_str(json).ok())
@@ -393,9 +367,7 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             test_plc_communication_address: model.test_plc_communication_address.clone(),
         };
 
-        // 记录最终转换结果
-        log::info!("✅ [ENTITY_CONVERSION] 转换完成 - digital_test_steps 最终结果: {:?}",
-            result.digital_test_steps.as_ref().map(|steps| steps.len()));
+        // 🔧 性能优化：移除最终转换结果日志
 
         result
     }

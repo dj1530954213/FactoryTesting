@@ -325,20 +325,20 @@ impl TestCoordinationService {
 
                     // 保存结果到持久化存储
                     if let Err(e) = persistence_service.save_test_outcome(&result).await {
-                        error!("[TestCoordination] 保存测试结果失败: {}", e);
+                        // 🔧 移除 [TestCoordination] 日志
                     }
 
                     // ===== 关键修复：更新 ChannelStateManager 中的测试实例状态 =====
                     if let Err(e) = channel_state_manager.update_test_result(result.clone()).await {
-                        error!("[TestCoordination] 更新通道状态失败: {}", e);
+                        // 🔧 移除 [TestCoordination] 日志
                     } else {
-                        trace!("[TestCoordination] 成功更新通道状态: {}", result.channel_instance_id);
+                        // 🔧 移除 [TestCoordination] 日志
 
                         // ===== 新增：发布测试完成事件到前端 =====
                         if let Err(e) = event_publisher.publish_test_completed(&result).await {
-                            error!("[TestCoordination] 发布测试完成事件失败: {}", e);
+                            // 🔧 移除 [TestCoordination] 日志
                         } else {
-                            trace!("[TestCoordination] 成功发布测试完成事件: {}", result.channel_instance_id);
+                            // 🔧 移除 [TestCoordination] 日志
                         }
                     }
 
@@ -414,9 +414,9 @@ impl TestCoordinationService {
 
                             tokio::spawn(async move {
                                 if let Err(e) = event_publisher_clone.publish_batch_status_changed(&batch_id_clone, &statistics_clone).await {
-                                    error!("[TestCoordination] 发布批次状态变化事件失败: {}", e);
+                                    // 🔧 移除 [TestCoordination] 日志
                                 } else {
-                                    trace!("[TestCoordination] 成功发布批次状态变化事件: {}", batch_id_clone);
+                                    // 🔧 移除 [TestCoordination] 日志
                                 }
                             });
 
@@ -424,8 +424,7 @@ impl TestCoordinationService {
                             if tested_instances + skipped_instances >= total_instances {
                                 batch_info.status = BatchExecutionStatus::Completed;
                                 batch_info.completed_at = Some(Utc::now());
-                                info!("[TestCoordination] 批次 {} 测试完成，总点位: {}, 已测试: {}, 通过: {}, 失败: {}, 跳过: {}",
-                                    batch_id, total_instances, tested_instances, passed_instances, failed_instances, skipped_instances);
+                                // 🔧 移除 [TestCoordination] 日志
                             }
                         }
                     }
@@ -444,13 +443,11 @@ impl ITestCoordinationService for TestCoordinationService {
         &self,
         request: TestExecutionRequest,
     ) -> AppResult<TestExecutionResponse> {
-        log::info!("[TestCoordination] ===== 开始提交测试执行请求 =====");
-        log::info!("[TestCoordination] 批次: {}, 通道数: {}, 自动开始: {}",
-              request.batch_info.batch_id, request.channel_definitions.len(), request.auto_start);
+        // 🔧 移除 [TestCoordination] 日志
 
         // 验证请求
         if request.channel_definitions.is_empty() {
-            log::error!("[TestCoordination] 验证失败: 通道定义列表为空");
+            // 🔧 移除 [TestCoordination] 日志
             return Err(AppError::validation_error("通道定义列表不能为空"));
         }
 

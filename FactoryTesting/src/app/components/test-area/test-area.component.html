@@ -241,10 +241,11 @@
               
               <div class="filter-item">
                 <label>通道类型:</label>
-                <nz-select 
+                <nz-select
                   nzMode="multiple"
                   nzPlaceHolder="选择通道类型"
                   [(ngModel)]="selectedModuleTypes"
+                  (ngModelChange)="onModuleTypeFilterChange()"
                   style="width: 200px;">
                   <nz-option 
                     *ngFor="let option of moduleTypeOptions"
@@ -255,11 +256,11 @@
               </div>
               
               <div class="filter-item">
-                <nz-checkbox [(ngModel)]="showOnlyTested">仅显示已测试</nz-checkbox>
+                <nz-checkbox [(ngModel)]="showOnlyTested" (ngModelChange)="onFilterChange()">仅显示已测试</nz-checkbox>
               </div>
               
               <div class="filter-item">
-                <nz-checkbox [(ngModel)]="showOnlyFailed">仅显示失败</nz-checkbox>
+                <nz-checkbox [(ngModel)]="showOnlyFailed" (ngModelChange)="onFilterChange()">仅显示失败</nz-checkbox>
               </div>
               
               <div class="filter-item">
@@ -303,7 +304,7 @@
             </thead>
             
             <tbody>
-              <tr *ngFor="let instance of getFilteredInstances()">
+              <tr *ngFor="let instance of filteredInstances; trackBy: trackByInstanceId">
                 <td>
                   <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
                 </td>

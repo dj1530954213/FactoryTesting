@@ -139,17 +139,14 @@ impl AIHardPointPercentExecutor {
 
                 readings.push(reading);
 
-                // 显示测试结果判断
+                // 🔧 精简日志：只显示结果，不显示详细过程
                 let status_icon = if test_status == SubTestStatus::Passed { "✅" } else { "❌" };
-                info!("{} {}%点测试: 设定={:.2}, 实际={:.2}, 误差={:.2}% - {}",
-                    status_icon, percentage * 100.0, eng_value, actual_raw,
-                    error_percentage.unwrap_or(0.0),
-                    if test_status == SubTestStatus::Passed { "通过" } else { "失败" });
+                info!("{} {}%: {:.2}", status_icon, percentage * 100.0, actual_raw);
 
                 // 如果任意点测试失败，继续完成所有测试点，但标记为失败
                 // 不要立即返回，而是继续测试以收集完整的过程数据
                 if test_status == SubTestStatus::Failed {
-                    info!("⚠️ {}%点测试失败，但继续完成剩余测试点以收集完整数据", percentage * 100.0);
+                    // 标记为失败，但继续测试
                 }
         }
 
@@ -166,10 +163,10 @@ impl AIHardPointPercentExecutor {
             "AI硬点测试部分失败"
         };
 
-        info!("🎯 AI硬点测试完成: {} - 整体结果: {} - 线性度检查: {}",
-            instance.instance_id,
-            if overall_success { "✅通过" } else { "❌失败" },
-            if linearity_check { "✅通过" } else { "⚠️警告" });
+        // 🔧 精简日志：只保留最终结果
+        info!("✅ 结果: {} - {}",
+            definition.tag,
+            if overall_success { "通过" } else { "失败" });
 
         // 提取百分比测试结果 - 存储实际工程量 (转换f32到f64)
         // 🔧 关键修复：无论测试成功还是失败，都要保存过程数据
@@ -234,8 +231,8 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行AI硬点测试 - 实例: {}",
-               self.executor_name(), instance.instance_id);
+        // 🔧 精简日志：移除详细调试信息
+        info!("🚀 开始测试: {} [{}]", definition.tag, instance.instance_id);
 
         let result = self.execute_complete_ai_hardpoint_test(instance, definition, plc_service_test_rig, plc_service_target).await?;
 
@@ -334,15 +331,12 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
         _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行AI报警测试 {:?} - 实例: {}",
-               self.executor_name(), self.alarm_type, instance.instance_id);
-
+        // 🔧 精简日志：移除详细调试信息
         let (alarm_set_value, set_address, feedback_address) = self.get_alarm_config(definition)?;
         let start_time = Utc::now();
 
         // 步骤1: 设置报警触发值
-        info!("📝 写入报警设定值 [{}]: {:.3}",
-              set_address, alarm_set_value);
+        info!("📝 写入 [{}]: {:.3}", set_address, alarm_set_value);
 
         plc_service_target.write_float32(&set_address, alarm_set_value).await?;
 
@@ -478,7 +472,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         let mut digital_steps = Vec::new();
 
         // 步骤1: 测试PLC DO输出低电平
-        info!("📝 写入测试PLC DO [{}]: false (低电平)", test_rig_do_address);
+        info!("📝 写入 [{}]: false", test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO低电平失败: {}", e)))?;
 
@@ -486,9 +480,9 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤2: 检查被测PLC DI是否显示"断开"
-        info!("📖 读取被测PLC DI [{}] (期望:false)", target_di_address);
         let di_state_1 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+        info!("📖 读取 [{}]: {}", target_di_address, di_state_1);
 
         // 记录步骤1结果
         let step1_status = if di_state_1 {
@@ -508,7 +502,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         if di_state_1 {
             let error_msg = format!("❌ DI硬点测试失败: DO低电平时DI应为false，实际为true");
-            info!("{}", error_msg);
+            info!("❌ 结果: {} - 失败", definition.tag);
             let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
@@ -517,7 +511,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 低电平测试通过: DO=false, DI={}", di_state_1);
+        info!("✅ 低电平: {}", di_state_1);
 
         // 步骤3: 测试PLC DO输出高电平
         info!("📝 写入测试PLC DO [{}]: true (高电平)", test_rig_do_address);
@@ -550,7 +544,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         if !di_state_2 {
             let error_msg = format!("❌ DI硬点测试失败: DO高电平时DI应为true，实际为false");
-            info!("{}", error_msg);
+            info!("❌ 结果: {} - 失败", definition.tag);
             let mut outcome = RawTestOutcome::failure(
                 instance.instance_id.clone(),
                 SubTestItem::HardPoint,
@@ -559,7 +553,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 高电平测试通过: DO=true, DI={}", di_state_2);
+        info!("✅ 高电平: {}", di_state_2);
 
         // 步骤5: 测试PLC DO输出低电平(复位)
         info!("📝 写入测试PLC DO [{}]: false (复位)", test_rig_do_address);
@@ -601,11 +595,10 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 复位测试通过: DO=false, DI={}", di_state_3);
+        info!("✅ 复位: {}", di_state_3);
 
         let end_time = Utc::now();
-        info!("🎯 DI硬点测试完成: 低({}) → 高({}) → 低({}) - 通过",
-                                 di_state_1, di_state_2, di_state_3);
+        info!("✅ 结果: {} - 通过", definition.tag);
 
         // 构造成功的测试结果
         let success_msg = format!("DI硬点测试成功: 低→高→低电平切换，DI状态正确响应");
@@ -675,21 +668,18 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行DO硬点测试 - 实例: {}",
-               self.executor_name(), instance.instance_id);
+        // 🔧 精简日志：移除详细调试信息
+        info!("🚀 开始测试: {} [{}]", definition.tag, instance.instance_id);
 
         let start_time = Utc::now();
         let test_rig_di_address = self.get_test_rig_di_address(instance)?;
         let target_do_address = &definition.plc_communication_address;
 
-        info!("🔧 DO硬点测试开始 - 被测PLC DO: {}, 测试PLC DI: {}",
-              target_do_address, test_rig_di_address);
-
         // 创建数字量测试步骤记录
         let mut digital_steps = Vec::new();
 
         // 步骤1: 被测PLC DO输出低电平
-        info!("📝 写入被测PLC DO [{}]: false (低电平)", target_do_address);
+        info!("📝 写入 [{}]: false", target_do_address);
         plc_service_target.write_bool(target_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO低电平失败: {}", e)))?;
 
@@ -697,9 +687,9 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤2: 检查测试PLC DI是否显示"断开"
-        info!("📖 读取测试PLC DI [{}] (期望:false)", test_rig_di_address);
         let di_state_1 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+        info!("📖 读取 [{}]: {}", test_rig_di_address, di_state_1);
 
         // 记录步骤1结果
         let step1_status = if di_state_1 {
@@ -910,8 +900,7 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         for (step, percentage) in test_percentages.iter().enumerate() {
             let output_value = range_lower + (range_upper - range_lower) * percentage;
 
-            info!("📝 写入被测PLC AO [{}]: {:.3} ({}%)",
-                  target_ao_address, output_value, percentage * 100.0);
+            info!("📝 写入 [{}]: {:.2}", target_ao_address, output_value);
 
             // 设置被测PLC AO输出
             plc_service_target.write_float32(target_ao_address, output_value).await
@@ -921,24 +910,22 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
             tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
             // 读取测试PLC AI采集值
-            info!("📖 读取测试PLC AI [{}]", test_rig_ai_address);
             let read_value = plc_service_test_rig.read_float32(&test_rig_ai_address).await
                 .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC AI值失败: {}", e)))?;
+            info!("📖 读取 [{}]: {:.2}", test_rig_ai_address, read_value);
 
             // 计算偏差
             let deviation = ((read_value - output_value) / (range_upper - range_lower) * 100.0).abs();
             let is_within_tolerance = deviation <= 5.0; // 5%偏差容限
 
             let status_icon = if is_within_tolerance { "✅" } else { "❌" };
-            info!("{} {}%点测试: 期望={:.3}, 实际={:.3}, 偏差={:.2}% - {}",
-                  status_icon, percentage * 100.0, output_value, read_value, deviation,
-                  if is_within_tolerance { "通过" } else { "失败" });
+            info!("{} {}%: {:.2}", status_icon, percentage * 100.0, read_value);
 
             readings.push((output_value, read_value, deviation, is_within_tolerance));
 
             // 🔧 不要立即返回失败，而是继续完成所有测试点以收集完整的过程数据
             if !is_within_tolerance {
-                info!("⚠️ {}%点测试失败，但继续完成剩余测试点以收集完整数据", percentage * 100.0);
+                // 移除冗余的失败日志
             }
         }
 
@@ -951,11 +938,11 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         let overall_success = failed_points.is_empty();
 
         let (success_msg, outcome) = if overall_success {
-            info!("🎯 AO硬点测试完成: 所有{}个测试点偏差均在5%以内 - 通过", readings.len());
+            info!("✅ 结果: {} - 通过", definition.tag);
             let msg = format!("AO硬点测试成功: 所有{}个测试点偏差均在5%以内", readings.len());
             (msg.clone(), RawTestOutcome::success(instance.instance_id.clone(), SubTestItem::HardPoint))
         } else {
-            info!("🎯 AO硬点测试完成: {}个测试点失败 - 失败", failed_points.len());
+            info!("❌ 结果: {} - 失败", definition.tag);
             let msg = format!("AO硬点测试失败: {}个测试点偏差过大", failed_points.len());
             (msg.clone(), RawTestOutcome::failure(instance.instance_id.clone(), SubTestItem::HardPoint, msg))
         };
@@ -988,9 +975,7 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         outcome.test_result_75_percent = analog_readings.get(3).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
         outcome.test_result_100_percent = analog_readings.get(4).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
 
-        info!("📊 AO硬点测试百分比结果: 0%={:?}, 25%={:?}, 50%={:?}, 75%={:?}, 100%={:?}",
-            outcome.test_result_0_percent, outcome.test_result_25_percent, outcome.test_result_50_percent,
-            outcome.test_result_75_percent, outcome.test_result_100_percent);
+        // 🔧 精简日志：移除详细百分比结果日志
 
         Ok(outcome)
     }

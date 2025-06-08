@@ -116,6 +116,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     estimatedTimeRemaining: undefined as string | undefined
   };
 
+  // 🔧 优化：数据刷新防抖机制
+  private refreshTimeouts = new Map<string, any>();
+  private lastRefreshTime = 0;
+  private readonly MIN_REFRESH_INTERVAL = 1000; // 最小刷新间隔1秒
+
   // 测试状态
   isTestCompleted = false;
   recentTestResults: Array<{
@@ -129,9 +134,20 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   // 筛选和搜索相关
   selectedModuleTypes: ModuleType[] = [];
-  searchText = '';
+  private _searchText = '';
   showOnlyTested = false;
   showOnlyFailed = false;
+
+  // 🔧 性能优化：缓存过滤结果
+  private _filteredInstances: ChannelTestInstance[] = [];
+  private _lastFilterHash = '';
+
+  // 🔧 性能优化：缓存定义映射
+  private _definitionMap = new Map<string, ChannelPointDefinition>();
+
+  // 🔧 性能优化：防抖处理
+  private _searchDebounceTimer: any = null;
+  private _statsUpdateTimer: any = null;
 
   // 模块类型选项
   moduleTypeOptions = [
@@ -162,15 +178,81 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
     // 初始化测试进度
     this.initializeTestProgress();
-
-    // 如果有选中的批次，立即刷新详情以获取最新状态
-    if (this.selectedBatch) {
-      this.loadBatchDetails();
-    }
   }
 
   ngOnDestroy(): void {
+    // 🔧 优化：组件销毁时清理所有定时器
+    this.refreshTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    this.refreshTimeouts.clear();
+    console.log('🔧 [TEST_AREA] 组件销毁，已清理所有定时器');
+
+    // 清理订阅
     this.subscriptions.unsubscribe();
+
+    // 🔧 性能优化：清理缓存和定时器
+    this._definitionMap.clear();
+    this._filteredInstances = [];
+    if (this._searchDebounceTimer) {
+      clearTimeout(this._searchDebounceTimer);
+      this._searchDebounceTimer = null;
+    }
+    if (this._statsUpdateTimer) {
+      clearTimeout(this._statsUpdateTimer);
+      this._statsUpdateTimer = null;
+    }
+  }
+
+  // 🔧 性能优化：trackBy函数
+  trackByInstanceId(index: number, instance: ChannelTestInstance): string {
+    return instance.instance_id;
+  }
+
+  trackByBatchId(index: number, batch: TestBatchInfo): string {
+    return batch.batch_id;
+  }
+
+  // 🔧 性能优化：搜索文本的getter和setter，实现防抖
+  get searchText(): string {
+    return this._searchText;
+  }
+
+  set searchText(value: string) {
+    this._searchText = value;
+
+    // 清除之前的定时器
+    if (this._searchDebounceTimer) {
+      clearTimeout(this._searchDebounceTimer);
+    }
+
+    // 设置新的防抖定时器
+    this._searchDebounceTimer = setTimeout(() => {
+      // 清理过滤缓存，触发重新计算
+      this._filteredInstances = [];
+      this._lastFilterHash = '';
+    }, 300); // 300ms防抖延迟
+  }
+
+  // 🔧 性能优化：延迟统计更新，避免频繁调用
+  private scheduleStatsUpdate(): void {
+    if (this._statsUpdateTimer) {
+      clearTimeout(this._statsUpdateTimer);
+    }
+
+    this._statsUpdateTimer = setTimeout(() => {
+      this.updateModuleTypeStats();
+    }, 100); // 100ms延迟
+  }
+
+  // 🔧 性能优化：模块类型过滤变化处理
+  onModuleTypeFilterChange(): void {
+    this.onFilterChange();
+  }
+
+  // 🔧 性能优化：通用过滤变化处理
+  onFilterChange(): void {
+    // 清理过滤缓存，触发重新计算
+    this._filteredInstances = [];
+    this._lastFilterHash = '';
   }
 
   /**
@@ -189,6 +271,33 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       }
     });
     this.subscriptions.add(subscription);
+  }
+
+  /**
+   * 🔧 优化：智能数据刷新调度器，避免频繁刷新
+   */
+  private scheduleDataRefresh(reason: string, delay: number = 1000): void {
+    // 清除之前的定时器
+    if (this.refreshTimeouts.has(reason)) {
+      clearTimeout(this.refreshTimeouts.get(reason));
+    }
+
+    // 检查最小刷新间隔
+    const now = Date.now();
+    if (now - this.lastRefreshTime < this.MIN_REFRESH_INTERVAL) {
+      delay = Math.max(delay, this.MIN_REFRESH_INTERVAL - (now - this.lastRefreshTime));
+    }
+
+    // 设置新的定时器
+    const timeoutId = setTimeout(async () => {
+      this.lastRefreshTime = Date.now();
+      this.refreshTimeouts.delete(reason);
+
+      console.log(`🔄 [TEST_AREA] 执行数据刷新 (原因: ${reason})`);
+      await this.loadBatchDetails();
+    }, delay);
+
+    this.refreshTimeouts.set(reason, timeoutId);
   }
 
   /**
@@ -221,11 +330,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新测试进度
         this.updateTestProgressFromResult(testResult);
 
-        // 🔧 修复：测试完成后立即刷新数据，确保获取最新状态
-        setTimeout(() => {
-          console.log('🔄 [TEST_AREA] 测试完成后刷新批次数据');
-          this.loadBatchDetails();
-        }, 500); // 延迟500ms确保后端数据已保存
+        // 🔧 优化：测试完成后延迟刷新，避免频繁调用
+        this.scheduleDataRefresh('test-completed', 1000);
 
         // 显示通知
         if (testResult.success) {
@@ -253,13 +359,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新本地状态
         this.updateInstanceStatusDirect(statusChange.instanceId, statusChange.newStatus);
 
-        // 🔧 修复：测试状态变化后刷新数据，特别是测试完成状态
+        // 🔧 优化：测试状态变化后智能刷新
         if (statusChange.newStatus === OverallTestStatus.TestCompletedPassed ||
             statusChange.newStatus === OverallTestStatus.TestCompletedFailed) {
-          setTimeout(() => {
-            console.log('🔄 [TEST_AREA] 测试状态变化后刷新批次数据');
-            this.loadBatchDetails();
-          }, 300);
+          this.scheduleDataRefresh('status-changed', 500);
         }
 
         // 更新当前测试点位
@@ -340,11 +443,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
             this.testProgress.currentPoint = undefined;
             this.message.success('批次测试已完成！', { nzDuration: 5000 });
 
-            // 🔧 修复：批次完成后立即刷新数据，确保获取最新状态
-            setTimeout(() => {
-              console.log('🔄 [TEST_AREA] 批次完成后刷新批次数据');
-              this.loadBatchDetails();
-            }, 800); // 稍长延迟确保所有数据都已保存
+            // 🔧 优化：批次完成后智能刷新
+            this.scheduleDataRefresh('batch-completed', 1200);
           }
 
           console.log('📋 [TEST_AREA] 批次状态已更新:', this.testProgress);
@@ -413,8 +513,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         instance.overall_status = OverallTestStatus.TestCompletedFailed;
       }
 
-      // 更新统计信息
-      this.updateModuleTypeStats();
+      // 🔧 性能优化：延迟更新统计信息
+      this.scheduleStatsUpdate();
 
       console.log(`🔄 [TEST_AREA] 已更新实例状态: ${testResult.instanceId} -> ${instance.overall_status}`);
     } else {
@@ -545,8 +645,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 直接更新状态
       instance.overall_status = newStatus;
 
-      // 更新统计信息
-      this.updateModuleTypeStats();
+      // 🔧 性能优化：延迟更新统计信息
+      this.scheduleStatsUpdate();
 
       console.log(`🔄 [TEST_AREA] 直接更新实例状态: ${instanceId} -> ${newStatus}`);
     } else {
@@ -656,8 +756,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         this.message.success('🚀 通道自动测试已启动', { nzDuration: 2000 });
         console.log('✅ [TEST_AREA] 通道自动测试启动成功');
 
-        // 重新加载批次详情以获取最新状态
-        await this.loadBatchDetails();
+        // 🔧 优化：测试启动后智能刷新
+        this.scheduleDataRefresh('test-started', 800);
 
         // 测试启动成功，保持 isAutoTesting = true，直到测试完成
         console.log('✅ [TEST_AREA] 测试已启动，等待测试完成...');
@@ -687,7 +787,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.message.info('正在刷新批次状态...', { nzDuration: 1000 });
 
     try {
+      // 🔧 优化：清除所有待执行的刷新，立即执行手动刷新
+      this.refreshTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+      this.refreshTimeouts.clear();
+
       await this.loadBatchDetails();
+      this.lastRefreshTime = Date.now(); // 更新最后刷新时间
       this.message.success('批次状态已刷新', { nzDuration: 2000 });
     } catch (error) {
       console.error('❌ [TEST_AREA] 刷新批次详情失败:', error);
@@ -851,22 +956,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 调用真实的后端API获取批次详情
       console.log('📊 [TEST_AREA] 调用后端API: getBatchDetails()');
 
-      // 🔧 修复：添加重试机制，确保获取到最新数据
-      let details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
-
-      // 如果第一次获取的数据中有 digital_test_steps 为空的情况，等待一下再重试
-      if (details && details.instances) {
-        const hasEmptyDigitalSteps = details.instances.some(instance =>
-          !instance.digital_test_steps || instance.digital_test_steps.length === 0
-        );
-
-        if (hasEmptyDigitalSteps) {
-          console.log('🔄 [TEST_AREA] 检测到空的 digital_test_steps，等待500ms后重试...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
-          console.log('🔄 [TEST_AREA] 重试后的数据:', details);
-        }
-      }
+      // 🔧 优化：直接获取数据，避免重试导致的双倍请求
+      const details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
 
       console.log('📊 [TEST_AREA] 后端返回的详情数据:', details);
 
@@ -890,6 +981,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         // 移除成功消息，因为这个方法会被定时器频繁调用
         // this.message.success('批次详情加载成功');
+
+        // 🔧 性能优化：重建定义缓存和清理过滤缓存
+        this.rebuildDefinitionCache();
+        this._filteredInstances = [];
+        this._lastFilterHash = '';
+
         this.updateModuleTypeStats();
 
         // 更新测试进度
@@ -911,9 +1008,33 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   getDefinitionByInstanceId(instanceId: string): ChannelPointDefinition | undefined {
-    return this.batchDetails?.definitions?.find(def => 
+    return this.batchDetails?.definitions?.find(def =>
       this.batchDetails?.instances?.find(inst => inst.instance_id === instanceId)?.definition_id === def.id
     );
+  }
+
+  // 🔧 性能优化：缓存的定义查找方法
+  private getDefinitionByInstanceIdCached(instanceId: string): ChannelPointDefinition | undefined {
+    // 如果缓存为空，重建缓存
+    if (this._definitionMap.size === 0 && this.batchDetails?.definitions && this.batchDetails?.instances) {
+      this.rebuildDefinitionCache();
+    }
+
+    return this._definitionMap.get(instanceId);
+  }
+
+  // 🔧 性能优化：重建定义缓存
+  private rebuildDefinitionCache(): void {
+    this._definitionMap.clear();
+    if (this.batchDetails?.definitions && this.batchDetails?.instances) {
+      // 建立 instanceId -> definition 的映射
+      this.batchDetails.instances.forEach(instance => {
+        const definition = this.batchDetails!.definitions!.find(def => def.id === instance.definition_id);
+        if (definition) {
+          this._definitionMap.set(instance.instance_id, definition);
+        }
+      });
+    }
   }
 
   getInstanceStatusColor(status: OverallTestStatus): string {
@@ -944,39 +1065,72 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     return this.batchDetails?.allocation_summary?.allocation_errors?.length || 0;
   }
 
-  getFilteredInstances(): ChannelTestInstance[] {
+  // 🔧 性能优化：使用getter返回缓存的过滤结果，保持数据一致性
+  get filteredInstances(): ChannelTestInstance[] {
+    if (!this.batchDetails?.instances) return [];
+
+    // 计算当前过滤条件的哈希值
+    const currentFilterHash = this.calculateFilterHash();
+
+    // 如果过滤条件没有变化，返回缓存的结果
+    if (currentFilterHash === this._lastFilterHash && this._filteredInstances.length > 0) {
+      return this._filteredInstances;
+    }
+
+    // 重新计算过滤结果 - 保持原有逻辑完全一致
+    this._filteredInstances = this.computeFilteredInstances();
+    this._lastFilterHash = currentFilterHash;
+
+    return this._filteredInstances;
+  }
+
+  // 🔧 性能优化：计算过滤条件哈希值
+  private calculateFilterHash(): string {
+    return JSON.stringify({
+      selectedModuleTypes: this.selectedModuleTypes.sort(),
+      searchText: this.searchText.trim().toLowerCase(),
+      showOnlyTested: this.showOnlyTested,
+      showOnlyFailed: this.showOnlyFailed,
+      instancesLength: this.batchDetails?.instances?.length || 0,
+      // 添加实例状态变化的检测
+      instancesHash: this.batchDetails?.instances?.map(i => `${i.instance_id}:${i.overall_status}`).join(',') || ''
+    });
+  }
+
+  // 🔧 性能优化：实际的过滤计算逻辑 - 保持原有逻辑完全一致
+  private computeFilteredInstances(): ChannelTestInstance[] {
     if (!this.batchDetails?.instances) return [];
 
     return this.batchDetails.instances.filter(instance => {
-      const definition = this.getDefinitionByInstanceId(instance.instance_id);
-      
-      // 模块类型筛选
+      const definition = this.getDefinitionByInstanceIdCached(instance.instance_id);
+
+      // 模块类型筛选 - 保持原有逻辑
       if (this.selectedModuleTypes.length > 0 && definition) {
         if (!this.selectedModuleTypes.includes(definition.module_type)) {
           return false;
         }
       }
 
-      // 搜索文本筛选
+      // 搜索文本筛选 - 保持原有逻辑
       if (this.searchText.trim()) {
         const searchLower = this.searchText.toLowerCase();
         const matchesTag = definition?.tag?.toLowerCase().includes(searchLower);
         const matchesVariable = definition?.variable_name?.toLowerCase().includes(searchLower);
         const matchesDescription = definition?.description?.toLowerCase().includes(searchLower);
-        
+
         if (!matchesTag && !matchesVariable && !matchesDescription) {
           return false;
         }
       }
 
-      // 测试状态筛选
+      // 测试状态筛选 - 保持原有逻辑
       if (this.showOnlyTested) {
         if (instance.overall_status === OverallTestStatus.NotTested) {
           return false;
         }
       }
 
-      // 失败状态筛选
+      // 失败状态筛选 - 保持原有逻辑
       if (this.showOnlyFailed) {
         if (instance.overall_status !== OverallTestStatus.TestCompletedFailed) {
           return false;
@@ -985,6 +1139,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
       return true;
     });
+  }
+
+  // 🔧 保持向后兼容的方法
+  getFilteredInstances(): ChannelTestInstance[] {
+    return this.filteredInstances;
   }
 
   updateModuleTypeStats(): void {

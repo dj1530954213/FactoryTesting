@@ -522,12 +522,12 @@ pub async fn get_batch_status_cmd(
     state: State<'_, AppState>
 ) -> Result<BatchDetailsPayload, String> {
     let batch_id = args.batch_id;
-    info!("📊 [GET_BATCH_STATUS] 获取批次状态: {}", batch_id);
+    // 🔧 性能优化：移除详细状态获取日志
 
     // 获取批次信息
     let batch_info = match state.persistence_service.load_batch_info(&batch_id).await {
         Ok(Some(info)) => {
-            info!("✅ [GET_BATCH_STATUS] 成功获取批次信息: {}", info.batch_name);
+            // 🔧 性能优化：移除批次信息获取日志
             info
         },
         Ok(None) => {
@@ -551,31 +551,52 @@ pub async fn get_batch_status_cmd(
             .collect();
 
         if !batch_instances.is_empty() {
-            info!("✅ [GET_BATCH_STATUS] 从状态管理器内存获取{}个测试实例", batch_instances.len());
+            // 🔧 性能优化：移除内存数据获取日志
 
-            // 🔍 调试：检查前5个实例的状态
-            for (i, instance) in batch_instances.iter().take(5).enumerate() {
-                info!("🔍 [MEMORY_DATA] 实例{}: ID={}, 状态={:?}, 定义ID={}",
-                      i + 1,
-                      instance.instance_id,
-                      instance.overall_status,
-                      instance.definition_id);
+            // 🔧 修复：按照定义的标签排序测试实例
+            let mut sorted_instances = batch_instances;
+            sorted_instances.sort_by(|a, b| {
+                // 获取对应的定义来比较标签
+                let def_a = state.channel_state_manager.get_channel_definition(&a.definition_id);
+                let def_b = state.channel_state_manager.get_channel_definition(&b.definition_id);
 
-                // 🔍 检查 digital_test_steps 数据
-                if let Some(ref digital_steps) = instance.digital_test_steps {
-                    info!("🔍 [MEMORY_DATA] 实例{} digital_test_steps 数量: {}", i + 1, digital_steps.len());
-                } else {
-                    info!("🔍 [MEMORY_DATA] 实例{} digital_test_steps: None", i + 1);
-                }
-            }
+                // 使用 futures::executor::block_on 来等待异步操作
+                let tag_a = match futures::executor::block_on(def_a) {
+                    Some(def) => def.tag.clone(),
+                    None => String::new(),
+                };
+                let tag_b = match futures::executor::block_on(def_b) {
+                    Some(def) => def.tag.clone(),
+                    None => String::new(),
+                };
 
-            batch_instances
+                tag_a.cmp(&tag_b)
+            });
+
+            sorted_instances
         } else {
             // 如果内存中没有数据，则从数据库获取（兜底方案）
-            info!("⚠️ [GET_BATCH_STATUS] 内存中无数据，从数据库获取测试实例");
+            // 🔧 性能优化：移除数据库获取警告日志
             match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
-                Ok(instances) => {
-                    info!("✅ [GET_BATCH_STATUS] 从数据库获取{}个测试实例", instances.len());
+                Ok(mut instances) => {
+                    // 🔧 修复：对数据库获取的实例也进行排序
+                    instances.sort_by(|a, b| {
+                        // 获取对应的定义来比较标签
+                        let def_a = state.channel_state_manager.get_channel_definition(&a.definition_id);
+                        let def_b = state.channel_state_manager.get_channel_definition(&b.definition_id);
+
+                        let tag_a = match futures::executor::block_on(def_a) {
+                            Some(def) => def.tag.clone(),
+                            None => String::new(),
+                        };
+                        let tag_b = match futures::executor::block_on(def_b) {
+                            Some(def) => def.tag.clone(),
+                            None => String::new(),
+                        };
+
+                        tag_a.cmp(&tag_b)
+                    });
+
                     instances
                 },
                 Err(e) => {
@@ -586,8 +607,7 @@ pub async fn get_batch_status_cmd(
         }
     };
 
-    // 从状态管理器获取通道定义
-
+    // 从状态管理器获取通道定义，并按照导入时的顺序排序
     let definitions = {
         let state_manager = &state.channel_state_manager;
         let instance_definition_ids: std::collections::HashSet<String> = instances
@@ -604,6 +624,10 @@ pub async fn get_batch_status_cmd(
             }
         }
 
+        // 🔧 修复：按照点位标签排序（保持一致的顺序）
+        definitions.sort_by(|a, b| {
+            a.tag.cmp(&b.tag)
+        });
 
         definitions
     };
@@ -650,19 +674,7 @@ pub async fn get_batch_status_cmd(
         allocation_errors: Vec::new(), // 这里可以根据实际情况填充
     };
 
-    info!("✅ [GET_BATCH_STATUS] 批次状态获取完成");
-    info!("✅ [GET_BATCH_STATUS] 总点位: {}, 已测试: {}, 通过: {}, 失败: {}",
-          total_points, tested_points, passed_points, failed_points);
-
-    // 🔍 序列化前检查数据
-    for (i, instance) in instances.iter().take(3).enumerate() {
-        if instance.digital_test_steps.is_some() {
-            error!("🔍 [SERIALIZATION_CHECK] 实例{} 序列化前 digital_test_steps: {:?}",
-                   i + 1, instance.digital_test_steps.as_ref().map(|steps| steps.len()));
-        } else {
-            error!("🔍 [SERIALIZATION_CHECK] 实例{} 序列化前 digital_test_steps: None", i + 1);
-        }
-    }
+    // 🔧 性能优化：移除批次状态统计日志
 
     let payload = BatchDetailsPayload {
         batch_info,
@@ -672,21 +684,8 @@ pub async fn get_batch_status_cmd(
         progress,
     };
 
-    // 🔍 尝试序列化检查
-    match serde_json::to_string(&payload) {
-        Ok(json_str) => {
-            error!("🔍 [SERIALIZATION_CHECK] 序列化成功，JSON长度: {}", json_str.len());
-            // 检查JSON中是否包含digital_test_steps
-            if json_str.contains("digital_test_steps") {
-                error!("🔍 [SERIALIZATION_CHECK] JSON包含 digital_test_steps 字段");
-            } else {
-                error!("❌ [SERIALIZATION_CHECK] JSON不包含 digital_test_steps 字段");
-            }
-        }
-        Err(e) => {
-            error!("❌ [SERIALIZATION_CHECK] 序列化失败: {}", e);
-        }
-    }
+    // 🔧 性能优化：移除序列化检查，直接返回数据
+    // 序列化检查已在开发阶段验证，生产环境无需重复检查
 
     Ok(payload)
 }

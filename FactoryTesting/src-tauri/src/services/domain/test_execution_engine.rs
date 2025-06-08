@@ -151,8 +151,7 @@ impl TestExecutionEngine {
         let executors = self.determine_test_steps(&definition);
 
         if executors.is_empty() {
-            warn!("[TestEngine] 没有找到适用的测试执行器 - 点位: {}, 类型: {:?}",
-                  definition.tag, definition.module_type);
+            // 🔧 移除 [TestEngine] 日志
 
             // 更新任务状态为失败
             {
@@ -164,8 +163,7 @@ impl TestExecutionEngine {
             return;
         }
 
-        // 减少冗余日志 - 只在debug模式下显示步骤数量
-        debug!("[TestEngine] 确定了 {} 个测试步骤 - 任务: {}", executors.len(), task_id);
+        // 🔧 移除 [TestEngine] 日志
 
         let mut step_count = 0;
         let total_steps = executors.len();
@@ -175,7 +173,7 @@ impl TestExecutionEngine {
         for executor in executors {
             // 检查取消令牌
             if task_cancellation_token.is_cancelled() || self.global_cancellation_token.is_cancelled() {
-                info!("[TestEngine] 任务被取消 - 任务: {}", task_id);
+                // 🔧 移除 [TestEngine] 日志
 
                 // 更新任务状态为已取消
                 {
@@ -191,14 +189,11 @@ impl TestExecutionEngine {
 
             // 检查执行器是否支持当前点位定义
             if !executor.supports_definition(&definition) {
-                debug!("[TestEngine] 跳过不支持的测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}",
-                       task_id, step_count, total_steps, executor.executor_name());
+                // 🔧 移除 [TestEngine] 日志
                 continue;
             }
 
-            // 减少冗余日志 - 只在debug模式下显示步骤执行信息
-            debug!("[TestEngine] 执行测试步骤 - 任务: {}, 步骤: {}/{}, 执行器: {}",
-                   task_id, step_count, total_steps, executor.executor_name());
+            // 🔧 移除 [TestEngine] 日志
 
             // 执行测试步骤
             match executor.execute(
@@ -209,25 +204,22 @@ impl TestExecutionEngine {
             ).await {
                 Ok(outcome) => {
                     // 减少冗余日志 - 只在debug模式下显示步骤完成信息
-                    debug!("[TestEngine] 测试步骤完成 - 任务: {}, 步骤: {}/{}, 结果: {}",
-                           task_id, step_count, total_steps, outcome.success);
+                    // 🔧 移除 [TestEngine] 日志
 
                     // 发送测试结果
                     if let Err(e) = result_sender.send(outcome.clone()).await {
-                        error!("[TestEngine] 发送测试结果失败 - 任务: {}, 错误: {}", task_id, e);
+                        // 🔧 移除 [TestEngine] 日志
                     }
 
                     // 记录失败状态，但继续执行后续步骤以获得完整测试数据
                     if !outcome.success {
-                        warn!("[TestEngine] 测试步骤失败，但继续执行以获得完整数据 - 任务: {}, 步骤: {:?}",
-                              task_id, outcome.sub_test_item);
+                        // 🔧 移除 [TestEngine] 日志
                         has_failure = true;
                         // 不再break，继续执行后续测试步骤
                     }
                 },
                 Err(e) => {
-                    error!("[TestEngine] 测试步骤执行失败 - 任务: {}, 步骤: {}/{}, 错误: {}",
-                           task_id, step_count, total_steps, e);
+                    // 🔧 移除 [TestEngine] 日志
 
                     // 创建失败的测试结果
                     let mut failed_outcome = RawTestOutcome::new(
@@ -239,7 +231,7 @@ impl TestExecutionEngine {
 
                     // 发送失败结果
                     if let Err(send_err) = result_sender.send(failed_outcome).await {
-                        error!("[TestEngine] 发送失败结果失败 - 任务: {}, 错误: {}", task_id, send_err);
+                        // 🔧 移除 [TestEngine] 日志
                     }
 
                     has_failure = true;
@@ -275,8 +267,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
         let task_cancellation_token = self.global_cancellation_token.child_token();
 
         // 减少冗余日志 - 只在debug模式下显示任务提交信息
-        debug!("[TestEngine] 提交测试任务: {} for instance: {}, 点位: {}",
-              task_id, instance.instance_id, definition.tag);
+        // 🔧 移除 [TestEngine] 日志
 
         // 创建任务记录
         let task = TestTask {
@@ -316,7 +307,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
             let _permit = match semaphore.acquire().await {
                 Ok(permit) => permit,
                 Err(_) => {
-                    error!("[TestEngine] 获取信号量许可失败 - 任务: {}", task_id);
+                    // 🔧 移除 [TestEngine] 日志
 
                     // 更新任务状态为失败
                     {
@@ -344,7 +335,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
                 tasks.remove(&task_id);
             }
 
-            debug!("[TestEngine] 任务清理完成 - 任务: {}", task_id);
+            // 🔧 移除 [TestEngine] 日志
         });
 
         Ok(return_task_id)
@@ -361,13 +352,13 @@ impl ITestExecutionEngine for TestExecutionEngine {
 
     /// 取消任务
     async fn cancel_task(&self, task_id: &str) -> AppResult<()> {
-        info!("[TestEngine] 取消任务: {}", task_id);
+        // 🔧 移除 [TestEngine] 日志
 
         let tasks = self.active_tasks.read().await;
         match tasks.get(task_id) {
             Some(task) => {
                 task.cancellation_token.cancel();
-                info!("[TestEngine] 任务取消信号已发送: {}", task_id);
+                // 🔧 移除 [TestEngine] 日志
                 Ok(())
             },
             None => Err(AppError::not_found_error("任务", &format!("任务不存在: {}", task_id))),
@@ -382,7 +373,7 @@ impl ITestExecutionEngine for TestExecutionEngine {
 
     /// 停止所有任务
     async fn stop_all_tasks(&self) -> AppResult<()> {
-        info!("[TestEngine] 停止所有任务");
+        // 🔧 移除 [TestEngine] 日志
 
         self.global_cancellation_token.cancel();
 
@@ -402,9 +393,9 @@ impl ITestExecutionEngine for TestExecutionEngine {
 
         let final_count = self.get_active_task_count().await;
         if final_count > 0 {
-            warn!("[TestEngine] 仍有 {} 个任务未完成", final_count);
+            // 🔧 移除 [TestEngine] 日志
         } else {
-            info!("[TestEngine] 所有任务已停止");
+            // 🔧 移除 [TestEngine] 日志
         }
 
         Ok(())

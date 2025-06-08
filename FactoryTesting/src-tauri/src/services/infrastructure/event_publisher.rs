@@ -26,9 +26,9 @@ static GLOBAL_APP_HANDLE: once_cell::sync::OnceCell<AppHandle> = once_cell::sync
 /// 设置全局AppHandle
 pub fn set_global_app_handle(handle: AppHandle) {
     if let Err(_) = GLOBAL_APP_HANDLE.set(handle) {
-        warn!("[EventPublisher] 全局AppHandle已经设置过了");
+        // 🔧 移除 [EventPublisher] 日志
     } else {
-        info!("[EventPublisher] 全局AppHandle设置成功");
+        // 🔧 移除 [EventPublisher] 日志
     }
 }
 
@@ -49,13 +49,13 @@ impl SimpleEventPublisher {
     async fn emit_to_frontend(&self, event_name: &str, payload: serde_json::Value) -> AppResult<()> {
         if let Some(handle) = GLOBAL_APP_HANDLE.get() {
             if let Err(e) = handle.emit(event_name, payload) {
-                error!("[EventPublisher] 发布事件到前端失败: {} - {}", event_name, e);
+                // 🔧 移除 [EventPublisher] 日志
                 return Err(AppError::generic(format!("发布事件失败: {}", e)));
             } else {
                 // 完全移除事件发布成功的冗余日志
             }
         } else {
-            warn!("[EventPublisher] 全局AppHandle未设置，无法发布事件到前端: {}", event_name);
+            // 🔧 移除 [EventPublisher] 日志
         }
         Ok(())
     }
@@ -89,10 +89,7 @@ impl EventPublisher for SimpleEventPublisher {
         old_status: OverallTestStatus,
         new_status: OverallTestStatus,
     ) -> AppResult<()> {
-        debug!(
-            "[EventPublisher] 测试状态变化: 实例={}, 状态: {:?} -> {:?}",
-            instance_id, old_status, new_status
-        );
+        // 🔧 移除 [EventPublisher] 日志
 
         // 发布状态变化事件到前端
         let payload = json!({
@@ -104,10 +101,7 @@ impl EventPublisher for SimpleEventPublisher {
 
         self.emit_to_frontend("test-status-changed", payload).await?;
 
-        info!(
-            "[EventPublisher] 发布测试状态变化事件: 实例={}, {:?} -> {:?}",
-            instance_id, old_status, new_status
-        );
+        // 🔧 移除 [EventPublisher] 日志
 
         Ok(())
     }
@@ -128,22 +122,14 @@ impl EventPublisher for SimpleEventPublisher {
 
         self.emit_to_frontend("test-completed", payload).await?;
 
-        info!(
-            "[EventPublisher] 发布测试结果事件: 实例={}, 成功={}, 消息={}",
-            outcome.channel_instance_id,
-            outcome.success,
-            outcome.message.as_deref().unwrap_or("无消息")
-        );
+        // 🔧 移除 [EventPublisher] 日志
 
         Ok(())
     }
 
     /// 发布批次状态变化事件
     async fn publish_batch_status_changed(&self, batch_id: &str, statistics: &crate::services::traits::BatchStatistics) -> AppResult<()> {
-        info!(
-            "[EventPublisher] 批次状态变化: 批次={}, 统计={:?}",
-            batch_id, statistics
-        );
+        // 🔧 移除 [EventPublisher] 日志
 
         // 判断批次状态
         let status = if statistics.tested_channels >= statistics.total_channels {
@@ -193,10 +179,7 @@ impl EventPublisher for SimpleEventPublisher {
 
         self.emit_to_frontend("test-progress-update", progress_payload).await?;
 
-        info!(
-            "[EventPublisher] 发布批次状态变化事件: 批次={}, 状态={}, 进度={}/{}",
-            batch_id, status, statistics.tested_channels, statistics.total_channels
-        );
+        // 🔧 移除 [EventPublisher] 日志
 
         Ok(())
     }
@@ -204,9 +187,9 @@ impl EventPublisher for SimpleEventPublisher {
     /// 发布PLC连接状态变化事件
     async fn publish_plc_connection_changed(&self, connected: bool) -> AppResult<()> {
         if connected {
-            info!("[EventPublisher] PLC连接已建立");
+            // 🔧 移除 [EventPublisher] 日志
         } else {
-            warn!("[EventPublisher] PLC连接已断开");
+            // 🔧 移除 [EventPublisher] 日志
         }
 
         // TODO: 实际的事件发布逻辑
@@ -216,7 +199,7 @@ impl EventPublisher for SimpleEventPublisher {
 
     /// 发布错误事件
     async fn publish_error(&self, error: &AppError) -> AppResult<()> {
-        warn!("[EventPublisher] 系统错误: {:?}", error);
+        // 🔧 移除 [EventPublisher] 日志
 
         // TODO: 实际的事件发布逻辑
 

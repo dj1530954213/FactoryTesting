@@ -369,11 +369,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .await
                 .map_err(|e| AppError::persistence_error(format!("更新测试实例失败: {}", e)))?;
 
-            // 🔧 修复：记录更新操作，用于调试 ORM 缓存问题
-            log::info!("✅ [PERSISTENCE] 测试实例已更新到数据库: {}", instance.instance_id);
-            if let Some(ref steps) = instance.digital_test_steps {
-                log::info!("🔍 [PERSISTENCE] 更新的 digital_test_steps 数量: {}", steps.len());
-            }
+            // 🔧 移除 [PERSISTENCE] 日志
         } else {
             // 记录不存在，执行插入操作
             let active_model: entities::channel_test_instance::ActiveModel = instance.into();
@@ -382,36 +378,18 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 .await
                 .map_err(|e| AppError::persistence_error(format!("插入测试实例失败: {}", e)))?;
 
-            // 🔧 修复：记录插入操作
-            log::info!("✅ [PERSISTENCE] 测试实例已插入到数据库: {}", instance.instance_id);
+            // 🔧 移除 [PERSISTENCE] 日志
         }
 
         Ok(())
     }
 
     async fn load_test_instance(&self, instance_id: &str) -> AppResult<Option<ChannelTestInstance>> {
-        // 🔧 添加详细的调试日志
-        error!("🔍 [PERSISTENCE] 查询测试实例:");
-        error!("   - 查询的instance_id: {}", instance_id);
-        error!("   - instance_id长度: {}", instance_id.len());
-        error!("   - instance_id字节: {:?}", instance_id.as_bytes());
-
+        // 🔧 性能优化：移除详细调试日志，只保留关键错误信息
         let model = entities::channel_test_instance::Entity::find_by_id(instance_id.to_string())
             .one(self.db_conn.as_ref())
             .await
             .map_err(|e| AppError::persistence_error(format!("加载测试实例失败: {}", e)))?;
-
-        match &model {
-            Some(m) => {
-                error!("✅ [PERSISTENCE] 找到测试实例: {}", m.instance_id);
-                error!("   - 数据库中的instance_id: {}", m.instance_id);
-                error!("   - 数据库中的definition_id: {}", m.definition_id);
-                error!("   - 数据库中的test_batch_id: {}", m.test_batch_id);
-            },
-            None => {
-                error!("❌ [PERSISTENCE] 未找到测试实例: {}", instance_id);
-            },
-        }
 
         Ok(model.map(|m| (&m).into()))
     }
@@ -422,16 +400,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .await
             .map_err(|e| AppError::persistence_error(format!("加载所有测试实例失败: {}", e)))?;
 
-        // 🔧 添加详细的调试日志
-        error!("🔍 [PERSISTENCE] 数据库中的所有测试实例:");
-        error!("   - 总数: {}", models.len());
-        for (i, model) in models.iter().enumerate() {
-            error!("   {}. instance_id: {} (长度: {})", i + 1, model.instance_id, model.instance_id.len());
-            error!("      definition_id: {}", model.definition_id);
-            error!("      test_batch_id: {}", model.test_batch_id);
-            error!("      overall_status: {}", model.overall_status);
-        }
-
+        // 🔧 性能优化：移除详细调试日志
         Ok(models.iter().map(|m| m.into()).collect())
     }
 
@@ -445,13 +414,7 @@ impl PersistenceService for SqliteOrmPersistenceService {
             .map_err(|e| AppError::persistence_error(format!("按批次加载测试实例失败: {}", e)))?;
 
         // 🔧 添加数据验证日志
-        log::info!("🔍 [PERSISTENCE] 从数据库加载批次实例: batch_id={}, 数量={}", batch_id, models.len());
-        for (i, model) in models.iter().enumerate().take(3) { // 只记录前3个
-            log::info!("🔍 [PERSISTENCE] 实例{}：digital_test_steps_json={:?}",
-                i + 1,
-                model.digital_test_steps_json.as_ref().map(|s| &s[..50.min(s.len())])
-            );
-        }
+        // 🔧 性能优化：移除持久化详细日志
 
         Ok(models.iter().map(|m| m.into()).collect())
     }

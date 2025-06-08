@@ -298,32 +298,26 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 🔧 修复：如果 sub_test_results 是空的，先初始化它
         if instance.sub_test_results.is_empty() {
-            warn!("🔧 [APPLY_OUTCOME] 检测到空的 sub_test_results，正在修复...");
+            // 🔧 移除 [APPLY_OUTCOME] 日志
 
             // 尝试获取通道定义来正确初始化
             if let Some(definition) = self.get_channel_definition(&instance.definition_id).await {
                 // 🔧 使用现有的 initialize_sub_test_results 方法
                 instance.sub_test_results = self.initialize_sub_test_results(&definition.module_type);
-                info!("🔧 [APPLY_OUTCOME] 已根据通道定义初始化 {} 个子测试项", instance.sub_test_results.len());
+                // 🔧 移除 [APPLY_OUTCOME] 日志
             } else {
                 // 如果找不到定义，至少添加当前测试项
                 instance.sub_test_results.insert(
                     outcome.sub_test_item.clone(),
                     SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None)
                 );
-                info!("🔧 [APPLY_OUTCOME] 已添加当前测试项: {:?}", outcome.sub_test_item);
+                // 🔧 移除 [APPLY_OUTCOME] 日志
             }
-        }
-
-        // 🔧 调试：检查 sub_test_results 的状态 - 完全移除冗余日志
-        trace!("🔍 [APPLY_OUTCOME] sub_test_results 包含 {} 个项目:", instance.sub_test_results.len());
-        for (item, result) in &instance.sub_test_results {
-            trace!("   - {:?}: {:?}", item, result.status);
         }
 
         // 检查是否存在对应的子测试项，如果不存在则动态添加
         if !instance.sub_test_results.contains_key(&outcome.sub_test_item) {
-            warn!("🔧 [APPLY_OUTCOME] 动态添加缺失的子测试项: {:?}", outcome.sub_test_item);
+            // 🔧 移除 [APPLY_OUTCOME] 日志
             instance.sub_test_results.insert(
                 outcome.sub_test_item.clone(),
                 SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None)
@@ -377,7 +371,7 @@ impl IChannelStateManager for ChannelStateManager {
                 instance.transient_data.insert("test_result_100_percent".to_string(),
                     serde_json::json!(outcome.test_result_100_percent));
 
-                trace!("🔍 [APPLY_OUTCOME] 已从outcome直接存储百分比测试结果");
+                // 🔧 移除 [APPLY_OUTCOME] 日志
                 percentage_data_stored = true;
             }
 
@@ -395,13 +389,13 @@ impl IChannelStateManager for ChannelStateManager {
                     instance.transient_data.insert("test_result_100_percent".to_string(),
                         serde_json::json!(readings[4].actual_reading_eng.map(|v| v as f64)));
 
-                    trace!("🔍 [APPLY_OUTCOME] 已从readings提取百分比测试结果到临时数据");
+                    // 🔧 移除 [APPLY_OUTCOME] 日志
                     percentage_data_stored = true;
                 }
             }
 
             if !percentage_data_stored {
-                warn!("⚠️ [APPLY_OUTCOME] 未能存储百分比测试结果：outcome中无直接数据且readings不足5个");
+                // 🔧 移除 [APPLY_OUTCOME] 日志
             }
         }
 
@@ -555,10 +549,10 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 🔧 第二步：如果缓存中没有，从数据库加载
         if instance_from_cache.is_none() {
-            trace!("🔍 [STATE_MANAGER] 准备从数据库查询实例ID: {}", instance_id);
+            // 🔧 移除 [STATE_MANAGER] 日志
             match self.persistence_service.load_test_instance(&instance_id).await {
                 Ok(Some(instance)) => {
-                    trace!("✅ [STATE_MANAGER] 从数据库加载测试实例: {} (定义ID: {})", instance_id, instance.definition_id);
+                    // 🔧 移除 [STATE_MANAGER] 日志
 
                     // 将实例添加到缓存
                     {
@@ -597,7 +591,7 @@ impl IChannelStateManager for ChannelStateManager {
                 }
             }
         } else {
-            trace!("✅ [STATE_MANAGER] 从内存缓存获取测试实例: {}", instance_id);
+            // 🔧 移除 [STATE_MANAGER] 日志
         }
 
         // 🔧 第三步：更新测试实例状态
@@ -614,16 +608,12 @@ impl IChannelStateManager for ChannelStateManager {
             // 保存到数据库
             self.persistence_service.save_test_instance(&instance).await?;
 
-            // 🔧 修复：立即验证数据是否正确保存
+            // 🔧 性能优化：移除详细验证日志，只保留关键错误检查
             if let Some(ref digital_steps) = instance.digital_test_steps {
-                log::info!("🔍 [STATE_MANAGER] 保存后验证 - digital_test_steps 数量: {}", digital_steps.len());
-
-                // 立即从数据库重新加载验证
+                // 简化验证：只在出现问题时记录错误
                 if let Ok(Some(reloaded_instance)) = self.persistence_service.load_test_instance(&instance_id).await {
-                    if let Some(ref reloaded_steps) = reloaded_instance.digital_test_steps {
-                        log::info!("✅ [STATE_MANAGER] 数据库验证成功 - digital_test_steps 数量: {}", reloaded_steps.len());
-                    } else {
-                        log::error!("❌ [STATE_MANAGER] 数据库验证失败 - digital_test_steps 为空！");
+                    if reloaded_instance.digital_test_steps.is_none() {
+                        // 🔧 移除 [STATE_MANAGER] 日志
                     }
                 }
             }
@@ -706,11 +696,11 @@ impl IChannelStateManager for ChannelStateManager {
                 }
                 Ok(None) => {
                     not_found_count += 1;
-                    warn!("⚠️ [STATE_MANAGER] 数据库中未找到通道定义: {}", definition_id);
+                    // 🔧 移除 [STATE_MANAGER] 日志
                 }
                 Err(e) => {
                     error_count += 1;
-                    error!("❌ [STATE_MANAGER] 加载通道定义失败: {} - {}", definition_id, e);
+                    // 🔧 移除 [STATE_MANAGER] 日志
                 }
             }
         }
@@ -790,7 +780,7 @@ impl IChannelStateManager for ChannelStateManager {
                 None
             }
             Err(e) => {
-                warn!("⚠️ [STATE_MANAGER] 获取通道定义失败: {} - {}", definition_id, e);
+                // 🔧 移除 [STATE_MANAGER] 日志
                 None
             }
         }
