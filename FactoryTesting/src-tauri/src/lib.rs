@@ -31,6 +31,10 @@ use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd,
     connect_plc_cmd, start_batch_auto_test_cmd, get_plc_connection_status_cmd
 };
+use commands::manual_test_commands::{
+    start_manual_test_cmd, update_manual_test_subitem_cmd, get_manual_test_status_cmd,
+    start_plc_monitoring_cmd, stop_plc_monitoring_cmd
+};
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
@@ -189,6 +193,12 @@ pub fn run() {
                 connect_plc_cmd,
                 start_batch_auto_test_cmd,
                 get_plc_connection_status_cmd,
+                // 新的手动测试命令
+                start_manual_test_cmd,
+                update_manual_test_subitem_cmd,
+                get_manual_test_status_cmd,
+                start_plc_monitoring_cmd,
+                stop_plc_monitoring_cmd,
                 // 测试PLC配置命令
                 get_test_plc_channels_cmd,
                 save_test_plc_channel_cmd,

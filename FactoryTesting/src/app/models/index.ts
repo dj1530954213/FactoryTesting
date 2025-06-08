@@ -64,6 +64,11 @@ export interface ChannelPointDefinition {
   analog_range_max?: number;
   range_low_limit?: number;
   range_high_limit?: number;
+  // 报警设定值通信地址（用于手动测试）
+  sll_set_point_communication_address?: string;
+  sl_set_point_communication_address?: string;
+  sh_set_point_communication_address?: string;
+  shh_set_point_communication_address?: string;
   created_at: string;
   updated_at: string;
 }

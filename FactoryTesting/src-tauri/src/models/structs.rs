@@ -735,3 +735,7 @@ impl Default for AppSettings {
     }
 }
 
+// 重新导出手动测试相关结构体
+pub mod manual_test;
+pub use manual_test::*;
+

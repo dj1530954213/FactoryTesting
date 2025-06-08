@@ -1,0 +1,154 @@
+.ai-manual-test {
+  padding: 16px 0;
+}
+
+/* 监控数据卡片 */
+.monitoring-card {
+  margin-bottom: 16px;
+}
+
+.monitoring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+/* 测试项目区域 */
+.test-items-section h4 {
+  margin: 0 0 16px 0;
+  color: #1890ff;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.test-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* 测试项卡片 */
+.test-item-card {
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.test-item-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.test-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.test-item-title {
+  font-weight: 600;
+  color: #262626;
+  font-size: 14px;
+}
+
+.test-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.test-item-content p {
+  margin: 0;
+  color: #595959;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.test-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.test-item-actions button {
+  flex: 1;
+}
+
+/* 测试进度区域 */
+.test-progress-section {
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.progress-info > span {
+  font-weight: 600;
+  color: #262626;
+  font-size: 14px;
+}
+
+.progress-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 卡片标题样式覆盖 */
+::ng-deep .monitoring-card .ant-card-head {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+  border-bottom: 1px solid #91d5ff;
+}
+
+::ng-deep .monitoring-card .ant-card-head-title {
+  color: #1890ff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+::ng-deep .test-item-card .ant-card-body {
+  padding: 12px;
+}
+
+/* 统计数据样式覆盖 */
+::ng-deep .monitoring-grid .ant-statistic-title {
+  font-size: 12px;
+  color: #8c8c8c;
+  margin-bottom: 4px;
+}
+
+::ng-deep .monitoring-grid .ant-statistic-content {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .test-items-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .monitoring-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .progress-info {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .progress-actions {
+    justify-content: stretch;
+  }
+  
+  .progress-actions button {
+    flex: 1;
+  }
+}

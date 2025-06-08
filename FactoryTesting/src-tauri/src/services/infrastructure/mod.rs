@@ -13,6 +13,9 @@ pub mod excel;
 /// 事件发布相关模块
 pub mod event_publisher;
 
+/// PLC监控服务模块
+pub mod plc_monitoring_service;
+
 // 为后续步骤准备的模块（暂时注释）
 // pub mod excel;
 
@@ -27,6 +30,9 @@ pub use plc::{
     ModbusPlcService,
     ModbusConfig,
 };
+
+// 重新导出PLC监控服务
+pub use plc_monitoring_service::{IPlcMonitoringService, PlcMonitoringService};
 
 // 重新导出持久化相关接口和实现
 pub use persistence::{

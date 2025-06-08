@@ -496,6 +496,25 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* 表格行颜色变更样式 */
+::ng-deep .ant-table-tbody .row-failed {
+  background-color: #fff2f0 !important;
+  border-left: 3px solid #ff4d4f;
+}
+
+::ng-deep .ant-table-tbody .row-failed:hover {
+  background-color: #ffebe8 !important;
+}
+
+::ng-deep .ant-table-tbody .row-passed {
+  background-color: #f6ffed !important;
+  border-left: 3px solid #52c41a;
+}
+
+::ng-deep .ant-table-tbody .row-passed:hover {
+  background-color: #f0f9e8 !important;
+}
+
 
 
 /* 筛选工具栏 */

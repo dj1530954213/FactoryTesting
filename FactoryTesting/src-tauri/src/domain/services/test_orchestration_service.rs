@@ -68,10 +68,37 @@ pub trait ITestOrchestrationService: BaseService {
     async fn get_batch_details(&self, batch_id: &str) -> AppResult<TestBatchInfo>;
     
     /// 删除批次
-    /// 
+    ///
     /// # 参数
     /// * `batch_id` - 批次ID
     async fn delete_batch(&self, batch_id: &str) -> AppResult<()>;
+
+    /// 开始手动测试
+    ///
+    /// # 参数
+    /// * `request` - 手动测试请求
+    ///
+    /// # 返回
+    /// * `StartManualTestResponse` - 手动测试启动响应
+    async fn start_manual_test(&self, request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse>;
+
+    /// 更新手动测试子项状态
+    ///
+    /// # 参数
+    /// * `request` - 更新请求
+    ///
+    /// # 返回
+    /// * `UpdateManualTestSubItemResponse` - 更新响应
+    async fn update_manual_test_subitem(&self, request: crate::models::structs::UpdateManualTestSubItemRequest) -> AppResult<crate::models::structs::UpdateManualTestSubItemResponse>;
+
+    /// 获取手动测试状态
+    ///
+    /// # 参数
+    /// * `instance_id` - 实例ID
+    ///
+    /// # 返回
+    /// * `Option<ManualTestStatus>` - 手动测试状态
+    async fn get_manual_test_status(&self, instance_id: &str) -> AppResult<Option<crate::models::structs::ManualTestStatus>>;
 }
 
 /// 测试执行请求

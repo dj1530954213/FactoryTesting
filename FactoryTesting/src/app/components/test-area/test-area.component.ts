@@ -43,6 +43,7 @@ import {
   POINT_DATA_TYPE_LABELS
 } from '../../models';
 import { ErrorDetailModalComponent } from './error-detail-modal.component';
+import { ManualTestModalComponent } from '../manual-test/manual-test-modal.component';
 
 // 批次测试统计接口
 interface BatchTestStats {
@@ -81,7 +82,8 @@ interface BatchTestStats {
     NzCollapseModule,
     NzProgressModule,
     NzModalModule,
-    ErrorDetailModalComponent
+    ErrorDetailModalComponent,
+    ManualTestModalComponent
   ],
   templateUrl: './test-area.component.html',
   styleUrls: ['./test-area.component.css']
@@ -161,6 +163,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   errorDetailModalVisible = false;
   selectedErrorInstance: ChannelTestInstance | null = null;
   selectedErrorDefinition: ChannelPointDefinition | null = null;
+
+  // 手动测试模态框相关
+  manualTestModalVisible = false;
+  selectedManualTestInstance: ChannelTestInstance | null = null;
+  selectedManualTestDefinition: ChannelPointDefinition | null = null;
 
   constructor(
     private tauriApiService: TauriApiService,
@@ -1503,6 +1510,82 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       console.error('❌ [TEST_AREA] 启动单个通道硬点测试失败:', error);
       this.message.error(`启动硬点测试失败: ${error}`);
     }
+  }
+
+  /**
+   * 获取表格行的CSS类名（用于整行颜色变更）
+   */
+  getRowClassName = (data: ChannelTestInstance, index: number): string => {
+    // 硬点测试失败 → 红色
+    if (data.overall_status === OverallTestStatus.TestCompletedFailed) {
+      return 'row-failed';
+    }
+
+    // 测试完成且通过 → 绿色
+    if (data.overall_status === OverallTestStatus.TestCompletedPassed) {
+      return 'row-passed';
+    }
+
+    return '';
+  }
+
+  /**
+   * 检查手动测试按钮是否启用
+   */
+  isManualTestEnabled(instance: ChannelTestInstance): boolean {
+    // 只有硬点测试通过后才允许手动测试
+    return instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
+           instance.overall_status === OverallTestStatus.TestCompletedPassed ||
+           instance.overall_status === OverallTestStatus.ManualTesting;
+  }
+
+  /**
+   * 开始手动测试
+   */
+  async startManualTest(instance: ChannelTestInstance): Promise<void> {
+    try {
+      console.log('🔧 [TEST_AREA] 开始手动测试:', instance.instance_id);
+
+      // 获取通道定义信息
+      const definition = this.getDefinitionByInstanceId(instance.instance_id);
+      if (!definition) {
+        this.message.error('无法找到通道定义信息');
+        return;
+      }
+
+      // 设置选中的实例和定义
+      this.selectedManualTestInstance = instance;
+      this.selectedManualTestDefinition = definition;
+
+      // 打开手动测试模态框
+      this.manualTestModalVisible = true;
+
+      console.log('✅ [TEST_AREA] 手动测试模态框已打开');
+
+    } catch (error) {
+      console.error('❌ [TEST_AREA] 启动手动测试失败:', error);
+      this.message.error(`启动手动测试失败: ${error}`);
+    }
+  }
+
+  /**
+   * 手动测试完成处理
+   */
+  onManualTestCompleted(): void {
+    console.log('🎉 [TEST_AREA] 手动测试完成');
+    this.closeManualTestModal();
+
+    // 刷新批次详情以获取最新状态
+    this.loadBatchDetails();
+  }
+
+  /**
+   * 关闭手动测试模态框
+   */
+  closeManualTestModal(): void {
+    this.manualTestModalVisible = false;
+    this.selectedManualTestInstance = null;
+    this.selectedManualTestDefinition = null;
   }
 
 

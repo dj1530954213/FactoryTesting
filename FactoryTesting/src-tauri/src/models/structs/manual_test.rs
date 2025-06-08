@@ -1,0 +1,238 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use chrono::{DateTime, Utc};
+
+use crate::models::enums::{ModuleType, OverallTestStatus};
+
+/// 手动测试子项状态枚举
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ManualTestSubItemStatus {
+    NotTested,
+    Testing,
+    Passed,
+    Failed,
+    Skipped,
+}
+
+/// 手动测试子项类型
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ManualTestSubItem {
+    // 通用测试项
+    ShowValueCheck,        // 显示值核对
+    
+    // AI点位专用测试项
+    LowLowAlarmTest,      // 低低报警测试
+    LowAlarmTest,         // 低报警测试
+    HighAlarmTest,        // 高报警测试
+    HighHighAlarmTest,    // 高高报警测试
+    
+    // AI/AO点位通用测试项
+    TrendCheck,           // 趋势检查
+    ReportCheck,          // 报表检查
+    MaintenanceFunction,  // 维护功能测试
+}
+
+/// 手动测试子项结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManualTestSubItemResult {
+    pub sub_item: ManualTestSubItem,
+    pub status: ManualTestSubItemStatus,
+    pub test_time: Option<DateTime<Utc>>,
+    pub operator_notes: Option<String>,
+    pub skip_reason: Option<String>,
+}
+
+/// 手动测试状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManualTestStatus {
+    pub instance_id: String,
+    pub overall_status: OverallTestStatus,
+    pub sub_item_results: HashMap<ManualTestSubItem, ManualTestSubItemResult>,
+    pub start_time: Option<DateTime<Utc>>,
+    pub completion_time: Option<DateTime<Utc>>,
+    pub current_operator: Option<String>,
+}
+
+/// PLC监控数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlcMonitoringData {
+    pub instance_id: String,
+    pub timestamp: DateTime<Utc>,
+    pub values: HashMap<String, serde_json::Value>,
+}
+
+/// 手动测试请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartManualTestRequest {
+    pub instance_id: String,
+    pub module_type: ModuleType,
+    pub operator_name: Option<String>,
+}
+
+/// 手动测试响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartManualTestResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub test_status: Option<ManualTestStatus>,
+}
+
+/// 更新手动测试子项请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateManualTestSubItemRequest {
+    pub instance_id: String,
+    pub sub_item: ManualTestSubItem,
+    pub status: ManualTestSubItemStatus,
+    pub operator_notes: Option<String>,
+    pub skip_reason: Option<String>,
+}
+
+/// 更新手动测试子项响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateManualTestSubItemResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub test_status: Option<ManualTestStatus>,
+    pub is_completed: Option<bool>,
+}
+
+/// PLC监控请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartPlcMonitoringRequest {
+    pub instance_id: String,
+    pub module_type: ModuleType,
+    pub monitoring_addresses: Vec<String>,
+}
+
+/// PLC监控响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartPlcMonitoringResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub monitoring_id: Option<String>,
+}
+
+/// 停止PLC监控请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StopPlcMonitoringRequest {
+    pub instance_id: String,
+    pub monitoring_id: Option<String>,
+}
+
+/// 手动测试配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManualTestConfig {
+    pub module_type: ModuleType,
+    pub applicable_sub_items: Vec<ManualTestSubItem>,
+    pub plc_monitoring_required: bool,
+    pub monitoring_interval: u64, // 毫秒
+}
+
+impl ManualTestConfig {
+    /// 获取模块类型对应的手动测试配置
+    pub fn for_module_type(module_type: ModuleType) -> Self {
+        match module_type {
+            ModuleType::AI => Self {
+                module_type: ModuleType::AI,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                    ManualTestSubItem::LowLowAlarmTest,
+                    ManualTestSubItem::LowAlarmTest,
+                    ManualTestSubItem::HighAlarmTest,
+                    ManualTestSubItem::HighHighAlarmTest,
+                    ManualTestSubItem::TrendCheck,
+                    ManualTestSubItem::ReportCheck,
+                    ManualTestSubItem::MaintenanceFunction,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+            ModuleType::AO => Self {
+                module_type: ModuleType::AO,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                    ManualTestSubItem::TrendCheck,
+                    ManualTestSubItem::ReportCheck,
+                    ManualTestSubItem::MaintenanceFunction,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+            ModuleType::DI | ModuleType::DO => Self {
+                module_type,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+        }
+    }
+}
+
+impl ManualTestStatus {
+    /// 创建新的手动测试状态
+    pub fn new(instance_id: String, module_type: ModuleType, operator: Option<String>) -> Self {
+        let config = ManualTestConfig::for_module_type(module_type);
+        let mut sub_item_results = HashMap::new();
+        
+        // 初始化所有适用的子项为未测试状态
+        for sub_item in config.applicable_sub_items {
+            sub_item_results.insert(sub_item.clone(), ManualTestSubItemResult {
+                sub_item,
+                status: ManualTestSubItemStatus::NotTested,
+                test_time: None,
+                operator_notes: None,
+                skip_reason: None,
+            });
+        }
+        
+        Self {
+            instance_id,
+            overall_status: OverallTestStatus::ManualTesting,
+            sub_item_results,
+            start_time: Some(Utc::now()),
+            completion_time: None,
+            current_operator: operator,
+        }
+    }
+    
+    /// 检查是否所有子项都已完成
+    pub fn is_all_completed(&self) -> bool {
+        self.sub_item_results.values().all(|result| {
+            matches!(result.status, ManualTestSubItemStatus::Passed | ManualTestSubItemStatus::Skipped)
+        })
+    }
+    
+    /// 获取已完成的子项数量
+    pub fn get_completed_count(&self) -> usize {
+        self.sub_item_results.values()
+            .filter(|result| matches!(result.status, ManualTestSubItemStatus::Passed | ManualTestSubItemStatus::Skipped))
+            .count()
+    }
+    
+    /// 获取总子项数量
+    pub fn get_total_count(&self) -> usize {
+        self.sub_item_results.len()
+    }
+    
+    /// 更新子项状态
+    pub fn update_sub_item(&mut self, sub_item: ManualTestSubItem, status: ManualTestSubItemStatus, operator_notes: Option<String>, skip_reason: Option<String>) -> bool {
+        if let Some(result) = self.sub_item_results.get_mut(&sub_item) {
+            result.status = status;
+            result.test_time = Some(Utc::now());
+            result.operator_notes = operator_notes;
+            result.skip_reason = skip_reason;
+            
+            // 检查是否所有子项都已完成
+            if self.is_all_completed() {
+                self.overall_status = OverallTestStatus::TestCompletedPassed;
+                self.completion_time = Some(Utc::now());
+            }
+            
+            true
+        } else {
+            false
+        }
+    }
+}

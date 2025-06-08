@@ -1,0 +1,97 @@
+.manual-test-content {
+  padding: 16px 0;
+}
+
+/* 通道信息区域 */
+.channel-info-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+}
+
+.channel-info-section h4 {
+  margin: 0 0 12px 0;
+  color: #1890ff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item label {
+  font-weight: 500;
+  color: #595959;
+  font-size: 12px;
+  min-width: 80px;
+  margin: 0;
+}
+
+.info-item span {
+  color: #262626;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 测试内容区域 */
+.test-content-section {
+  min-height: 400px;
+}
+
+/* 不支持的类型提示 */
+.unsupported-type {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #8c8c8c;
+  text-align: center;
+}
+
+.unsupported-type i {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #faad14;
+}
+
+.unsupported-type p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* 模态框样式覆盖 */
+::ng-deep .ant-modal-header {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+  border-bottom: 1px solid #91d5ff;
+}
+
+::ng-deep .ant-modal-title {
+  color: #1890ff;
+  font-weight: 600;
+}
+
+::ng-deep .ant-modal-body {
+  padding: 16px 24px;
+}
+
+/* 加载状态 */
+::ng-deep .ant-spin-container {
+  min-height: 200px;
+}
+
+::ng-deep .ant-spin-tip {
+  color: #1890ff;
+  font-size: 14px;
+}

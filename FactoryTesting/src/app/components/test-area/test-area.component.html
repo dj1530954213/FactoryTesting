@@ -289,22 +289,24 @@
             [nzShowPagination]="false"
             [nzScroll]="{ x: '1200px', y: '800px' }"
             nzSize="small">
-            
+
             <thead>
               <tr>
-                <th nzWidth="120px">点位名称</th>
-                <th nzWidth="120px">测试PLC通道号</th>
-                <th nzWidth="120px">被测PLC通道号</th>
-                <th nzWidth="100px">通道类型</th>
-                <th nzWidth="100px">数据类型</th>
-                <th nzWidth="200px">错误详情</th>
-                <th nzWidth="100px">测试状态</th>
-                <th nzWidth="150px">操作</th>
+                <th>点位名称</th>
+                <th>测试PLC通道号</th>
+                <th>被测PLC通道号</th>
+                <th>通道类型</th>
+                <th>数据类型</th>
+                <th>错误详情</th>
+                <th>测试状态</th>
+                <th>硬点重测</th>
+                <th>手动测试</th>
               </tr>
             </thead>
             
             <tbody>
-              <tr *ngFor="let instance of filteredInstances; trackBy: trackByInstanceId">
+              <tr *ngFor="let instance of filteredInstances; trackBy: trackByInstanceId"
+                  [class]="getRowClassName(instance, 0)">
                 <td>
                   <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
                 </td>
@@ -369,42 +371,27 @@
                   </nz-tag>
                 </td>
                 <td>
-                  <nz-button-group>
-                    <button
-                      nz-button
-                      nzType="primary"
-                      nzSize="small"
-                      [disabled]="isChannelTestDisabled(instance)"
-                      [nzLoading]="instance.overall_status === OverallTestStatus.HardPointTesting"
-                      (click)="startSingleChannelTest(instance)">
-                      <i nz-icon nzType="play-circle" *ngIf="instance.overall_status !== OverallTestStatus.HardPointTesting"></i>
-                      {{ getChannelTestButtonText(instance) }}
-                    </button>
-                    <button 
-                      nz-button 
-                      nzSize="small"
-                      nz-dropdown 
-                      [nzDropdownMenu]="actionMenu">
-                      <i nz-icon nzType="more"></i>
-                    </button>
-                  </nz-button-group>
-                  
-                  <nz-dropdown-menu #actionMenu="nzDropdownMenu">
-                    <ul nz-menu>
-                      <li nz-menu-item>
-                        <i nz-icon nzType="eye"></i>
-                        查看详情
-                      </li>
-                      <li nz-menu-item>
-                        <i nz-icon nzType="edit"></i>
-                        手动测试
-                      </li>
-                      <li nz-menu-item>
-                        <i nz-icon nzType="redo"></i>
-                        重新测试
-                      </li>
-                    </ul>
-                  </nz-dropdown-menu>
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [disabled]="isChannelTestDisabled(instance)"
+                    [nzLoading]="instance.overall_status === OverallTestStatus.HardPointTesting"
+                    (click)="startSingleChannelTest(instance)">
+                    <i nz-icon nzType="play-circle" *ngIf="instance.overall_status !== OverallTestStatus.HardPointTesting"></i>
+                    {{ getChannelTestButtonText(instance) }}
+                  </button>
+                </td>
+                <td>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [disabled]="!isManualTestEnabled(instance)"
+                    (click)="startManualTest(instance)">
+                    <i nz-icon nzType="setting"></i>
+                    手动测试
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -421,5 +408,14 @@
     [definition]="selectedErrorDefinition"
     (visibleChange)="closeErrorDetailModal()">
   </app-error-detail-modal>
+
+  <!-- 手动测试模态框 -->
+  <app-manual-test-modal
+    [(visible)]="manualTestModalVisible"
+    [instance]="selectedManualTestInstance"
+    [definition]="selectedManualTestDefinition"
+    (visibleChange)="closeManualTestModal()"
+    (testCompleted)="onManualTestCompleted()">
+  </app-manual-test-modal>
 
 </div>

@@ -4,6 +4,7 @@
 
 pub mod data_management;
 pub mod manual_testing;
+pub mod manual_test_commands;
 pub mod test_plc_config;
 
 // 重新导出命令
@@ -43,4 +44,12 @@ pub use manual_testing::{
     connect_plc_cmd,
     start_batch_auto_test_cmd,
     get_plc_connection_status_cmd
+};
+
+pub use manual_test_commands::{
+    start_manual_test_cmd,
+    update_manual_test_subitem_cmd,
+    get_manual_test_status_cmd,
+    start_plc_monitoring_cmd,
+    stop_plc_monitoring_cmd
 };
