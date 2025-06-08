@@ -221,6 +221,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新测试进度
         this.updateTestProgressFromResult(testResult);
 
+        // 🔧 修复：测试完成后立即刷新数据，确保获取最新状态
+        setTimeout(() => {
+          console.log('🔄 [TEST_AREA] 测试完成后刷新批次数据');
+          this.loadBatchDetails();
+        }, 500); // 延迟500ms确保后端数据已保存
+
         // 显示通知
         if (testResult.success) {
           console.log(`✅ [TEST_AREA] 测试通过: ${testResult.instanceId}`);
@@ -246,6 +252,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         // 更新本地状态
         this.updateInstanceStatusDirect(statusChange.instanceId, statusChange.newStatus);
+
+        // 🔧 修复：测试状态变化后刷新数据，特别是测试完成状态
+        if (statusChange.newStatus === OverallTestStatus.TestCompletedPassed ||
+            statusChange.newStatus === OverallTestStatus.TestCompletedFailed) {
+          setTimeout(() => {
+            console.log('🔄 [TEST_AREA] 测试状态变化后刷新批次数据');
+            this.loadBatchDetails();
+          }, 300);
+        }
 
         // 更新当前测试点位
         if (statusChange.newStatus === OverallTestStatus.HardPointTesting && statusChange.pointTag) {
@@ -325,8 +340,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
             this.testProgress.currentPoint = undefined;
             this.message.success('批次测试已完成！', { nzDuration: 5000 });
 
-            // 刷新批次详情以获取最新状态
-            this.loadBatchDetails();
+            // 🔧 修复：批次完成后立即刷新数据，确保获取最新状态
+            setTimeout(() => {
+              console.log('🔄 [TEST_AREA] 批次完成后刷新批次数据');
+              this.loadBatchDetails();
+            }, 800); // 稍长延迟确保所有数据都已保存
           }
 
           console.log('📋 [TEST_AREA] 批次状态已更新:', this.testProgress);

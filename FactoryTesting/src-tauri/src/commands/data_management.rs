@@ -540,25 +540,49 @@ pub async fn get_batch_status_cmd(
         }
     };
 
-    // 获取测试实例
-    let instances = match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
-        Ok(instances) => {
-            info!("✅ [GET_BATCH_STATUS] 成功获取{}个测试实例", instances.len());
+    // 🔧 修复：优先从状态管理器内存获取测试实例，确保获取最新数据
+    let instances = {
+        // 首先尝试从状态管理器内存缓存获取
+        let cached_instances = state.channel_state_manager.get_all_cached_test_instances().await;
+
+        // 过滤出属于当前批次的实例
+        let batch_instances: Vec<_> = cached_instances.into_iter()
+            .filter(|instance| instance.test_batch_id == batch_id)
+            .collect();
+
+        if !batch_instances.is_empty() {
+            info!("✅ [GET_BATCH_STATUS] 从状态管理器内存获取{}个测试实例", batch_instances.len());
 
             // 🔍 调试：检查前5个实例的状态
-            for (i, instance) in instances.iter().take(5).enumerate() {
-                info!("🔍 [DEBUG] 实例{}: ID={}, 状态={}, 定义ID={}",
+            for (i, instance) in batch_instances.iter().take(5).enumerate() {
+                info!("🔍 [MEMORY_DATA] 实例{}: ID={}, 状态={:?}, 定义ID={}",
                       i + 1,
                       instance.instance_id,
                       instance.overall_status,
                       instance.definition_id);
+
+                // 🔍 检查 digital_test_steps 数据
+                if let Some(ref digital_steps) = instance.digital_test_steps {
+                    info!("🔍 [MEMORY_DATA] 实例{} digital_test_steps 数量: {}", i + 1, digital_steps.len());
+                } else {
+                    info!("🔍 [MEMORY_DATA] 实例{} digital_test_steps: None", i + 1);
+                }
             }
 
-            instances
-        },
-        Err(e) => {
-            error!("获取测试实例失败: {}", e);
-            return Err(format!("获取测试实例失败: {}", e));
+            batch_instances
+        } else {
+            // 如果内存中没有数据，则从数据库获取（兜底方案）
+            info!("⚠️ [GET_BATCH_STATUS] 内存中无数据，从数据库获取测试实例");
+            match state.persistence_service.load_test_instances_by_batch(&batch_id).await {
+                Ok(instances) => {
+                    info!("✅ [GET_BATCH_STATUS] 从数据库获取{}个测试实例", instances.len());
+                    instances
+                },
+                Err(e) => {
+                    error!("❌ [GET_BATCH_STATUS] 获取测试实例失败: {}", e);
+                    return Err(format!("获取测试实例失败: {}", e));
+                }
+            }
         }
     };
 
