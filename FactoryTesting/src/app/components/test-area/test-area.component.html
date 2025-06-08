@@ -370,13 +370,15 @@
                 </td>
                 <td>
                   <nz-button-group>
-                    <button 
-                      nz-button 
-                      nzType="primary" 
+                    <button
+                      nz-button
+                      nzType="primary"
                       nzSize="small"
-                      [disabled]="instance.overall_status === OverallTestStatus.HardPointTesting">
-                      <i nz-icon nzType="play-circle"></i>
-                      开始测试
+                      [disabled]="isChannelTestDisabled(instance)"
+                      [nzLoading]="instance.overall_status === OverallTestStatus.HardPointTesting"
+                      (click)="startSingleChannelTest(instance)">
+                      <i nz-icon nzType="play-circle" *ngIf="instance.overall_status !== OverallTestStatus.HardPointTesting"></i>
+                      {{ getChannelTestButtonText(instance) }}
                     </button>
                     <button 
                       nz-button 

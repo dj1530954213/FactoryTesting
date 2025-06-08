@@ -168,6 +168,16 @@ impl AIHardPointPercentExecutor {
             definition.tag,
             if overall_success { "通过" } else { "失败" });
 
+        // 🔄 测试完成后复位测试PLC输出为0%
+        let test_rig_address = self.get_test_rig_address_for_channel(instance)?;
+        info!("🔄 测试完成，复位测试PLC [{}]: 0.00", test_rig_address);
+        if let Err(e) = test_rig_plc.write_float32(&test_rig_address, 0.0).await {
+            // 复位失败不影响测试结果，只记录警告
+            log::warn!("⚠️ 测试PLC复位失败: {}", e);
+        } else {
+            info!("✅ 测试PLC已复位为0%");
+        }
+
         // 提取百分比测试结果 - 存储实际工程量 (转换f32到f64)
         // 🔧 关键修复：无论测试成功还是失败，都要保存过程数据
         let test_result_0_percent = readings.get(0).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
@@ -974,6 +984,16 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         outcome.test_result_50_percent = analog_readings.get(2).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
         outcome.test_result_75_percent = analog_readings.get(3).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
         outcome.test_result_100_percent = analog_readings.get(4).and_then(|r| r.actual_reading_eng.map(|v| v as f64));
+
+        // 🔄 测试完成后复位被测PLC的AO输出为0%
+        let reset_value = range_lower; // 复位为量程下限
+        info!("🔄 测试完成，复位被测PLC AO [{}]: {:.2}", target_ao_address, reset_value);
+        if let Err(e) = plc_service_target.write_float32(target_ao_address, reset_value).await {
+            // 复位失败不影响测试结果，只记录警告
+            log::warn!("⚠️ 被测PLC AO复位失败: {}", e);
+        } else {
+            info!("✅ 被测PLC AO已复位为量程下限");
+        }
 
         // 🔧 精简日志：移除详细百分比结果日志
 

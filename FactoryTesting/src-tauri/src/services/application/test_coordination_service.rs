@@ -249,6 +249,9 @@ pub trait ITestCoordinationService: Send + Sync {
 
     /// 清理完成的批次
     async fn cleanup_completed_batch(&self, batch_id: &str) -> AppResult<()>;
+
+    /// 开始单个通道的硬点测试
+    async fn start_single_channel_test(&self, instance_id: &str) -> AppResult<()>;
 }
 
 /// 测试协调服务实现
@@ -832,6 +835,73 @@ impl ITestCoordinationService for TestCoordinationService {
 
         batches.remove(batch_id);
         info!("[TestCoordination] 批次 {} 已清理", batch_id);
+        Ok(())
+    }
+
+    /// 开始单个通道的硬点测试
+    async fn start_single_channel_test(&self, instance_id: &str) -> AppResult<()> {
+        info!("开始单个通道硬点测试: {}", instance_id);
+
+        // 1. 从状态管理器获取测试实例
+        let instance = match self.channel_state_manager
+            .get_instance_state(instance_id)
+            .await {
+            Ok(instance) => instance,
+            Err(_) => return Err(AppError::not_found_error("测试实例", instance_id)),
+        };
+
+        // 2. 获取通道定义
+        let definition = self.channel_state_manager
+            .get_channel_definition(&instance.definition_id)
+            .await
+            .ok_or_else(|| AppError::not_found_error("通道定义", &instance.definition_id))?;
+
+        // 3. 检查批次是否在活动列表中，如果不在则加载
+        let batch_id = &instance.test_batch_id;
+        {
+            let batches = self.active_batches.lock().await;
+            if !batches.contains_key(batch_id) {
+                drop(batches);
+                // 加载批次到活动列表
+                self.load_existing_batch(batch_id).await?;
+            }
+        }
+
+        // 4. 获取结果发送器
+        let result_sender = {
+            let batches = self.active_batches.lock().await;
+            let batch_info = batches.get(batch_id)
+                .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
+            batch_info.result_sender.clone()
+        };
+
+        // 5. 发布测试开始事件
+        if let Err(e) = self.event_publisher.publish_test_status_changed(
+            instance_id,
+            instance.overall_status.clone(),
+            OverallTestStatus::HardPointTesting,
+        ).await {
+            warn!("发布测试开始事件失败: {}", e);
+        }
+
+        // 6. 提交单个测试任务
+        let task_id = self.test_execution_engine
+            .submit_test_instance(
+                instance.clone(),
+                definition,
+                result_sender,
+            )
+            .await?;
+
+        // 7. 记录任务映射
+        {
+            let mut batches = self.active_batches.lock().await;
+            if let Some(batch_info) = batches.get_mut(batch_id) {
+                batch_info.task_mappings.insert(instance_id.to_string(), task_id.clone());
+            }
+        }
+
+        info!("单个通道硬点测试任务已提交: {} -> {}", instance_id, task_id);
         Ok(())
     }
 

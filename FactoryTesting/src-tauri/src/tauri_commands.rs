@@ -382,6 +382,18 @@ pub async fn cleanup_completed_batch(
         .map_err(|e| e.to_string())
 }
 
+/// 开始单个通道的硬点测试
+#[tauri::command]
+pub async fn start_single_channel_test(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<(), String> {
+    state.test_coordination_service
+        .start_single_channel_test(&instance_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 创建测试数据 - 用于调试批次分配功能
 #[tauri::command]
 pub async fn create_test_data(

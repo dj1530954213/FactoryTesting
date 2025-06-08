@@ -1465,5 +1465,45 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     return shouldShow;
   }
 
+  /**
+   * 检查单个通道测试按钮是否应该禁用
+   */
+  isChannelTestDisabled(instance: ChannelTestInstance): boolean {
+    // 当状态为"通过"或"测试中"时禁用按钮
+    return instance.overall_status === OverallTestStatus.TestCompletedPassed ||
+           instance.overall_status === OverallTestStatus.HardPointTesting;
+  }
+
+  /**
+   * 获取单个通道测试按钮的文本
+   */
+  getChannelTestButtonText(instance: ChannelTestInstance): string {
+    if (instance.overall_status === OverallTestStatus.HardPointTesting) {
+      return '测试中...';
+    }
+    return '硬点重测';
+  }
+
+  /**
+   * 开始单个通道的硬点测试
+   */
+  async startSingleChannelTest(instance: ChannelTestInstance): Promise<void> {
+    try {
+      console.log('🚀 [TEST_AREA] 开始单个通道硬点测试:', instance.instance_id);
+
+      // 调用后端API开始单个通道测试
+      await firstValueFrom(this.tauriApiService.startSingleChannelTest(instance.instance_id));
+
+      console.log('✅ [TEST_AREA] 单个通道硬点测试已启动:', instance.instance_id);
+
+      // 可选：显示成功消息
+      // this.message.success('硬点测试已启动');
+
+    } catch (error) {
+      console.error('❌ [TEST_AREA] 启动单个通道硬点测试失败:', error);
+      this.message.error(`启动硬点测试失败: ${error}`);
+    }
+  }
+
 
 }

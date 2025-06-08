@@ -112,6 +112,13 @@ export class TauriApiService {
   }
 
   /**
+   * 开始单个通道的硬点测试
+   */
+  startSingleChannelTest(instanceId: string): Observable<void> {
+    return from(invoke<void>('start_single_channel_test', { instanceId }));
+  }
+
+  /**
    * 创建测试数据 - 用于调试批次分配功能
    */
   createTestData(): Observable<ChannelPointDefinition[]> {

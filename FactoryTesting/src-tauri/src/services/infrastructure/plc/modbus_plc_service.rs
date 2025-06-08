@@ -45,20 +45,84 @@ impl Default for ByteOrder {
     }
 }
 
-// 临时的 ByteOrderConverter 桩，实际应使用项目中的实现
+// ByteOrderConverter 实现
 struct ByteOrderConverter;
 impl ByteOrderConverter {
-    #[allow(dead_code)]
-    fn registers_to_float(_reg1: u16, _reg2: u16, _order: ByteOrder) -> f32 {
-        // TODO: 实现实际的字节序转换逻辑
-        0.0
+    /// 将两个寄存器转换为 float32
+    fn registers_to_float(reg1: u16, reg2: u16, order: ByteOrder) -> f32 {
+        let bytes = match order {
+            ByteOrder::ABCD => {
+                // 高字在前，高字节在前：[reg1_high, reg1_low, reg2_high, reg2_low]
+                [
+                    (reg1 >> 8) as u8,
+                    (reg1 & 0xFF) as u8,
+                    (reg2 >> 8) as u8,
+                    (reg2 & 0xFF) as u8,
+                ]
+            },
+            ByteOrder::CDAB => {
+                // 低字在前，高字节在前：[reg2_high, reg2_low, reg1_high, reg1_low]
+                [
+                    (reg2 >> 8) as u8,
+                    (reg2 & 0xFF) as u8,
+                    (reg1 >> 8) as u8,
+                    (reg1 & 0xFF) as u8,
+                ]
+            },
+            ByteOrder::BADC => {
+                // 高字在前，低字节在前：[reg1_low, reg1_high, reg2_low, reg2_high]
+                [
+                    (reg1 & 0xFF) as u8,
+                    (reg1 >> 8) as u8,
+                    (reg2 & 0xFF) as u8,
+                    (reg2 >> 8) as u8,
+                ]
+            },
+            ByteOrder::DCBA => {
+                // 低字在前，低字节在前：[reg2_low, reg2_high, reg1_low, reg1_high]
+                [
+                    (reg2 & 0xFF) as u8,
+                    (reg2 >> 8) as u8,
+                    (reg1 & 0xFF) as u8,
+                    (reg1 >> 8) as u8,
+                ]
+            },
+        };
+
+        f32::from_be_bytes(bytes)
     }
-    #[allow(dead_code)]
-    fn float_to_registers(_value: f32, _order: ByteOrder) -> (u16, u16) {
-        // TODO: 实现实际的字节序转换逻辑
-        (0, 0)
+
+    /// 将 float32 转换为两个寄存器
+    fn float_to_registers(value: f32, order: ByteOrder) -> (u16, u16) {
+        let bytes = value.to_be_bytes();
+
+        match order {
+            ByteOrder::ABCD => {
+                // 高字在前，高字节在前：[bytes[0], bytes[1], bytes[2], bytes[3]]
+                let reg1 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                let reg2 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                (reg1, reg2)
+            },
+            ByteOrder::CDAB => {
+                // 低字在前，高字节在前：[bytes[2], bytes[3], bytes[0], bytes[1]]
+                let reg1 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                let reg2 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                (reg1, reg2)
+            },
+            ByteOrder::BADC => {
+                // 高字在前，低字节在前：[bytes[1], bytes[0], bytes[3], bytes[2]]
+                let reg1 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                let reg2 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                (reg1, reg2)
+            },
+            ByteOrder::DCBA => {
+                // 低字在前，低字节在前：[bytes[3], bytes[2], bytes[1], bytes[0]]
+                let reg1 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                let reg2 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                (reg1, reg2)
+            },
+        }
     }
-    // 其他转换方法...
 }
 
 
@@ -671,6 +735,20 @@ impl PlcCommunicationService for ModbusPlcService {
         let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
         let registers_to_write = [reg1, reg2];
 
+        // 🔍 详细调试信息：打印写入的寄存器内容
+        log::info!("🔍 [ModbusPlcService] Float32写入调试信息:");
+        log::info!("   原始值: {}", value);
+        log::info!("   字节序: {:?}", self.config.byte_order);
+        log::info!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
+        log::info!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
+        log::info!("   目标地址: {}, 偏移: {}", address, reg_offset);
+
+        // 🔍 将float32转换为字节数组来查看内存布局
+        let bytes = value.to_le_bytes();
+        log::info!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
+        let bytes_be = value.to_be_bytes();
+        log::info!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
+
         let start_time = chrono::Utc::now();
         let modbus_io_result = ctx.write_multiple_registers(reg_offset, &registers_to_write).await;
 
@@ -957,6 +1035,7 @@ impl ModbusPlcService {
                     return match addr_type {
                         '4' => { // 保持寄存器
                             log::debug!("📖 [ModbusPlcService] 读取保持寄存器Float32: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
+                            log::debug!("test");
                             match context.read_holding_registers(reg_offset, 2).await {
                                 Ok(Ok(values)) => {
                                     if values.len() < 2 {
@@ -1063,6 +1142,20 @@ impl ModbusPlcService {
 
                             let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
                             let registers_to_write = [reg1, reg2];
+
+                            // 🔍 详细调试信息：打印写入的寄存器内容 (管理器方法)
+                            log::info!("🔍 [ModbusPlcService] Float32写入调试信息(管理器):");
+                            log::info!("   原始值: {}", value);
+                            log::info!("   字节序: {:?}", self.config.byte_order);
+                            log::info!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
+                            log::info!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
+                            log::info!("   目标地址: {}, 偏移: {}", address, reg_offset);
+
+                            // 🔍 将float32转换为字节数组来查看内存布局
+                            let bytes = value.to_le_bytes();
+                            log::info!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
+                            let bytes_be = value.to_be_bytes();
+                            log::info!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
 
                             match context.write_multiple_registers(reg_offset, &registers_to_write).await {
                                 Ok(_) => {

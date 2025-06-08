@@ -135,6 +135,7 @@ pub fn run() {
                 tauri_commands::get_batch_results,
                 tauri_commands::get_session_batches,
                 tauri_commands::cleanup_completed_batch,
+                tauri_commands::start_single_channel_test,
                 tauri_commands::create_test_data,
                 // 数据管理相关命令
                 tauri_commands::import_excel_file,

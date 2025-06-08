@@ -529,8 +529,31 @@ impl IChannelStateManager for ChannelStateManager {
 
     /// 获取测试实例状态
     async fn get_instance_state(&self, instance_id: &str) -> AppResult<ChannelTestInstance> {
-        // TODO: 从持久化服务获取实例状态
-        Err(AppError::not_found_error("测试实例", &format!("测试实例未找到: {}", instance_id)))
+        // 首先尝试从内存缓存获取
+        {
+            let cache = self.test_instances_cache.read().unwrap();
+            if let Some(instance) = cache.get(instance_id) {
+                return Ok(instance.clone());
+            }
+        }
+
+        // 如果缓存中没有，尝试从数据库加载
+        match self.persistence_service.load_test_instance(instance_id).await {
+            Ok(Some(instance)) => {
+                // 加载成功后，将实例存储到缓存中
+                {
+                    let mut cache = self.test_instances_cache.write().unwrap();
+                    cache.insert(instance_id.to_string(), instance.clone());
+                }
+                Ok(instance)
+            }
+            Ok(None) => {
+                Err(AppError::not_found_error("测试实例", instance_id))
+            }
+            Err(_) => {
+                Err(AppError::not_found_error("测试实例", instance_id))
+            }
+        }
     }
 
     /// 更新测试结果
