@@ -106,6 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         test_result_75_percent: Some(75.1),
         test_result_100_percent: Some(99.9),
         details: HashMap::new(),
+        digital_steps: None,
     };
     
     println!("✅ 创建硬点测试结果，包含5个百分比测试点");

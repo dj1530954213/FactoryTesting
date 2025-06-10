@@ -10,8 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 检查数据库中的 digital_test_steps_json 数据...");
     
     // 首先检查表结构
-    let table_info = db.execute_unprepared("PRAGMA table_info(channel_test_instances);").await?;
-    println!("📋 channel_test_instances 表结构:");
+    println!("📋 channel_test_instances 表结构检查已跳过（execute_unprepared方法已移除）");
 
     // 查询所有记录，看看实际的字段
     let instances = channel_test_instance::Entity::find()

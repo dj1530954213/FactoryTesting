@@ -252,6 +252,15 @@ pub trait ITestCoordinationService: Send + Sync {
 
     /// 开始单个通道的硬点测试
     async fn start_single_channel_test(&self, instance_id: &str) -> AppResult<()>;
+
+    /// 开始手动测试
+    async fn start_manual_test(&self, request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse>;
+
+    /// 更新手动测试子项状态
+    async fn update_manual_test_subitem(&self, request: crate::models::structs::UpdateManualTestSubItemRequest) -> AppResult<crate::models::structs::UpdateManualTestSubItemResponse>;
+
+    /// 获取手动测试状态
+    async fn get_manual_test_status(&self, instance_id: &str) -> AppResult<Option<crate::models::structs::ManualTestStatus>>;
 }
 
 /// 测试协调服务实现
@@ -327,12 +336,12 @@ impl TestCoordinationService {
                     // 移除冗余的测试结果接收日志
 
                     // 保存结果到持久化存储
-                    if let Err(e) = persistence_service.save_test_outcome(&result).await {
+                    if let Err(_e) = persistence_service.save_test_outcome(&result).await {
                         // 🔧 移除 [TestCoordination] 日志
                     }
 
                     // ===== 关键修复：更新 ChannelStateManager 中的测试实例状态 =====
-                    if let Err(e) = channel_state_manager.update_test_result(result.clone()).await {
+                    if let Err(_e) = channel_state_manager.update_test_result(result.clone()).await {
                         // 🔧 移除 [TestCoordination] 日志
                     } else {
                         // 🔧 移除 [TestCoordination] 日志
@@ -903,6 +912,87 @@ impl ITestCoordinationService for TestCoordinationService {
 
         info!("单个通道硬点测试任务已提交: {} -> {}", instance_id, task_id);
         Ok(())
+    }
+
+    /// 开始手动测试
+    async fn start_manual_test(&self, request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse> {
+        info!("🔧 [TEST_COORDINATION] 开始手动测试: {:?}", request);
+
+        // 创建手动测试状态
+        let test_status = crate::models::structs::ManualTestStatus::new(
+            request.instance_id.clone(),
+            request.module_type.clone(),
+            request.operator_name.clone(),
+        );
+
+        // 更新实例状态为手动测试进行中
+        if let Err(e) = self.channel_state_manager.update_overall_status(
+            &request.instance_id,
+            crate::models::enums::OverallTestStatus::ManualTestInProgress,
+        ).await {
+            warn!("⚠️ [TEST_COORDINATION] 更新实例状态失败: {}", e);
+        }
+
+        Ok(crate::models::structs::StartManualTestResponse {
+            success: true,
+            message: Some("手动测试已启动".to_string()),
+            test_status: Some(test_status),
+        })
+    }
+
+    /// 更新手动测试子项状态
+    async fn update_manual_test_subitem(&self, request: crate::models::structs::UpdateManualTestSubItemRequest) -> AppResult<crate::models::structs::UpdateManualTestSubItemResponse> {
+        info!("🔧 [TEST_COORDINATION] 更新手动测试子项: {:?}", request);
+
+        // 创建手动测试状态（在实际实现中应该从状态管理器获取）
+        let mut test_status = crate::models::structs::ManualTestStatus::new(
+            request.instance_id.clone(),
+            crate::models::enums::ModuleType::AI, // 默认类型，实际应该从数据库获取
+            Some("操作员".to_string()),
+        );
+
+        // 更新子项状态
+        let updated = test_status.update_sub_item(
+            request.sub_item.clone(),
+            request.status.clone(),
+            request.operator_notes.clone(),
+            request.skip_reason.clone(),
+        );
+
+        // 检查是否所有子项都已完成
+        let is_completed = test_status.is_all_completed();
+
+        // 如果测试完成，更新实例状态
+        if is_completed {
+            if let Err(e) = self.channel_state_manager.update_overall_status(
+                &request.instance_id,
+                crate::models::enums::OverallTestStatus::TestCompletedPassed, // 简化处理，实际应该根据结果判断
+            ).await {
+                warn!("⚠️ [TEST_COORDINATION] 更新实例完成状态失败: {}", e);
+            }
+        }
+
+        Ok(crate::models::structs::UpdateManualTestSubItemResponse {
+            success: updated,
+            message: Some("子项状态已更新".to_string()),
+            test_status: Some(test_status.clone()),
+            is_completed: Some(is_completed),
+        })
+    }
+
+    /// 获取手动测试状态
+    async fn get_manual_test_status(&self, instance_id: &str) -> AppResult<Option<crate::models::structs::ManualTestStatus>> {
+        info!("🔧 [TEST_COORDINATION] 获取手动测试状态: {}", instance_id);
+
+        // 在实际实现中，这里应该从状态管理器或数据库获取真实的测试状态
+        // 目前返回一个模拟状态
+        let test_status = crate::models::structs::ManualTestStatus::new(
+            instance_id.to_string(),
+            crate::models::enums::ModuleType::AI,
+            Some("操作员".to_string()),
+        );
+
+        Ok(Some(test_status))
     }
 
 }

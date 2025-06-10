@@ -155,6 +155,7 @@ async fn main() -> Result<(), AppError> {
         transient_data: HashMap::new(),
         test_plc_channel_tag: Some("TEST_AI_01".to_string()),
         test_plc_communication_address: Some("40001".to_string()),
+        digital_test_steps: None,
     };
     
     println!("✅ 创建测试实例: {}", test_instance.instance_id);
@@ -195,6 +196,7 @@ async fn main() -> Result<(), AppError> {
         test_result_75_percent: Some(75.1),
         test_result_100_percent: Some(99.9),
         details: HashMap::new(),
+        digital_steps: None,
     };
     
     println!("✅ 创建硬点测试结果");

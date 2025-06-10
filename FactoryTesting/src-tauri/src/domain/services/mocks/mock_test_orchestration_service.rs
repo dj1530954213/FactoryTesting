@@ -147,4 +147,72 @@ impl ITestOrchestrationService for MockTestOrchestrationService {
         self.simulate_delay().await;
         Ok(())
     }
+
+    async fn start_manual_test(&self, _request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse> {
+        self.simulate_delay().await;
+
+        if self.should_inject_error() {
+            return Err(crate::utils::error::AppError::MockError("Injected error".to_string()));
+        }
+
+        // 创建Mock手动测试状态
+        let test_status = crate::models::structs::ManualTestStatus::new(
+            _request.instance_id.clone(),
+            _request.module_type.clone(),
+            _request.operator_name.clone(),
+        );
+
+        Ok(crate::models::structs::StartManualTestResponse {
+            success: true,
+            message: Some("手动测试已启动".to_string()),
+            test_status: Some(test_status),
+        })
+    }
+
+    async fn update_manual_test_subitem(&self, _request: crate::models::structs::UpdateManualTestSubItemRequest) -> AppResult<crate::models::structs::UpdateManualTestSubItemResponse> {
+        self.simulate_delay().await;
+
+        if self.should_inject_error() {
+            return Err(crate::utils::error::AppError::MockError("Injected error".to_string()));
+        }
+
+        // 创建Mock更新响应
+        let mut test_status = crate::models::structs::ManualTestStatus::new(
+            _request.instance_id.clone(),
+            crate::models::enums::ModuleType::AI, // 默认类型
+            Some("Mock操作员".to_string()),
+        );
+
+        // 更新子项状态
+        let updated = test_status.update_sub_item(
+            _request.sub_item.clone(),
+            _request.status.clone(),
+            _request.operator_notes.clone(),
+            _request.skip_reason.clone(),
+        );
+
+        Ok(crate::models::structs::UpdateManualTestSubItemResponse {
+            success: updated,
+            message: Some("子项状态已更新".to_string()),
+            test_status: Some(test_status.clone()),
+            is_completed: Some(test_status.is_all_completed()),
+        })
+    }
+
+    async fn get_manual_test_status(&self, _instance_id: &str) -> AppResult<Option<crate::models::structs::ManualTestStatus>> {
+        self.simulate_delay().await;
+
+        if self.should_inject_error() {
+            return Err(crate::utils::error::AppError::MockError("Injected error".to_string()));
+        }
+
+        // 返回Mock状态
+        let test_status = crate::models::structs::ManualTestStatus::new(
+            _instance_id.to_string(),
+            crate::models::enums::ModuleType::AI,
+            Some("Mock操作员".to_string()),
+        );
+
+        Ok(Some(test_status))
+    }
 }

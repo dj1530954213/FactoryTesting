@@ -226,6 +226,9 @@ pub trait EventPublisher: BaseService {
     
     /// 发布错误事件
     async fn publish_error(&self, error: &crate::utils::error::AppError) -> AppResult<()>;
+
+    /// 发布自定义事件
+    async fn publish_custom(&self, event_name: &str, payload: serde_json::Value) -> AppResult<()>;
 }
 
 /// 服务容器trait - 用于依赖注入

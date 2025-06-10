@@ -64,8 +64,11 @@ pub struct PlcMonitoringData {
 /// 手动测试请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartManualTestRequest {
+    #[serde(rename = "instanceId")]
     pub instance_id: String,
+    #[serde(rename = "moduleType")]
     pub module_type: ModuleType,
+    #[serde(rename = "operatorName")]
     pub operator_name: Option<String>,
 }
 
@@ -80,10 +83,14 @@ pub struct StartManualTestResponse {
 /// 更新手动测试子项请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateManualTestSubItemRequest {
+    #[serde(rename = "instanceId")]
     pub instance_id: String,
+    #[serde(rename = "subItem")]
     pub sub_item: ManualTestSubItem,
     pub status: ManualTestSubItemStatus,
+    #[serde(rename = "operatorNotes")]
     pub operator_notes: Option<String>,
+    #[serde(rename = "skipReason")]
     pub skip_reason: Option<String>,
 }
 
@@ -99,8 +106,11 @@ pub struct UpdateManualTestSubItemResponse {
 /// PLC监控请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartPlcMonitoringRequest {
+    #[serde(rename = "instanceId")]
     pub instance_id: String,
+    #[serde(rename = "moduleType")]
     pub module_type: ModuleType,
+    #[serde(rename = "monitoringAddresses")]
     pub monitoring_addresses: Vec<String>,
 }
 
@@ -115,7 +125,9 @@ pub struct StartPlcMonitoringResponse {
 /// 停止PLC监控请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopPlcMonitoringRequest {
+    #[serde(rename = "instanceId")]
     pub instance_id: String,
+    #[serde(rename = "monitoringId")]
     pub monitoring_id: Option<String>,
 }
 
@@ -165,6 +177,46 @@ impl ManualTestConfig {
                 ],
                 plc_monitoring_required: true,
                 monitoring_interval: 500,
+            },
+            // 无源模块类型
+            ModuleType::AINone => Self {
+                module_type: ModuleType::AINone,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                    ManualTestSubItem::TrendCheck,
+                    ManualTestSubItem::ReportCheck,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+            ModuleType::AONone => Self {
+                module_type: ModuleType::AONone,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                    ManualTestSubItem::TrendCheck,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+            ModuleType::DINone | ModuleType::DONone => Self {
+                module_type,
+                applicable_sub_items: vec![
+                    ManualTestSubItem::ShowValueCheck,
+                ],
+                plc_monitoring_required: true,
+                monitoring_interval: 500,
+            },
+            ModuleType::Communication => Self {
+                module_type: ModuleType::Communication,
+                applicable_sub_items: vec![], // 通信模块暂不支持手动测试
+                plc_monitoring_required: false,
+                monitoring_interval: 1000,
+            },
+            ModuleType::Other(_) => Self {
+                module_type,
+                applicable_sub_items: vec![], // 其他类型模块暂不支持手动测试
+                plc_monitoring_required: false,
+                monitoring_interval: 1000,
             },
         }
     }

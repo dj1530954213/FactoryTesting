@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::Utc;
-use log::{info, error, warn, debug, trace};
+use log::{info, error, warn, trace};
 
 /// 通道状态管理器接口
 #[async_trait]
@@ -117,21 +117,22 @@ impl ChannelStateManager {
         let mut has_manual_tests = false;
         let mut manual_tests_completed = true;
 
-        trace!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
+        // 移除详细的状态评估日志，避免日志过多
+        // trace!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
 
         // 遍历所有子测试结果
         for (sub_test_item, result) in &instance.sub_test_results {
-            trace!("🔍 [EVALUATE_STATUS] 检查子测试: {:?} -> {:?}", sub_test_item, result.status);
+            // trace!("🔍 [EVALUATE_STATUS] 检查子测试: {:?} -> {:?}", sub_test_item, result.status);
 
             match result.status {
                 SubTestStatus::Failed => {
-                    trace!("🔍 [EVALUATE_STATUS] 发现失败测试: {:?}", sub_test_item);
+                    // trace!("🔍 [EVALUATE_STATUS] 发现失败测试: {:?}", sub_test_item);
                     any_failed = true;
                     all_required_passed = false;
                 }
                 SubTestStatus::NotTested => {
                     if self.is_required_test(sub_test_item) {
-                        trace!("🔍 [EVALUATE_STATUS] 必需测试未完成: {:?}", sub_test_item);
+                        // trace!("🔍 [EVALUATE_STATUS] 必需测试未完成: {:?}", sub_test_item);
                         all_required_passed = false;
                     }
                     if self.is_manual_test(sub_test_item) {
@@ -139,7 +140,7 @@ impl ChannelStateManager {
                     }
                 }
                 SubTestStatus::Passed => {
-                    trace!("🔍 [EVALUATE_STATUS] 测试通过: {:?}", sub_test_item);
+                    // trace!("🔍 [EVALUATE_STATUS] 测试通过: {:?}", sub_test_item);
                     if *sub_test_item == SubTestItem::HardPoint {
                         hard_point_completed = true;
                     }
@@ -157,33 +158,34 @@ impl ChannelStateManager {
             }
         }
 
-        trace!("🔍 [EVALUATE_STATUS] 状态评估结果:");
-        trace!("   - any_failed: {}", any_failed);
-        trace!("   - all_required_passed: {}", all_required_passed);
-        trace!("   - hard_point_completed: {}", hard_point_completed);
-        trace!("   - has_manual_tests: {}", has_manual_tests);
-        trace!("   - manual_tests_completed: {}", manual_tests_completed);
+        // 移除详细的状态评估日志，避免日志过多
+        // trace!("🔍 [EVALUATE_STATUS] 状态评估结果:");
+        // trace!("   - any_failed: {}", any_failed);
+        // trace!("   - all_required_passed: {}", all_required_passed);
+        // trace!("   - hard_point_completed: {}", hard_point_completed);
+        // trace!("   - has_manual_tests: {}", has_manual_tests);
+        // trace!("   - manual_tests_completed: {}", manual_tests_completed);
 
         // 根据状态机规则更新整体状态
         let new_status = if any_failed {
-            trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
+            // trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
             OverallTestStatus::TestCompletedFailed
         } else if all_required_passed {
-            trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
+            // trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
             OverallTestStatus::TestCompletedPassed
         } else if hard_point_completed && has_manual_tests && !manual_tests_completed {
-            trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
+            // trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
             OverallTestStatus::HardPointTestCompleted
         } else if hard_point_completed {
-            trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
+            // trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
             OverallTestStatus::HardPointTestCompleted
         } else {
-            trace!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
+            // trace!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
             OverallTestStatus::NotTested
         };
 
         instance.overall_status = new_status;
-        trace!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
+        // trace!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
 
         // 如果测试完成，更新时间戳
         if matches!(instance.overall_status, 

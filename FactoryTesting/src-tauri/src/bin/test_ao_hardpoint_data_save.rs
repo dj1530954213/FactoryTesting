@@ -120,6 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         test_result_75_percent: Some(2.98),
         test_result_100_percent: Some(3.97),
         details: HashMap::new(),
+        digital_steps: None,
     };
     
     println!("📊 创建AO硬点测试结果:");

@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzModalModule } from 'ng-zorro-antd/modal';
@@ -119,7 +119,7 @@ import { DoManualTestComponent } from './do-manual-test.component';
 
               <!-- 不支持的模块类型 -->
               <div *ngIf="!isSupportedModuleType()" class="unsupported-type">
-                <nz-icon nzType="exclamation-circle" nzTheme="outline"></nz-icon>
+                <span nz-icon nzType="exclamation-circle" nzTheme="outline" class="warning-icon"></span>
                 <p>不支持的模块类型: {{ definition?.module_type }}</p>
               </div>
             </div>
@@ -131,7 +131,7 @@ import { DoManualTestComponent } from './do-manual-test.component';
   `,
   styleUrls: ['./manual-test-modal.component.css']
 })
-export class ManualTestModalComponent implements OnInit, OnDestroy {
+export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
   @Input() visible = false;
   @Input() instance: ChannelTestInstance | null = null;
   @Input() definition: ChannelPointDefinition | null = null;
@@ -181,10 +181,10 @@ export class ManualTestModalComponent implements OnInit, OnDestroy {
   /**
    * 监听visible变化，当模态框打开时初始化测试
    */
-  ngOnChanges(): void {
-    if (this.visible && this.instance && this.definition) {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['visible'] && this.visible && this.instance && this.definition) {
       this.initializeManualTest();
-    } else if (!this.visible) {
+    } else if (changes['visible'] && !this.visible) {
       this.cleanup();
     }
   }
@@ -263,37 +263,60 @@ export class ManualTestModalComponent implements OnInit, OnDestroy {
     const addresses: string[] = [];
     const moduleType = this.definition.module_type as ModuleType;
 
+    // 使用真实的Modbus通信地址（如40001）
+    const baseAddress = this.definition.plc_communication_address;
+    if (!baseAddress) {
+      console.warn('⚠️ [MANUAL_TEST_MODAL] 通道定义缺少PLC通信地址:', this.definition.tag);
+      return [];
+    }
+
+    console.log('🔧 [MANUAL_TEST_MODAL] 获取监控地址 - 点位:', this.definition.tag, '地址:', baseAddress, '类型:', moduleType);
+
     switch (moduleType) {
       case ModuleType.AI:
-        // AI点位需要监控报警设定值
+        // AI点位监控当前值
+        addresses.push(baseAddress);
+
+        // 添加AI点位的报警设定值地址
         if (this.definition.sll_set_point_communication_address) {
           addresses.push(this.definition.sll_set_point_communication_address);
+          console.log('📊 [MANUAL_TEST_MODAL] 添加SLL设定值地址:', this.definition.sll_set_point_communication_address);
         }
         if (this.definition.sl_set_point_communication_address) {
           addresses.push(this.definition.sl_set_point_communication_address);
+          console.log('📊 [MANUAL_TEST_MODAL] 添加SL设定值地址:', this.definition.sl_set_point_communication_address);
         }
         if (this.definition.sh_set_point_communication_address) {
           addresses.push(this.definition.sh_set_point_communication_address);
+          console.log('📊 [MANUAL_TEST_MODAL] 添加SH设定值地址:', this.definition.sh_set_point_communication_address);
         }
         if (this.definition.shh_set_point_communication_address) {
           addresses.push(this.definition.shh_set_point_communication_address);
+          console.log('📊 [MANUAL_TEST_MODAL] 添加SHH设定值地址:', this.definition.shh_set_point_communication_address);
         }
-        // 当前值
-        if (this.definition.plc_communication_address) {
-          addresses.push(this.definition.plc_communication_address);
-        }
+
+        console.log('📊 [MANUAL_TEST_MODAL] AI点位监控地址列表:', addresses);
         break;
 
       case ModuleType.AO:
+        // AO点位监控当前输出值
+        addresses.push(baseAddress);
+        console.log('📊 [MANUAL_TEST_MODAL] AO点位监控地址:', baseAddress);
+        break;
+
       case ModuleType.DI:
       case ModuleType.DO:
-        // AO/DI/DO点位监控当前值
-        if (this.definition.plc_communication_address) {
-          addresses.push(this.definition.plc_communication_address);
-        }
+        // DI/DO点位监控当前状态
+        addresses.push(baseAddress);
+        console.log('📊 [MANUAL_TEST_MODAL] 数字量点位监控地址:', baseAddress);
+        break;
+
+      default:
+        console.warn('⚠️ [MANUAL_TEST_MODAL] 不支持的模块类型:', moduleType);
         break;
     }
 
+    console.log('✅ [MANUAL_TEST_MODAL] 最终监控地址列表:', addresses);
     return addresses;
   }
 

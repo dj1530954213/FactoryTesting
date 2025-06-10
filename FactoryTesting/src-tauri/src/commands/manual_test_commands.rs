@@ -12,19 +12,18 @@ use crate::models::structs::{
     StopPlcMonitoringRequest,
     ManualTestStatus,
 };
-use crate::services::application::ITestOrchestrationService;
+use crate::services::application::ITestCoordinationService;
 use crate::services::infrastructure::IPlcMonitoringService;
-use crate::errors::AppError;
 
 /// 开始手动测试命令
 #[tauri::command]
 pub async fn start_manual_test_cmd(
     request: StartManualTestRequest,
-    orchestration_service: State<'_, Arc<dyn ITestOrchestrationService>>,
+    app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<StartManualTestResponse, String> {
     info!("🔧 [MANUAL_TEST_CMD] 开始手动测试: {:?}", request);
 
-    match orchestration_service.start_manual_test(request).await {
+    match app_state.test_coordination_service.start_manual_test(request).await {
         Ok(response) => {
             info!("✅ [MANUAL_TEST_CMD] 手动测试启动成功");
             Ok(response)
@@ -40,11 +39,11 @@ pub async fn start_manual_test_cmd(
 #[tauri::command]
 pub async fn update_manual_test_subitem_cmd(
     request: UpdateManualTestSubItemRequest,
-    orchestration_service: State<'_, Arc<dyn ITestOrchestrationService>>,
+    app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<UpdateManualTestSubItemResponse, String> {
     info!("🔧 [MANUAL_TEST_CMD] 更新手动测试子项: {:?}", request);
 
-    match orchestration_service.update_manual_test_subitem(request).await {
+    match app_state.test_coordination_service.update_manual_test_subitem(request).await {
         Ok(response) => {
             info!("✅ [MANUAL_TEST_CMD] 手动测试子项更新成功");
             Ok(response)
@@ -60,11 +59,11 @@ pub async fn update_manual_test_subitem_cmd(
 #[tauri::command]
 pub async fn get_manual_test_status_cmd(
     instance_id: String,
-    orchestration_service: State<'_, Arc<dyn ITestOrchestrationService>>,
+    app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<serde_json::Value, String> {
     info!("🔧 [MANUAL_TEST_CMD] 获取手动测试状态: {}", instance_id);
 
-    match orchestration_service.get_manual_test_status(&instance_id).await {
+    match app_state.test_coordination_service.get_manual_test_status(&instance_id).await {
         Ok(status) => {
             info!("✅ [MANUAL_TEST_CMD] 获取手动测试状态成功");
             Ok(serde_json::json!({
@@ -83,11 +82,11 @@ pub async fn get_manual_test_status_cmd(
 #[tauri::command]
 pub async fn start_plc_monitoring_cmd(
     request: StartPlcMonitoringRequest,
-    monitoring_service: State<'_, Arc<dyn IPlcMonitoringService>>,
+    app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<StartPlcMonitoringResponse, String> {
     info!("🔧 [MANUAL_TEST_CMD] 开始PLC监控: {:?}", request);
 
-    match monitoring_service.start_monitoring(request).await {
+    match app_state.plc_monitoring_service.start_monitoring(request).await {
         Ok(response) => {
             info!("✅ [MANUAL_TEST_CMD] PLC监控启动成功");
             Ok(response)
@@ -103,11 +102,11 @@ pub async fn start_plc_monitoring_cmd(
 #[tauri::command]
 pub async fn stop_plc_monitoring_cmd(
     request: StopPlcMonitoringRequest,
-    monitoring_service: State<'_, Arc<dyn IPlcMonitoringService>>,
+    app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<serde_json::Value, String> {
     info!("🔧 [MANUAL_TEST_CMD] 停止PLC监控: {:?}", request);
 
-    match monitoring_service.stop_monitoring(request).await {
+    match app_state.plc_monitoring_service.stop_monitoring(request).await {
         Ok(_) => {
             info!("✅ [MANUAL_TEST_CMD] PLC监控停止成功");
             Ok(serde_json::json!({

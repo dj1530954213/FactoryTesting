@@ -16,6 +16,9 @@ pub mod event_publisher;
 /// PLC监控服务模块
 pub mod plc_monitoring_service;
 
+/// Mock PLC监控服务模块
+pub mod mock_plc_monitoring_service;
+
 // 为后续步骤准备的模块（暂时注释）
 // pub mod excel;
 
@@ -32,6 +35,7 @@ pub use plc::{
 };
 
 // 重新导出PLC监控服务
+pub use mock_plc_monitoring_service::{MockPlcMonitoringService};
 pub use plc_monitoring_service::{IPlcMonitoringService, PlcMonitoringService};
 
 // 重新导出持久化相关接口和实现

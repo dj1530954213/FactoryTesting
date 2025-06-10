@@ -50,6 +50,7 @@ pub struct AppState {
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
     pub plc_connection_manager: Arc<PlcConnectionManager>,
+    pub plc_monitoring_service: Arc<dyn crate::services::infrastructure::IPlcMonitoringService>,
 
     // 会话管理：跟踪当前会话中创建的批次
     pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
@@ -172,7 +173,7 @@ impl AppState {
             TestExecutionEngine::new(
                 10, // 最大并发测试数
                 plc_service_test_rig,
-                plc_service_target,
+                plc_service_target.clone(),
             )
         );
 
@@ -219,6 +220,14 @@ impl AppState {
         // 设置全局PLC连接管理器，让ModbusPlcService能够访问
         crate::services::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
 
+        // 创建PLC监控服务 - 使用真实的PLC监控服务
+        let plc_monitoring_service: Arc<dyn crate::services::infrastructure::IPlcMonitoringService> = Arc::new(
+            crate::services::infrastructure::plc_monitoring_service::PlcMonitoringService::new(
+                plc_service_target.clone(),
+                Arc::new(crate::services::infrastructure::event_publisher::SimpleEventPublisher::new()),
+            )
+        );
+
 
 
         Ok(Self {
@@ -231,6 +240,7 @@ impl AppState {
             test_plc_config_service,
             channel_allocation_service,
             plc_connection_manager,
+            plc_monitoring_service,
 
             // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),

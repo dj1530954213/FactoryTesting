@@ -205,4 +205,9 @@ impl EventPublisher for SimpleEventPublisher {
 
         Ok(())
     }
+
+    /// 发布自定义事件
+    async fn publish_custom(&self, event_name: &str, payload: serde_json::Value) -> AppResult<()> {
+        self.emit_to_frontend(event_name, payload).await
+    }
 }
