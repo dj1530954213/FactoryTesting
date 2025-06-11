@@ -96,18 +96,54 @@ import {
             </div>
             <div class="test-item-content">
               <p>请确认HMI界面显示的数值与实际测量值一致</p>
+
+              <!-- 显示值输入和操作 -->
+              <div class="display-value-section">
+                <div class="value-input-group">
+                  <label>测试值:</label>
+                  <nz-input-group nzCompact>
+                    <input
+                      nz-input
+                      style="width: 120px"
+                      [(ngModel)]="displayTestValue"
+                      [placeholder]="getDisplayValuePlaceholder()"
+                      type="number"
+                      step="0.01">
+                    <button
+                      nz-button
+                      nzType="default"
+                      (click)="generateRandomDisplayValue()"
+                      title="生成随机值">
+                      <i nz-icon nzType="reload"></i>
+                    </button>
+                  </nz-input-group>
+                </div>
+
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isDisplayValueTesting"
+                    (click)="executeDisplayValueTest()">
+                    <i nz-icon nzType="play-circle"></i>
+                    显示值核对测试
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
                   (click)="completeSubItem(ManualTestSubItem.ShowValueCheck)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
                   (click)="skipSubItem(ManualTestSubItem.ShowValueCheck)">
@@ -129,18 +165,43 @@ import {
             <div class="test-item-content">
               <p>设定值: {{ getSllSetPoint() }}</p>
               <p>请确认当数值低于设定值时触发低低报警</p>
+
+              <!-- 报警测试操作 -->
+              <div class="alarm-test-section">
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'LL'"
+                    (click)="executeAlarmTest('LL')">
+                    <i nz-icon nzType="play-circle"></i>
+                    低低报警测试
+                  </button>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'LL_RESET'"
+                    (click)="resetAlarmTest('LL')">
+                    <i nz-icon nzType="reload"></i>
+                    复位
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.LowLowAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.LowLowAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.LowLowAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.LowLowAlarmTest)">
@@ -162,18 +223,43 @@ import {
             <div class="test-item-content">
               <p>设定值: {{ getSlSetPoint() }}</p>
               <p>请确认当数值低于设定值时触发低报警</p>
+
+              <!-- 报警测试操作 -->
+              <div class="alarm-test-section">
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'L'"
+                    (click)="executeAlarmTest('L')">
+                    <i nz-icon nzType="play-circle"></i>
+                    低报警测试
+                  </button>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'L_RESET'"
+                    (click)="resetAlarmTest('L')">
+                    <i nz-icon nzType="reload"></i>
+                    复位
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.LowAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.LowAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.LowAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.LowAlarmTest)">
@@ -195,18 +281,43 @@ import {
             <div class="test-item-content">
               <p>设定值: {{ getShSetPoint() }}</p>
               <p>请确认当数值高于设定值时触发高报警</p>
+
+              <!-- 报警测试操作 -->
+              <div class="alarm-test-section">
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'H'"
+                    (click)="executeAlarmTest('H')">
+                    <i nz-icon nzType="play-circle"></i>
+                    高报警测试
+                  </button>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'H_RESET'"
+                    (click)="resetAlarmTest('H')">
+                    <i nz-icon nzType="reload"></i>
+                    复位
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.HighAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.HighAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.HighAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.HighAlarmTest)">
@@ -228,18 +339,43 @@ import {
             <div class="test-item-content">
               <p>设定值: {{ getShhSetPoint() }}</p>
               <p>请确认当数值高于设定值时触发高高报警</p>
+
+              <!-- 报警测试操作 -->
+              <div class="alarm-test-section">
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'HH'"
+                    (click)="executeAlarmTest('HH')">
+                    <i nz-icon nzType="play-circle"></i>
+                    高高报警测试
+                  </button>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [nzLoading]="isAlarmTesting && currentAlarmType === 'HH_RESET'"
+                    (click)="resetAlarmTest('HH')">
+                    <i nz-icon nzType="reload"></i>
+                    复位
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.HighHighAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.HighHighAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.HighHighAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.HighHighAlarmTest)">
@@ -324,18 +460,43 @@ import {
             </div>
             <div class="test-item-content">
               <p>请确认维护开关和维护值设定功能正常</p>
+
+              <!-- 维护功能测试操作 -->
+              <div class="maintenance-test-section">
+                <div class="test-actions">
+                  <button
+                    nz-button
+                    nzType="primary"
+                    nzSize="small"
+                    [nzLoading]="isMaintenanceTesting"
+                    (click)="executeMaintenanceTest(true)">
+                    <i nz-icon nzType="play-circle"></i>
+                    维护功能启用
+                  </button>
+                  <button
+                    nz-button
+                    nzType="default"
+                    nzSize="small"
+                    [nzLoading]="isMaintenanceTesting"
+                    (click)="executeMaintenanceTest(false)">
+                    <i nz-icon nzType="reload"></i>
+                    维护功能复位
+                  </button>
+                </div>
+              </div>
+
               <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
+                <button
+                  nz-button
+                  nzType="primary"
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
                   (click)="completeSubItem(ManualTestSubItem.MaintenanceFunction)">
                   <i nz-icon nzType="check"></i>
                   确认通过
                 </button>
-                <button 
-                  nz-button 
+                <button
+                  nz-button
                   nzSize="small"
                   [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
                   (click)="skipSubItem(ManualTestSubItem.MaintenanceFunction)">
@@ -393,6 +554,17 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
 
   // 枚举引用（用于模板）
   ManualTestSubItem = ManualTestSubItem;
+
+  // 显示值测试相关
+  displayTestValue: number = 0;
+  isDisplayValueTesting: boolean = false;
+
+  // 报警测试状态
+  isAlarmTesting: boolean = false;
+  currentAlarmType: string = '';
+
+  // 维护功能测试状态
+  isMaintenanceTesting: boolean = false;
 
   constructor(
     private manualTestService: ManualTestService,
@@ -545,5 +717,169 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
         this.testCancelled.emit();
       }
     });
+  }
+
+  // ==================== 新增的AI手动测试方法 ====================
+
+  /**
+   * 获取显示值占位符
+   */
+  getDisplayValuePlaceholder(): string {
+    if (!this.definition) return '请输入测试值';
+    const low = this.definition.range_low_limit || 0;
+    const high = this.definition.range_high_limit || 100;
+    return `${low} - ${high}`;
+  }
+
+  /**
+   * 生成随机显示值
+   */
+  async generateRandomDisplayValue(): Promise<void> {
+    if (!this.instance) {
+      this.message.error('测试实例不存在');
+      return;
+    }
+
+    try {
+      const response = await this.manualTestService.generateRandomDisplayValue(this.instance.instance_id);
+      if (response.success) {
+        this.displayTestValue = response.randomValue;
+        this.message.success(`已生成随机值: ${response.randomValue.toFixed(2)}`);
+      } else {
+        this.message.error(response.message || '生成随机值失败');
+      }
+    } catch (error) {
+      this.message.error(`生成随机值失败: ${error}`);
+    }
+  }
+
+  /**
+   * 执行显示值核对测试
+   */
+  async executeDisplayValueTest(): Promise<void> {
+    if (!this.instance) {
+      this.message.error('测试实例不存在');
+      return;
+    }
+
+    if (this.displayTestValue === null || this.displayTestValue === undefined) {
+      this.message.error('请输入测试值');
+      return;
+    }
+
+    this.isDisplayValueTesting = true;
+    try {
+      const response = await this.manualTestService.executeShowValueTest(
+        this.instance.instance_id,
+        this.displayTestValue
+      );
+
+      if (response.success) {
+        this.message.success(`显示值测试成功: ${response.message}`);
+      } else {
+        this.message.error(response.message || '显示值测试失败');
+      }
+    } catch (error) {
+      this.message.error(`显示值测试失败: ${error}`);
+    } finally {
+      this.isDisplayValueTesting = false;
+    }
+  }
+
+  /**
+   * 执行报警测试
+   */
+  async executeAlarmTest(alarmType: string): Promise<void> {
+    if (!this.instance) {
+      this.message.error('测试实例不存在');
+      return;
+    }
+
+    this.isAlarmTesting = true;
+    this.currentAlarmType = alarmType;
+
+    try {
+      const response = await this.manualTestService.executeAlarmTest(
+        this.instance.instance_id,
+        alarmType
+      );
+
+      if (response.success) {
+        this.message.success(`${alarmType}报警测试成功: ${response.message}`);
+      } else {
+        this.message.error(response.message || `${alarmType}报警测试失败`);
+      }
+    } catch (error) {
+      this.message.error(`${alarmType}报警测试失败: ${error}`);
+    } finally {
+      this.isAlarmTesting = false;
+      this.currentAlarmType = '';
+    }
+  }
+
+  /**
+   * 复位报警测试（恢复到显示值核对的值）
+   */
+  async resetAlarmTest(alarmType: string): Promise<void> {
+    if (!this.instance) {
+      this.message.error('测试实例不存在');
+      return;
+    }
+
+    if (this.displayTestValue === null || this.displayTestValue === undefined) {
+      this.message.error('请先执行显示值核对测试');
+      return;
+    }
+
+    this.isAlarmTesting = true;
+    this.currentAlarmType = `${alarmType}_RESET`;
+
+    try {
+      const response = await this.manualTestService.executeShowValueTest(
+        this.instance.instance_id,
+        this.displayTestValue
+      );
+
+      if (response.success) {
+        this.message.success(`${alarmType}报警复位成功，已恢复到显示值: ${this.displayTestValue.toFixed(2)}`);
+      } else {
+        this.message.error(response.message || `${alarmType}报警复位失败`);
+      }
+    } catch (error) {
+      this.message.error(`${alarmType}报警复位失败: ${error}`);
+    } finally {
+      this.isAlarmTesting = false;
+      this.currentAlarmType = '';
+    }
+  }
+
+  /**
+   * 执行维护功能测试
+   */
+  async executeMaintenanceTest(enable: boolean): Promise<void> {
+    if (!this.instance) {
+      this.message.error('测试实例不存在');
+      return;
+    }
+
+    this.isMaintenanceTesting = true;
+
+    try {
+      const response = await this.manualTestService.executeMaintenanceTest(
+        this.instance.instance_id,
+        enable
+      );
+
+      if (response.success) {
+        const action = enable ? '启用' : '复位';
+        this.message.success(`维护功能${action}成功: ${response.message}`);
+      } else {
+        this.message.error(response.message || '维护功能测试失败');
+      }
+    } catch (error) {
+      this.message.error(`维护功能测试失败: ${error}`);
+    } finally {
+      this.isMaintenanceTesting = false;
+    }
   }
 }

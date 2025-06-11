@@ -273,38 +273,52 @@ impl PlcMonitoringService {
     
     /// 根据地址和模块类型获取值的键名
     fn get_value_key(address: &str, module_type: &crate::models::enums::ModuleType) -> String {
-        // 对于Modbus地址（如40001），根据模块类型映射到对应的键名
+        // 对于Modbus地址，根据模块类型和具体地址映射到对应的键名
         log::debug!("🔧 [PLC_MONITORING] 映射地址键名: {} -> 模块类型: {:?}", address, module_type);
 
         match module_type {
             crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AINone => {
-                // AI点位需要根据地址区分不同的值类型
-                // 使用地址的最后一位数字来区分不同类型的值
+                // AI点位需要根据地址范围区分不同的值类型
+                // 根据实际数据库配置：
+                // - 当前值地址：40000-41000范围
+                // - 报警设定值地址：43000-44000范围
                 if let Ok(addr_num) = address.parse::<u32>() {
-                    let last_digit = addr_num % 10;
-                    match last_digit {
-                        0 | 1 | 2 | 3 => {
+                    match addr_num {
+                        // 当前值地址范围 (40000-41999)
+                        40000..=41999 => {
                             log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为当前值", address);
                             "currentValue".to_string()
                         },
-                        4 => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SLL设定值", address);
-                            "sllSetPoint".to_string()
+                        // 报警设定值地址范围 (43000-44999)
+                        43000..=44999 => {
+                            // 根据地址的最后一位数字区分不同的报警设定值
+                            let last_digit = addr_num % 10;
+                            match last_digit {
+                                1 => {
+                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SLL设定值", address);
+                                    "sllSetPoint".to_string()
+                                },
+                                3 => {
+                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SL设定值", address);
+                                    "slSetPoint".to_string()
+                                },
+                                5 => {
+                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SH设定值", address);
+                                    "shSetPoint".to_string()
+                                },
+                                7 => {
+                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SHH设定值", address);
+                                    "shhSetPoint".to_string()
+                                },
+                                _ => {
+                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 未知报警设定值类型，默认为当前值", address);
+                                    "currentValue".to_string()
+                                }
+                            }
                         },
-                        5 => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SL设定值", address);
-                            "slSetPoint".to_string()
-                        },
-                        6 => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SH设定值", address);
-                            "shSetPoint".to_string()
-                        },
-                        7 => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SHH设定值", address);
-                            "shhSetPoint".to_string()
-                        },
+                        // 其他地址范围默认为当前值
                         _ => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 默认映射为当前值", address);
+                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 不在已知范围内，默认映射为当前值", address);
                             "currentValue".to_string()
                         }
                     }

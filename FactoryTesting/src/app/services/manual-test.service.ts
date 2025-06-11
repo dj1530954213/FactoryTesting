@@ -218,4 +218,91 @@ export class ManualTestService {
     this.currentTestStatus.next(null);
     this.hasActiveTest.next(false);
   }
+
+  // ==================== AI手动测试专用方法 ====================
+
+  /**
+   * 生成随机显示值
+   */
+  async generateRandomDisplayValue(instanceId: string): Promise<{ success: boolean; randomValue: number; message?: string }> {
+    try {
+      console.log('🔧 [MANUAL_TEST_SERVICE] 生成随机显示值:', instanceId);
+
+      const response = await invoke<{ success: boolean; randomValue: number; message?: string }>('generate_random_display_value_cmd', {
+        instanceId
+      });
+
+      console.log('✅ [MANUAL_TEST_SERVICE] 随机值生成结果:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ [MANUAL_TEST_SERVICE] 生成随机显示值失败:', error);
+      throw new Error(`生成随机显示值失败: ${error}`);
+    }
+  }
+
+  /**
+   * 执行显示值核对测试
+   */
+  async executeShowValueTest(instanceId: string, testValue: number): Promise<{ success: boolean; message?: string; sentPercentage?: number; testPlcAddress?: string }> {
+    try {
+      console.log('🔧 [MANUAL_TEST_SERVICE] 执行显示值核对测试:', { instanceId, testValue });
+
+      const response = await invoke<{ success: boolean; message?: string; sentPercentage?: number; testPlcAddress?: string }>('ai_show_value_test_cmd', {
+        request: {
+          instanceId,
+          testValue
+        }
+      });
+
+      console.log('✅ [MANUAL_TEST_SERVICE] 显示值测试结果:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ [MANUAL_TEST_SERVICE] 显示值测试失败:', error);
+      throw new Error(`显示值测试失败: ${error}`);
+    }
+  }
+
+  /**
+   * 执行报警测试
+   */
+  async executeAlarmTest(instanceId: string, alarmType: string): Promise<{ success: boolean; message?: string; sentValue?: number; sentPercentage?: number; testPlcAddress?: string }> {
+    try {
+      console.log('🔧 [MANUAL_TEST_SERVICE] 执行报警测试:', { instanceId, alarmType });
+
+      const response = await invoke<{ success: boolean; message?: string; sentValue?: number; sentPercentage?: number; testPlcAddress?: string }>('ai_alarm_test_cmd', {
+        request: {
+          instanceId,
+          alarmType
+        }
+      });
+
+      console.log('✅ [MANUAL_TEST_SERVICE] 报警测试结果:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ [MANUAL_TEST_SERVICE] 报警测试失败:', error);
+      throw new Error(`报警测试失败: ${error}`);
+    }
+  }
+
+  /**
+   * 执行维护功能测试
+   */
+  async executeMaintenanceTest(instanceId: string, enable: boolean): Promise<{ success: boolean; message?: string; maintenanceAddress?: string }> {
+    try {
+      console.log('🔧 [MANUAL_TEST_SERVICE] 执行维护功能测试:', { instanceId, enable });
+
+      const response = await invoke<{ success: boolean; message?: string; maintenanceAddress?: string }>('ai_maintenance_test_cmd', {
+        request: {
+          instanceId,
+          enable
+        }
+      });
+
+      console.log('✅ [MANUAL_TEST_SERVICE] 维护功能测试结果:', response);
+      return response;
+    } catch (error) {
+      console.error('❌ [MANUAL_TEST_SERVICE] 维护功能测试失败:', error);
+      throw new Error(`维护功能测试失败: ${error}`);
+    }
+  }
 }

@@ -129,26 +129,112 @@
   font-weight: 600;
 }
 
+/* 新增的AI手动测试样式 */
+.display-value-section {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.value-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.value-input-group label {
+  font-weight: 500;
+  color: #495057;
+  min-width: 60px;
+}
+
+.alarm-test-section,
+.maintenance-test-section {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+}
+
+.test-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.test-actions button {
+  min-width: 120px;
+}
+
+/* 按钮加载状态样式 */
+.test-actions button[nz-loading] {
+  opacity: 0.7;
+}
+
+/* 输入框组合样式 */
+::ng-deep .value-input-group .ant-input-group-compact {
+  display: flex;
+}
+
+::ng-deep .value-input-group .ant-input-group-compact .ant-input {
+  border-radius: 6px 0 0 6px;
+}
+
+::ng-deep .value-input-group .ant-input-group-compact .ant-btn {
+  border-radius: 0 6px 6px 0;
+  border-left: 0;
+}
+
+/* 测试区域样式增强 */
+.display-value-section:hover,
+.alarm-test-section:hover,
+.maintenance-test-section:hover {
+  border-color: #1890ff;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.1);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .test-items-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .monitoring-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .progress-info {
     flex-direction: column;
     align-items: stretch;
   }
-  
+
   .progress-actions {
     justify-content: stretch;
   }
-  
+
   .progress-actions button {
     flex: 1;
+  }
+
+  .value-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .value-input-group label {
+    min-width: auto;
+    margin-bottom: 4px;
+  }
+
+  .test-actions {
+    flex-direction: column;
+  }
+
+  .test-actions button {
+    width: 100%;
   }
 }

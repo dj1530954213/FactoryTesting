@@ -33,7 +33,10 @@ use commands::manual_testing::{
 };
 use commands::manual_test_commands::{
     start_manual_test_cmd, update_manual_test_subitem_cmd, get_manual_test_status_cmd,
-    start_plc_monitoring_cmd, stop_plc_monitoring_cmd
+    start_plc_monitoring_cmd, stop_plc_monitoring_cmd,
+    // AI手动测试专用命令
+    generate_random_display_value_cmd, ai_show_value_test_cmd, ai_alarm_test_cmd,
+    ai_maintenance_test_cmd, ai_reset_to_display_value_cmd, complete_manual_test_subitem_cmd
 };
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
@@ -199,6 +202,13 @@ pub fn run() {
                 get_manual_test_status_cmd,
                 start_plc_monitoring_cmd,
                 stop_plc_monitoring_cmd,
+                // AI手动测试专用命令
+                generate_random_display_value_cmd,
+                ai_show_value_test_cmd,
+                ai_alarm_test_cmd,
+                ai_maintenance_test_cmd,
+                ai_reset_to_display_value_cmd,
+                complete_manual_test_subitem_cmd,
                 // 测试PLC配置命令
                 get_test_plc_channels_cmd,
                 save_test_plc_channel_cmd,
