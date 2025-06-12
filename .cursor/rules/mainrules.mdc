@@ -358,6 +358,77 @@ log::info!(
 );
 ```
 
+# Project Documentation and Implementation
+- Document overall project understanding in 项目整体理解.md and implementation steps in 第二阶段重构实施步骤.md.
+- User prefers detailed implementation documentation for autonomous development with minimal human intervention.
+- FAT_TEST项目第一阶段已完成85%，存在35个编译错误需要在第二阶段解决，主要问题包括SeaORM生命周期、数据访问层接口、PLC通信接口和服务依赖关系。
+- For Tauri projects, use 'cargo tauri dev' command from the src-tauri directory to start the entire application.
+- User prefers to achieve 100% code development and architecture stability before beginning testing phase.
+- User prefers complete implementation of features rather than stopping at partial completion, specifically wanting the entire AI manual testing functionality finished.
+
+# Data Management and State Management
+- Data uniqueness is an inviolable principle that must never be violated in any implementation.
+- Test instances should be saved simultaneously to state manager memory and database after test completion.
+- Data retrieval should prioritize state manager (memory) over database queries to avoid performance issues.
+- Only state manager can perform database operations (other components cannot directly access database).
+- Test area should get data from state manager (real-time batch allocation data) not from database.
+- Batch deletion should simultaneously delete related data from channel_point_definitions, channel_test_instances, and test_batch_info tables.
+- Test status recovery comes from state manager memory not direct database queries.
+- Manual test sub-item completion triggers state manager updates and database persistence.
+
+# Batch Allocation Logic
+- Batch auto-allocation must happen immediately after Excel parsing during point table import, with results stored in state manager.
+- When navigating to test area, only data retrieval is allowed (no batch creation/modification).
+- Correct channel allocation result should split points into multiple batches (first batch: 59 points, second batch: 29 points).
+- Test PLC channels can be reused across different batches after the previous batch completes.
+- Test with real 88 PLC point data from 测试IO.txt file to verify correct 59+29 batch split.
+
+# Database Schema and Data Mapping
+- Database schema must exactly match Excel point table structure with one-to-one column correspondence.
+- PLC绝对地址 (%MD100) maps to plc_absolute_address field, 上位机通讯地址 (40001) maps to plc_communication_address field.
+- Test PLC channel power supply types are stored as integers (C# enums) in database, using 8 enum types (AI/AO/DI/DO × powered/unpowered).
+- Actual power type determined by description field - if description doesn't contain '无源' then it's powered ('有源').
+- Channel details should maintain the same order as point table import sequence.
+
+# Testing Implementation
+- ALL test results (both success and failure) must be saved to database when hardpoint channel testing completes.
+- AI/AO testing: while test PLC writes 0/25/50/75/100% for convenience, display values must be converted to engineering units based on actual channel range.
+- AI/AO point testing: channels must be reset to 0% after test completion as the final step in the testing workflow.
+- Store 0%/25%/50%/75%/100% test results as actual engineering values in channel_test_instances table.
+- Deviation calculation uses |actual-expected|/range*100%, testing is sequential within channels but parallel between channels.
+- Use hardpoint_readings_json field for storing test data for all point types (AI/AO/DI/DO).
+
+# UI and Error Handling
+- Error details should show a button when errors exist to open dedicated error detail windows for 4 point types.
+- Hard point channel testing must complete entire test process even when errors occur to collect full test data.
+- For error detail modals: show deviation values for AI/AO points with 2% tolerance, use range_high_limit/range_low_limit from channel_point_definitions.
+- 'Start Test' button is for individual hardpoint channel testing, should be clickable except when hardpoint test status is 'passed'.
+- UI refresh logic causes severe performance issues and interface freezing during scrolling - requires fundamental optimization.
+- Failed hardpoint tests should turn row red and passed complete tests should turn row green.
+- Row color changes use NG-ZORRO implementation, and completion checker runs in backend state manager when frontend calls confirmation.
+
+# Manual Testing Implementation
+- Manual testing UI: adjust column widths to auto-fit content, remove three-dot buttons next to hardpoint retest, add manual testing button column.
+- Implement different manual testing windows for each point type (AI/AO/DI/DO) based on WPF project logic.
+- Manual test status should be 'ManualTestInProgress', completion requires checking all sub-items with skip marking support.
+- Manual testing requires 0.5s interval variable reading from PLC during window open.
+- Process values must be saved to maintain state between modal reopenings, only one manual test window can be open at a time.
+- AI manual testing requires: display value verification with random values within normal range, test value conversion to 0-100% scale for PLC communication, alarm level testing (SLL/SL/SH/SHH) by sending values slightly beyond limits, and reset functionality to restore display verification values.
+- AI manual testing requirements: use 0-100% conversion formula, 1% range offset for alarm tests, test_plc_communication_address for value transmission, random values between low/high limits, state manager handles confirmation updates, and maintenance testing uses enable/disable boolean switches via Modbus TCP.
+- AI manual testing interface should include reset buttons for all 4 alarm tests (LL/L/H/HH) and maintenance function, not just command execution buttons.
+- User expects to see both backend PLC command execution implementation and corresponding frontend interface changes when implementing manual testing features.
+
+# Debugging and Logging
+- User prefers minimal logging showing only read/write operations and pass/fail judgment results.
+- User prefers minimal logging output during debugging to avoid interference with error message visibility.
+- User prefers log files over console output to see complete log information during debugging.
+- User prefers direct database analysis over repeated testing cycles when debugging data issues.
+- IP addresses must be read from database configuration rather than hardcoded.
+- Avoid mock data or default PLC configurations that interfere with real PLC communication during testing.
+- PLC addresses should use numeric format like 40001, not variable name addresses.
+- User strictly prohibits using any mock or simulation methods for PLC monitoring - only real PLC communication should be used.
+- User prefers specific button click events to have dedicated log messages for manual testing functionality.
+
 ---
 
 

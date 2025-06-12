@@ -229,7 +229,9 @@ export class ManualTestService {
       console.log('🔧 [MANUAL_TEST_SERVICE] 生成随机显示值:', instanceId);
 
       const response = await invoke<{ success: boolean; random_value: number; message?: string }>('generate_random_display_value_cmd', {
-        instance_id: instanceId
+        request: {
+          instance_id: instanceId
+        }
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 随机值生成结果:', response);
@@ -252,8 +254,10 @@ export class ManualTestService {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行显示值核对测试:', { instanceId, testValue });
 
       const response = await invoke<{ success: boolean; message?: string; sent_percentage?: number; test_plc_address?: string }>('ai_show_value_test_cmd', {
-        instance_id: instanceId,
-        test_value: testValue
+        request: {
+          instance_id: instanceId,
+          test_value: testValue
+        }
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 显示值测试结果:', response);
@@ -277,8 +281,10 @@ export class ManualTestService {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行报警测试:', { instanceId, alarmType });
 
       const response = await invoke<{ success: boolean; message?: string; sent_value?: number; sent_percentage?: number; test_plc_address?: string }>('ai_alarm_test_cmd', {
-        instance_id: instanceId,
-        alarm_type: alarmType
+        request: {
+          instance_id: instanceId,
+          alarm_type: alarmType
+        }
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 报警测试结果:', response);
@@ -303,8 +309,10 @@ export class ManualTestService {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行维护功能测试:', { instanceId, enable });
 
       const response = await invoke<{ success: boolean; message?: string; maintenance_address?: string }>('ai_maintenance_test_cmd', {
-        instance_id: instanceId,
-        enable: enable
+        request: {
+          instance_id: instanceId,
+          enable: enable
+        }
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 维护功能测试结果:', response);
@@ -316,6 +324,34 @@ export class ManualTestService {
     } catch (error) {
       console.error('❌ [MANUAL_TEST_SERVICE] 维护功能测试失败:', error);
       throw new Error(`维护功能测试失败: ${error}`);
+    }
+  }
+
+  // ==================== DI 手动测试 ====================
+
+  /**
+   * 执行 DI 信号下发 / 复位 测试
+   */
+  async executeDiSignalTest(instanceId: string, enable: boolean): Promise<{ success: boolean; message?: string; testPlcAddress?: string }> {
+    try {
+      console.log('🔧 [MANUAL_TEST_SERVICE] 执行DI信号测试:', { instanceId, enable });
+
+      const response = await invoke<{ success: boolean; message?: string; test_plc_address?: string }>('di_signal_test_cmd', {
+        request: {
+          instance_id: instanceId,
+          enable: enable
+        }
+      });
+
+      console.log('✅ [MANUAL_TEST_SERVICE] DI信号测试结果:', response);
+      return {
+        success: response.success,
+        message: response.message,
+        testPlcAddress: response.test_plc_address
+      };
+    } catch (error) {
+      console.error('❌ [MANUAL_TEST_SERVICE] DI信号测试失败:', error);
+      throw new Error(`DI信号测试失败: ${error}`);
     }
   }
 }

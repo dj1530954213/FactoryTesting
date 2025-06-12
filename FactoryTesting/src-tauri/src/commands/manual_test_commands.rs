@@ -379,9 +379,9 @@ pub async fn ai_maintenance_test_cmd(
         Err(e) => return Err(e),
     };
 
-    // 获取维护使能开关地址
-    let maintenance_address = match definition.maintenance_enable_switch_point_communication_address {
-        Some(addr) => addr,
+    // 获取维护使能开关地址，并进行规范化（长度不足 5 位时左补 0）
+    let mut maintenance_address = match definition.maintenance_enable_switch_point_communication_address {
+        Some(addr) => normalize_modbus_address(&addr),
         None => {
             error!("❌ [AI_MANUAL_TEST] 未配置维护使能开关地址: {}", request.instance_id);
             return Err("未配置维护使能开关地址".to_string());
@@ -596,7 +596,10 @@ async fn write_bool_to_target_plc(
     address: &str,
     value: bool,
 ) -> Result<(), String> {
-    info!("📝 [AI_MANUAL_TEST] 写入被测PLC [{}]: {}", address, value);
+    // -------- 地址长度校正 ---------
+    let fixed_address = normalize_modbus_address(address);
+
+    info!("📝 [AI_MANUAL_TEST] 写入被测PLC [{}]: {}", fixed_address, value);
 
     // 暂时使用测试PLC的IP地址作为被测PLC地址
     // TODO: 在实际部署时，需要配置独立的被测PLC地址
@@ -634,14 +637,142 @@ async fn write_bool_to_target_plc(
     }
 
     // 执行PLC写入操作
-    match plc_service.write_bool_impl(address, value).await {
+    match plc_service.write_bool_impl(&fixed_address, value).await {
         Ok(_) => {
-            info!("✅ [AI_MANUAL_TEST] 被测PLC写入成功: [{}] = {}", address, value);
+            info!("✅ [AI_MANUAL_TEST] 被测PLC写入成功: [{}] = {}", fixed_address, value);
             Ok(())
         }
         Err(e) => {
             error!("❌ [AI_MANUAL_TEST] 被测PLC写入失败: [{}] = {}, 错误: {}",
-                   address, value, e);
+                   fixed_address, value, e);
+            Err(format!("PLC写入失败: {}", e))
+        }
+    }
+}
+
+/// 规范化 Modbus 地址：不足 5 位时在左侧补零至 5 位
+fn normalize_modbus_address(address: &str) -> String {
+    let mut addr = address.trim().to_string();
+    if addr.len() < 5 {
+        addr = format!("{:0>5}", addr);
+    }
+    addr
+}
+
+/// ==================== DI 手动测试专用命令 ====================
+
+/// DI 信号下发请求（将测试 PLC DO 通道置位或复位）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiSignalTestRequest {
+    pub instance_id: String,
+    pub enable: bool, // true = 置位 (ON), false = 复位 (OFF)
+}
+
+/// DI 信号下发响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiSignalTestResponse {
+    pub success: bool,
+    pub message: String,
+    pub test_plc_address: String,
+}
+
+/// DI 手动测试 - 信号下发
+#[tauri::command]
+pub async fn di_signal_test_cmd(
+    request: DiSignalTestRequest,
+    app_state: State<'_, crate::tauri_commands::AppState>,
+) -> Result<DiSignalTestResponse, String> {
+    info!("🎯 [DI_MANUAL_TEST] 点击{}按钮: {}",
+          if request.enable { "置位" } else { "复位" }, request.instance_id);
+
+    // 获取测试实例
+    let instance = match app_state.persistence_service.load_test_instance(&request.instance_id).await {
+        Ok(Some(inst)) => inst,
+        Ok(None) => {
+            error!("❌ [DI_MANUAL_TEST] 未找到测试实例: {}", request.instance_id);
+            return Err("未找到指定的测试实例".to_string());
+        },
+        Err(e) => {
+            error!("❌ [DI_MANUAL_TEST] 加载测试实例失败: {}", e);
+            return Err(format!("加载测试实例失败: {}", e));
+        }
+    };
+
+    // 生成测试 PLC 线圈地址 (DO)
+    let test_plc_address = match &instance.test_plc_channel_tag {
+        Some(tag) => normalize_modbus_address(tag),
+        None => {
+            error!("❌ [DI_MANUAL_TEST] 测试实例未分配测试PLC通道: {}", request.instance_id);
+            return Err("测试实例未分配测试PLC通道".to_string());
+        }
+    };
+
+    // 下发布尔值到测试 PLC
+    match write_bool_to_test_plc(&app_state, &test_plc_address, request.enable).await {
+        Ok(_) => {
+            let action = if request.enable { "置位" } else { "复位" };
+            info!("✅ [DI_MANUAL_TEST] {}成功: {} -> {}", action, test_plc_address, request.enable);
+            Ok(DiSignalTestResponse {
+                success: true,
+                message: format!("{}成功", action),
+                test_plc_address,
+            })
+        }
+        Err(e) => {
+            let action = if request.enable { "置位" } else { "复位" };
+            error!("❌ [DI_MANUAL_TEST] {}失败: {}", action, e);
+            Err(format!("{}失败: {}", action, e))
+        }
+    }
+}
+
+/// 写入布尔值到测试 PLC（用于 DI 点位手动测试）
+async fn write_bool_to_test_plc(
+    app_state: &State<'_, crate::tauri_commands::AppState>,
+    address: &str,
+    value: bool,
+) -> Result<(), String> {
+    // 对地址执行规范化
+    let fixed_address = normalize_modbus_address(address);
+
+    info!("📝 [DI_MANUAL_TEST] 写入测试PLC [{}]: {}", fixed_address, value);
+
+    // 获取测试 PLC 配置
+    let test_plc_config = match app_state.test_plc_config_service.get_test_plc_config().await {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            error!("❌ [DI_MANUAL_TEST] 获取测试PLC配置失败: {}", e);
+            return Err(format!("获取测试PLC配置失败: {}", e));
+        }
+    };
+
+    // 创建 Modbus 服务
+    let modbus_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+        ip_address: test_plc_config.ip_address.clone(),
+        port: 502,
+        slave_id: 1,
+        byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+        connection_timeout_ms: 5000,
+        read_timeout_ms: 3000,
+        write_timeout_ms: 3000,
+    };
+
+    let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
+
+    // 连接
+    if let Err(e) = plc_service.connect().await {
+        error!("❌ [DI_MANUAL_TEST] 测试PLC连接失败: {}", e);
+        return Err(format!("测试PLC连接失败: {}", e));
+    }
+
+    // 写入
+    match plc_service.write_bool_impl(&fixed_address, value).await {
+        Ok(_) => {
+            info!("✅ [DI_MANUAL_TEST] 测试PLC写入成功: [{}] = {}", fixed_address, value);
+            Ok(())
+        }
+        Err(e) => {
+            error!("❌ [DI_MANUAL_TEST] 测试PLC写入失败: [{}] = {}, 错误: {}", fixed_address, value, e);
             Err(format!("PLC写入失败: {}", e))
         }
     }
