@@ -195,11 +195,11 @@ impl PlcMonitoringService {
         let mut values = HashMap::new();
         
         // 读取所有地址的值
-        log::debug!("📊 [PLC_MONITORING] 开始读取地址列表: {:?}", addresses);
+        // log::debug!("📊 [PLC_MONITORING] 开始读取地址列表: {:?}", addresses);
 
         for address in addresses {
             let value_key = Self::get_value_key(address, module_type);
-            log::debug!("🔧 [PLC_MONITORING] 读取地址: {} -> 键名: {}", address, value_key);
+            // log::debug!("🔧 [PLC_MONITORING] 读取地址: {} -> 键名: {}", address, value_key);
 
             match module_type {
                 crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AO |
@@ -207,7 +207,7 @@ impl PlcMonitoringService {
                     // 读取浮点数值
                     match plc_service.read_float32(address).await {
                         Ok(value) => {
-                            log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
+                            // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             if let Some(number) = serde_json::Number::from_f64(value as f64) {
                                 values.insert(value_key, serde_json::Value::Number(number));
                             }
@@ -223,7 +223,7 @@ impl PlcMonitoringService {
                     // 读取布尔值
                     match plc_service.read_bool(address).await {
                         Ok(value) => {
-                            log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
+                            // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             values.insert(value_key, serde_json::Value::Bool(value));
                         }
                         Err(e) => {
@@ -243,7 +243,7 @@ impl PlcMonitoringService {
             }
         }
 
-        log::debug!("📊 [PLC_MONITORING] 读取完成，共获得 {} 个值: {:?}", values.len(), values);
+        // log::debug!("📊 [PLC_MONITORING] 读取完成，共获得 {} 个值: {:?}", values.len(), values);
 
         // 创建监控数据
         let monitoring_data = PlcMonitoringData {
@@ -264,7 +264,7 @@ impl PlcMonitoringService {
             log::warn!("⚠️ [PLC_MONITORING] 发布监控数据事件失败: {} - {}", instance_id, e);
         }
 
-        log::debug!("📊 [PLC_MONITORING] 监控数据已发布: {} 个值", monitoring_data.values.len());
+        // log::debug!("📊 [PLC_MONITORING] 监控数据已发布: {} 个值", monitoring_data.values.len());
 
         log::trace!("📊 [PLC_MONITORING] 监控数据已更新并发布: {}", instance_id);
 
@@ -274,7 +274,7 @@ impl PlcMonitoringService {
     /// 根据地址和模块类型获取值的键名
     fn get_value_key(address: &str, module_type: &crate::models::enums::ModuleType) -> String {
         // 对于Modbus地址，根据模块类型和具体地址映射到对应的键名
-        log::debug!("🔧 [PLC_MONITORING] 映射地址键名: {} -> 模块类型: {:?}", address, module_type);
+        // log::debug!("🔧 [PLC_MONITORING] 映射地址键名: {} -> 模块类型: {:?}", address, module_type);
 
         match module_type {
             crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AINone => {
@@ -286,7 +286,7 @@ impl PlcMonitoringService {
                     match addr_num {
                         // 当前值地址范围 (40000-41999)
                         40000..=41999 => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为当前值", address);
+                            // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为当前值", address);
                             "currentValue".to_string()
                         },
                         // 报警设定值地址范围 (43000-44999)
@@ -295,35 +295,35 @@ impl PlcMonitoringService {
                             let last_digit = addr_num % 10;
                             match last_digit {
                                 1 => {
-                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SLL设定值", address);
+                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SLL设定值", address);
                                     "sllSetPoint".to_string()
                                 },
                                 3 => {
-                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SL设定值", address);
+                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SL设定值", address);
                                     "slSetPoint".to_string()
                                 },
                                 5 => {
-                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SH设定值", address);
+                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SH设定值", address);
                                     "shSetPoint".to_string()
                                 },
                                 7 => {
-                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SHH设定值", address);
+                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SHH设定值", address);
                                     "shhSetPoint".to_string()
                                 },
                                 _ => {
-                                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 未知报警设定值类型，默认为当前值", address);
+                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 未知报警设定值类型，默认为当前值", address);
                                     "currentValue".to_string()
                                 }
                             }
                         },
                         // 其他地址范围默认为当前值
                         _ => {
-                            log::debug!("🔧 [PLC_MONITORING] AI地址 {} 不在已知范围内，默认映射为当前值", address);
+                            // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 不在已知范围内，默认映射为当前值", address);
                             "currentValue".to_string()
                         }
                     }
                 } else {
-                    log::debug!("🔧 [PLC_MONITORING] AI地址 {} 解析失败，默认映射为当前值", address);
+                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 解析失败，默认映射为当前值", address);
                     "currentValue".to_string()
                 }
             }

@@ -16,12 +16,14 @@ pub enum OverallTestStatus {
     WiringConfirmed,
     /// 硬点测试进行中
     HardPointTestInProgress,
+    //TODO:是否与下面的HardPointTesting重复？
     /// 硬点测试进行中
     HardPointTesting,
     /// 硬点测试已完成
     HardPointTestCompleted,
     /// 手动测试进行中
     ManualTestInProgress,
+    //TODO:是否与下面的HardPointTesting重复？
     /// 手动测试进行中
     ManualTesting,
     /// 测试完成且通过

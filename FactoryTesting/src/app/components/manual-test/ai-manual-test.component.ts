@@ -735,6 +735,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 生成随机显示值
    */
   async generateRandomDisplayValue(): Promise<void> {
+    console.log('🎯 [前端] 点击生成随机值按钮:', this.instance?.instance_id);
     if (!this.instance) {
       this.message.error('测试实例不存在');
       return;
@@ -745,10 +746,13 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
       if (response.success) {
         this.displayTestValue = response.randomValue;
         this.message.success(`已生成随机值: ${response.randomValue.toFixed(2)}`);
+        console.log('✅ [前端] 生成随机值成功:', response.randomValue);
       } else {
         this.message.error(response.message || '生成随机值失败');
+        console.error('❌ [前端] 生成随机值失败:', response.message);
       }
     } catch (error) {
+      console.error('❌ [前端] 生成随机值异常:', error);
       this.message.error(`生成随机值失败: ${error}`);
     }
   }
@@ -757,6 +761,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 执行显示值核对测试
    */
   async executeDisplayValueTest(): Promise<void> {
+    console.log('🎯 [前端] 点击显示值核对测试按钮:', this.instance?.instance_id, '测试值:', this.displayTestValue);
     if (!this.instance) {
       this.message.error('测试实例不存在');
       return;
@@ -776,10 +781,13 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
 
       if (response.success) {
         this.message.success(`显示值测试成功: ${response.message}`);
+        console.log('✅ [前端] 显示值测试成功:', response.message);
       } else {
         this.message.error(response.message || '显示值测试失败');
+        console.error('❌ [前端] 显示值测试失败:', response.message);
       }
     } catch (error) {
+      console.error('❌ [前端] 显示值测试异常:', error);
       this.message.error(`显示值测试失败: ${error}`);
     } finally {
       this.isDisplayValueTesting = false;
@@ -790,6 +798,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 执行报警测试
    */
   async executeAlarmTest(alarmType: string): Promise<void> {
+    console.log('🎯 [前端] 点击报警测试按钮:', alarmType, '实例ID:', this.instance?.instance_id);
     if (!this.instance) {
       this.message.error('测试实例不存在');
       return;
@@ -806,10 +815,13 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
 
       if (response.success) {
         this.message.success(`${alarmType}报警测试成功: ${response.message}`);
+        console.log('✅ [前端] 报警测试成功:', alarmType, response.message);
       } else {
         this.message.error(response.message || `${alarmType}报警测试失败`);
+        console.error('❌ [前端] 报警测试失败:', alarmType, response.message);
       }
     } catch (error) {
+      console.error('❌ [前端] 报警测试异常:', alarmType, error);
       this.message.error(`${alarmType}报警测试失败: ${error}`);
     } finally {
       this.isAlarmTesting = false;
@@ -857,6 +869,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 执行维护功能测试
    */
   async executeMaintenanceTest(enable: boolean): Promise<void> {
+    console.log('🎯 [前端] 点击维护功能测试按钮:', enable ? '启用' : '复位', '实例ID:', this.instance?.instance_id);
     if (!this.instance) {
       this.message.error('测试实例不存在');
       return;
@@ -873,10 +886,13 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
       if (response.success) {
         const action = enable ? '启用' : '复位';
         this.message.success(`维护功能${action}成功: ${response.message}`);
+        console.log('✅ [前端] 维护功能测试成功:', action, response.message);
       } else {
         this.message.error(response.message || '维护功能测试失败');
+        console.error('❌ [前端] 维护功能测试失败:', response.message);
       }
     } catch (error) {
+      console.error('❌ [前端] 维护功能测试异常:', error);
       this.message.error(`维护功能测试失败: ${error}`);
     } finally {
       this.isMaintenanceTesting = false;

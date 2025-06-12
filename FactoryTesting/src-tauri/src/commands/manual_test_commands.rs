@@ -199,7 +199,7 @@ pub async fn generate_random_display_value_cmd(
     request: GenerateRandomValueRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<GenerateRandomValueResponse, String> {
-    info!("🔧 [AI_MANUAL_TEST] 生成随机显示值: {}", request.instance_id);
+    info!("🎯 [AI_MANUAL_TEST] 点击生成随机显示值按钮: {}", request.instance_id);
 
     // 获取通道定义信息
     let instance = match app_state.persistence_service.load_test_instance(&request.instance_id).await {
@@ -257,7 +257,7 @@ pub async fn ai_show_value_test_cmd(
     request: AiShowValueTestRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<AiShowValueTestResponse, String> {
-    info!("🔧 [AI_MANUAL_TEST] 显示值核对测试: {} -> {:.2}",
+    info!("🎯 [AI_MANUAL_TEST] 点击显示值核对测试按钮: {} -> {:.2}",
           request.instance_id, request.test_value);
 
     // 获取测试实例和通道定义
@@ -305,8 +305,8 @@ pub async fn ai_alarm_test_cmd(
     request: AiAlarmTestRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<AiAlarmTestResponse, String> {
-    info!("🔧 [AI_MANUAL_TEST] 报警测试: {} -> {}",
-          request.instance_id, request.alarm_type);
+    info!("🎯 [AI_MANUAL_TEST] 点击{}报警测试按钮: {}",
+          request.alarm_type, request.instance_id);
 
     // 获取测试实例和通道定义
     let (instance, definition) = match get_instance_and_definition(&app_state, &request.instance_id).await {
@@ -370,8 +370,8 @@ pub async fn ai_maintenance_test_cmd(
     request: AiMaintenanceTestRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<AiMaintenanceTestResponse, String> {
-    info!("🔧 [AI_MANUAL_TEST] 维护功能测试: {} -> {}",
-          request.instance_id, if request.enable { "启用" } else { "复位" });
+    info!("🎯 [AI_MANUAL_TEST] 点击维护功能{}按钮: {}",
+          if request.enable { "启用" } else { "复位" }, request.instance_id);
 
     // 获取测试实例和通道定义
     let (_instance, definition) = match get_instance_and_definition(&app_state, &request.instance_id).await {
@@ -415,7 +415,7 @@ pub async fn ai_reset_to_display_value_cmd(
     request: AiShowValueTestRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<AiShowValueTestResponse, String> {
-    info!("🔧 [AI_MANUAL_TEST] 复位到显示值: {} -> {:.2}",
+    info!("🎯 [AI_MANUAL_TEST] 点击复位到显示值按钮: {} -> {:.2}",
           request.instance_id, request.test_value);
 
     // 复用显示值测试的逻辑

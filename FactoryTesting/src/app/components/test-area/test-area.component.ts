@@ -191,7 +191,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     // 🔧 优化：组件销毁时清理所有定时器
     this.refreshTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     this.refreshTimeouts.clear();
-    console.log('🔧 [TEST_AREA] 组件销毁，已清理所有定时器');
+    // console.log('🔧 [TEST_AREA] 组件销毁，已清理所有定时器');
 
     // 清理订阅
     this.subscriptions.unsubscribe();
@@ -269,7 +269,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const subscription = this.batchSelectionService.selectedBatch$.subscribe(batch => {
       this.selectedBatch = batch;
       if (batch) {
-        console.log('🎯 [TEST_AREA] 批次选择变化:', batch.batch_id);
+        // console.log('🎯 [TEST_AREA] 批次选择变化:', batch.batch_id);
         this.loadBatchDetails();
       } else {
         this.batchDetails = null;
@@ -300,7 +300,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.lastRefreshTime = Date.now();
       this.refreshTimeouts.delete(reason);
 
-      console.log(`🔄 [TEST_AREA] 执行数据刷新 (原因: ${reason})`);
+      // console.log(`🔄 [TEST_AREA] 执行数据刷新 (原因: ${reason})`);
       await this.loadBatchDetails();
     }, delay);
 
@@ -311,12 +311,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 设置测试结果实时监听
    */
   private async setupTestResultListener(): Promise<void> {
-    console.log('🎧 [TEST_AREA] 设置测试结果实时监听');
+    // console.log('🎧 [TEST_AREA] 设置测试结果实时监听');
 
     try {
       // 监听后端发布的测试完成事件
       const unlistenCompleted = await listen('test-completed', (event) => {
-        console.log('🎉 [TEST_AREA] 收到测试完成事件:', event.payload);
+        // console.log('🎉 [TEST_AREA] 收到测试完成事件:', event.payload);
 
         // 解析事件数据
         const testResult = event.payload as {
@@ -951,22 +951,22 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   async loadBatchDetails(): Promise<void> {
     if (!this.selectedBatch) {
-      console.log('⚠️ [TEST_AREA] 没有选择批次，无法加载详情');
+      // console.log('⚠️ [TEST_AREA] 没有选择批次，无法加载详情');
       this.message.warning('请先选择一个测试批次');
       return;
     }
 
-    console.log('📊 [TEST_AREA] 开始加载批次详情');
-    console.log('📊 [TEST_AREA] 选中的批次ID:', this.selectedBatch.batch_id);
+    // console.log('📊 [TEST_AREA] 开始加载批次详情');
+    // console.log('📊 [TEST_AREA] 选中的批次ID:', this.selectedBatch.batch_id);
     this.isLoadingDetails = true;
     try {
       // 调用真实的后端API获取批次详情
-      console.log('📊 [TEST_AREA] 调用后端API: getBatchDetails()');
+      // console.log('📊 [TEST_AREA] 调用后端API: getBatchDetails()');
 
       // 🔧 优化：直接获取数据，避免重试导致的双倍请求
       const details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
 
-      console.log('📊 [TEST_AREA] 后端返回的详情数据:', details);
+      // console.log('📊 [TEST_AREA] 后端返回的详情数据:', details);
 
       if (details) {
         // 使用后端返回的真实数据
@@ -982,9 +982,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           }
         };
 
-        console.log('✅ [TEST_AREA] 批次详情加载成功');
-        console.log('✅ [TEST_AREA] 实例数量:', this.batchDetails.instances.length);
-        console.log('✅ [TEST_AREA] 定义数量:', this.batchDetails.definitions.length);
+        // console.log('✅ [TEST_AREA] 批次详情加载成功');
+        // console.log('✅ [TEST_AREA] 实例数量:', this.batchDetails.instances.length);
+        // console.log('✅ [TEST_AREA] 定义数量:', this.batchDetails.definitions.length);
 
         // 移除成功消息，因为这个方法会被定时器频繁调用
         // this.message.success('批次详情加载成功');
@@ -1002,11 +1002,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 强制检查测试完成状态
         this.checkTestCompletionStatus();
       } else {
-        console.error('❌ [TEST_AREA] 后端返回空的详情数据');
+        // console.error('❌ [TEST_AREA] 后端返回空的详情数据');
         throw new Error('未找到批次详情数据');
       }
     } catch (error) {
-      console.error('❌ [TEST_AREA] 加载批次详情失败:', error);
+      // console.error('❌ [TEST_AREA] 加载批次详情失败:', error);
       this.message.error('加载批次详情失败: ' + error);
       this.batchDetails = null;
     } finally {
@@ -1387,12 +1387,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 批次创建应该在点表导入时完成
    */
   private checkForUnpersistedData(): void {
-    console.log('🔍 [TEST_AREA] 检查是否有未持久化的数据');
+    // console.log('🔍 [TEST_AREA] 检查是否有未持久化的数据');
     const testData = this.dataStateService.getTestData();
 
     if (testData.isDataAvailable && testData.parsedDefinitions.length > 0) {
-      console.log('⚠️ [TEST_AREA] 检测到未持久化的测试数据');
-      console.log('⚠️ [TEST_AREA] 这表明点表导入流程可能没有正确完成批次分配');
+      // console.log('⚠️ [TEST_AREA] 检测到未持久化的测试数据');
+      // console.log('⚠️ [TEST_AREA] 这表明点表导入流程可能没有正确完成批次分配');
 
       // 清理内存中的数据，因为批次应该已经在导入时创建
       this.dataStateService.clearTestData();
@@ -1401,7 +1401,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 重新加载批次列表，查看是否有新创建的批次
       this.loadAvailableBatches();
     } else {
-      console.log('✅ [TEST_AREA] 没有未持久化的数据，正常加载批次列表');
+      // console.log('✅ [TEST_AREA] 没有未持久化的数据，正常加载批次列表');
     }
   }
 
@@ -1409,11 +1409,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 显示错误详情
    */
   showErrorDetail(instance: ChannelTestInstance): void {
-    console.log('🔍 [TEST_AREA] DJDJDJDJ');
-    console.log('🔍 [TEST_AREA] 显示错误详情:', instance.instance_id);
-    console.log('🔍 [TEST_AREA] 实例完整数据:', instance);
-    console.log('🔍 [TEST_AREA] digital_test_steps 字段:', instance.digital_test_steps);
-    console.log('🔍 [TEST_AREA] digital_test_steps 长度:', instance.digital_test_steps?.length);
+    // console.log('🔍 [TEST_AREA] DJDJDJDJ');
+    // console.log('🔍 [TEST_AREA] 显示错误详情:', instance.instance_id);
+    // console.log('🔍 [TEST_AREA] 实例完整数据:', instance);
+    // console.log('🔍 [TEST_AREA] digital_test_steps 字段:', instance.digital_test_steps);
+    // console.log('🔍 [TEST_AREA] digital_test_steps 长度:', instance.digital_test_steps?.length);
 
     // 查找对应的通道定义
     const definition = this.getDefinitionByInstanceId(instance.instance_id);
@@ -1422,8 +1422,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log('🔍 [TEST_AREA] 找到定义:', definition);
-    console.log('🔍 [TEST_AREA] 定义模块类型:', definition.module_type);
+    // console.log('🔍 [TEST_AREA] 找到定义:', definition);
+    // console.log('🔍 [TEST_AREA] 定义模块类型:', definition.module_type);
 
     this.selectedErrorInstance = instance;
     this.selectedErrorDefinition = definition;
@@ -1443,24 +1443,24 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 检查是否有错误详情可显示
    */
   hasErrorDetails(instance: ChannelTestInstance): boolean {
-    console.log('------------------------');
-    console.log('🔍 [TEST_AREA] hasErrorDetails 检查:', instance.instance_id);
-    console.log('🔍 [TEST_AREA] error_messageaa:', instance.error_message);
-    console.log('🔍 [TEST_AREA] overall_status:', instance.overall_status);
-    console.log('🔍 [TEST_AREA] sub_test_results:', instance.sub_test_results);
+    // console.log('------------------------');
+    // console.log('🔍 [TEST_AREA] hasErrorDetails 检查:', instance.instance_id);
+    // console.log('🔍 [TEST_AREA] error_messageaa:', instance.error_message);
+    // console.log('🔍 [TEST_AREA] overall_status:', instance.overall_status);
+    // console.log('🔍 [TEST_AREA] sub_test_results:', instance.sub_test_results);
 
     // 检查是否有错误信息或失败的子测试结果
     if (instance.error_message && instance.error_message.trim()) {
-      console.log('🔍 [TEST_AREA] 有错误信息，返回 true');
+      // console.log('🔍 [TEST_AREA] 有错误信息，返回 true');
       return true;
     }
 
     // 检查是否有失败的子测试结果
     if (instance.sub_test_results) {
       for (const [testItem, result] of Object.entries(instance.sub_test_results)) {
-        console.log(`🔍 [TEST_AREA] 检查子测试 ${testItem}:`, result);
+        // console.log(`🔍 [TEST_AREA] 检查子测试 ${testItem}:`, result);
         if (result.status === SubTestStatus.Failed && result.details) {
-          console.log('🔍 [TEST_AREA] 找到失败的子测试，返回 true');
+          // console.log('🔍 [TEST_AREA] 找到失败的子测试，返回 true');
           return true;
         }
       }
@@ -1468,7 +1468,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
     // 如果状态是失败但没有具体错误信息，也显示按钮
     const shouldShow = instance.overall_status === OverallTestStatus.TestCompletedFailed;
-    console.log('🔍 [TEST_AREA] 最终判断结果:', shouldShow);
+    // console.log('🔍 [TEST_AREA] 最终判断结果:', shouldShow);
     return shouldShow;
   }
 

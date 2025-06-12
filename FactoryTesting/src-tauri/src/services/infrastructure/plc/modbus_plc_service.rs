@@ -318,7 +318,7 @@ impl PlcCommunicationService for ModbusPlcService {
                 return Ok(result);
             }
             // 如果连接管理器中没有匹配的连接，回退到独立连接模式
-            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
+            // log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
         }
 
         // 🔧 修复：确保在独立连接模式下能够自动连接
@@ -326,7 +326,7 @@ impl PlcCommunicationService for ModbusPlcService {
             let status = self.connection_status.lock().await;
             if !matches!(*status, PlcConnectionStatus::Connected) {
                 drop(status);
-                log::debug!("🔗 [ModbusPlcService] 独立连接模式，尝试自动连接: IP={}", self.config.ip_address);
+                // log::debug!("🔗 [ModbusPlcService] 独立连接模式，尝试自动连接: IP={}", self.config.ip_address);
                 // 需要可变引用来连接，但这里是不可变引用，所以我们需要另一种方法
                 // 我们将在下面的代码中处理这个问题
             }
@@ -338,7 +338,7 @@ impl PlcCommunicationService for ModbusPlcService {
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("🔗 [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            // log::debug!("🔗 [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -349,7 +349,7 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
+                    // log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
@@ -1034,8 +1034,8 @@ impl ModbusPlcService {
 
                     return match addr_type {
                         '4' => { // 保持寄存器
-                            log::debug!("📖 [ModbusPlcService] 读取保持寄存器Float32: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
-                            log::debug!("test");
+                            // log::debug!("📖 [ModbusPlcService] 读取保持寄存器Float32: IP={}, 地址={}, 偏移={}", target_ip, address, reg_offset);
+                            // log::debug!("test");
                             match context.read_holding_registers(reg_offset, 2).await {
                                 Ok(Ok(values)) => {
                                     if values.len() < 2 {
@@ -1045,7 +1045,7 @@ impl ModbusPlcService {
                                         });
                                     }
                                     let value = ByteOrderConverter::registers_to_float(values[0], values[1], self.config.byte_order);
-                                    log::debug!("✅ [ModbusPlcService] Float32读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
+                                    // log::debug!("✅ [ModbusPlcService] Float32读取成功: IP={}, 地址={}, 值={}", target_ip, address, value);
                                     Ok(value)
                                 },
                                 Ok(Err(exception)) => {

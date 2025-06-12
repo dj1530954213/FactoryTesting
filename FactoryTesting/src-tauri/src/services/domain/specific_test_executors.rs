@@ -482,7 +482,6 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         let mut digital_steps = Vec::new();
 
         // 步骤1: 测试PLC DO输出低电平
-        info!("📝 写入 [{}]: false", test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO低电平失败: {}", e)))?;
 
@@ -492,7 +491,6 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         // 步骤2: 检查被测PLC DI是否显示"断开"
         let di_state_1 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
-        info!("📖 读取 [{}]: {}", target_di_address, di_state_1);
 
         // 记录步骤1结果
         let step1_status = if di_state_1 {
@@ -524,7 +522,6 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         info!("✅ 低电平: {}", di_state_1);
 
         // 步骤3: 测试PLC DO输出高电平
-        info!("📝 写入测试PLC DO [{}]: true (高电平)", test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, true).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO高电平失败: {}", e)))?;
 
@@ -532,7 +529,6 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤4: 检查被测PLC DI是否显示"接通"
-        info!("📖 读取被测PLC DI [{}] (期望:true)", target_di_address);
         let di_state_2 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
 
@@ -689,7 +685,6 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let mut digital_steps = Vec::new();
 
         // 步骤1: 被测PLC DO输出低电平
-        info!("📝 写入 [{}]: false", target_do_address);
         plc_service_target.write_bool(target_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO低电平失败: {}", e)))?;
 
@@ -699,7 +694,6 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         // 步骤2: 检查测试PLC DI是否显示"断开"
         let di_state_1 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
-        info!("📖 读取 [{}]: {}", test_rig_di_address, di_state_1);
 
         // 记录步骤1结果
         let step1_status = if di_state_1 {

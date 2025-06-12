@@ -224,6 +224,7 @@ impl ChannelPointDefinition {
         }
     }
 
+    //TODO:没有使用的方法。后续删除
     /// 创建新的通道点位定义（可指定供电类型）
     pub fn new_with_power_type(
         tag: String,

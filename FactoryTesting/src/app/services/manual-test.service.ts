@@ -228,12 +228,16 @@ export class ManualTestService {
     try {
       console.log('🔧 [MANUAL_TEST_SERVICE] 生成随机显示值:', instanceId);
 
-      const response = await invoke<{ success: boolean; randomValue: number; message?: string }>('generate_random_display_value_cmd', {
-        instanceId
+      const response = await invoke<{ success: boolean; random_value: number; message?: string }>('generate_random_display_value_cmd', {
+        instance_id: instanceId
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 随机值生成结果:', response);
-      return response;
+      return {
+        success: response.success,
+        randomValue: response.random_value,
+        message: response.message
+      };
     } catch (error) {
       console.error('❌ [MANUAL_TEST_SERVICE] 生成随机显示值失败:', error);
       throw new Error(`生成随机显示值失败: ${error}`);
@@ -247,15 +251,18 @@ export class ManualTestService {
     try {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行显示值核对测试:', { instanceId, testValue });
 
-      const response = await invoke<{ success: boolean; message?: string; sentPercentage?: number; testPlcAddress?: string }>('ai_show_value_test_cmd', {
-        request: {
-          instanceId,
-          testValue
-        }
+      const response = await invoke<{ success: boolean; message?: string; sent_percentage?: number; test_plc_address?: string }>('ai_show_value_test_cmd', {
+        instance_id: instanceId,
+        test_value: testValue
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 显示值测试结果:', response);
-      return response;
+      return {
+        success: response.success,
+        message: response.message,
+        sentPercentage: response.sent_percentage,
+        testPlcAddress: response.test_plc_address
+      };
     } catch (error) {
       console.error('❌ [MANUAL_TEST_SERVICE] 显示值测试失败:', error);
       throw new Error(`显示值测试失败: ${error}`);
@@ -269,15 +276,19 @@ export class ManualTestService {
     try {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行报警测试:', { instanceId, alarmType });
 
-      const response = await invoke<{ success: boolean; message?: string; sentValue?: number; sentPercentage?: number; testPlcAddress?: string }>('ai_alarm_test_cmd', {
-        request: {
-          instanceId,
-          alarmType
-        }
+      const response = await invoke<{ success: boolean; message?: string; sent_value?: number; sent_percentage?: number; test_plc_address?: string }>('ai_alarm_test_cmd', {
+        instance_id: instanceId,
+        alarm_type: alarmType
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 报警测试结果:', response);
-      return response;
+      return {
+        success: response.success,
+        message: response.message,
+        sentValue: response.sent_value,
+        sentPercentage: response.sent_percentage,
+        testPlcAddress: response.test_plc_address
+      };
     } catch (error) {
       console.error('❌ [MANUAL_TEST_SERVICE] 报警测试失败:', error);
       throw new Error(`报警测试失败: ${error}`);
@@ -291,15 +302,17 @@ export class ManualTestService {
     try {
       console.log('🔧 [MANUAL_TEST_SERVICE] 执行维护功能测试:', { instanceId, enable });
 
-      const response = await invoke<{ success: boolean; message?: string; maintenanceAddress?: string }>('ai_maintenance_test_cmd', {
-        request: {
-          instanceId,
-          enable
-        }
+      const response = await invoke<{ success: boolean; message?: string; maintenance_address?: string }>('ai_maintenance_test_cmd', {
+        instance_id: instanceId,
+        enable: enable
       });
 
       console.log('✅ [MANUAL_TEST_SERVICE] 维护功能测试结果:', response);
-      return response;
+      return {
+        success: response.success,
+        message: response.message,
+        maintenanceAddress: response.maintenance_address
+      };
     } catch (error) {
       console.error('❌ [MANUAL_TEST_SERVICE] 维护功能测试失败:', error);
       throw new Error(`维护功能测试失败: ${error}`);

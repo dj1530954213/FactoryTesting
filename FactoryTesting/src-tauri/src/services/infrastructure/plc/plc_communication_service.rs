@@ -139,7 +139,10 @@ pub trait PlcCommunicationService: BaseService {
     async fn read_bool(&self, address: &str) -> AppResult<bool> {
         let result = self.read_bool_impl(address).await;
         match &result {
-            Ok(value) => log::info!("📖 读取 [{}]: {}", address, value),
+            Ok(_value) => {
+                // 只在错误时记录日志，减少冗余输出
+                // log::debug!("📖 读取 [{}]: {}", address, value);
+            },
             Err(e) => log::error!("❌ 读取失败 [{}]: {}", address, e),
         }
         result
@@ -176,7 +179,10 @@ pub trait PlcCommunicationService: BaseService {
     async fn read_float32(&self, address: &str) -> AppResult<f32> {
         let result = self.read_float32_impl(address).await;
         match &result {
-            Ok(value) => log::info!("📖 读取 [{}]: {:.3}", address, value),
+            Ok(_value) => {
+                // 只在错误时记录日志，减少冗余输出
+                // log::debug!("📖 读取 [{}]: {:.3}", address, value);
+            },
             Err(e) => log::error!("❌ 读取失败 [{}]: {}", address, e),
         }
         result
