@@ -62,8 +62,8 @@ mod tests {
             format!("DB1.DBD{}", id.parse::<u32>().unwrap_or(0) * 4)
         );
         def.id = id.to_string();
-        def.range_lower_limit = Some(4.0);
-        def.range_upper_limit = Some(20.0);
+        def.range_low_limit = Some(4.0);
+        def.range_high_limit = Some(20.0);
         def.engineering_unit = Some("mA".to_string());
         def
     }
@@ -87,19 +87,12 @@ mod tests {
 
     /// 创建测试用的测试结果
     fn create_test_outcome(channel_instance_id: &str, sub_test_item: SubTestItem) -> RawTestOutcome {
-        let now = chrono::Utc::now();
-        RawTestOutcome {
-            channel_instance_id: channel_instance_id.to_string(),
-            sub_test_item,
-            success: true,
-            raw_value_read: Some("RawVal".to_string()),
-            eng_value_calculated: Some("EngVal".to_string()),
-            message: Some("测试成功".to_string()),
-            start_time: now,
-            end_time: now,
-            readings: Some(Vec::new()),
-            details: std::collections::HashMap::new(),
-        }
+        let mut outcome = RawTestOutcome::success(channel_instance_id.to_string(), sub_test_item);
+        outcome.raw_value_read = Some("RawVal".to_string());
+        outcome.eng_value_calculated = Some("EngVal".to_string());
+        outcome.message = Some("测试成功".to_string());
+        outcome.readings = Some(Vec::new());
+        outcome
     }
 
     /// 测试基础服务功能

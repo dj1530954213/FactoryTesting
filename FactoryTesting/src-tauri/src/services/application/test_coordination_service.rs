@@ -918,19 +918,20 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn start_manual_test(&self, request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse> {
         info!("🔧 [TEST_COORDINATION] 开始手动测试: {:?}", request);
 
-        // 创建手动测试状态
-        let test_status = crate::models::structs::ManualTestStatus::new(
-            request.instance_id.clone(),
-            request.module_type.clone(),
-            request.operator_name.clone(),
-        );
+        // 读取或创建手动测试状态
+        let instance = self.channel_state_manager.get_instance_state(&request.instance_id).await?;
+        let mut test_status = crate::models::structs::ManualTestStatus::from_instance(&instance);
 
-        // 更新实例状态为手动测试进行中
-        if let Err(e) = self.channel_state_manager.update_overall_status(
-            &request.instance_id,
-            crate::models::enums::OverallTestStatus::ManualTestInProgress,
-        ).await {
-            warn!("⚠️ [TEST_COORDINATION] 更新实例状态失败: {}", e);
+        // 如果之前未进入手动测试，则更新整体状态
+        if !matches!(instance.overall_status, crate::models::enums::OverallTestStatus::ManualTestInProgress | crate::models::enums::OverallTestStatus::ManualTesting) {
+            if let Err(e) = self.channel_state_manager.update_overall_status(
+                &request.instance_id,
+                crate::models::enums::OverallTestStatus::ManualTestInProgress,
+            ).await {
+                warn!("⚠️ [TEST_COORDINATION] 更新实例状态失败: {}", e);
+            }
+            // 更新本地状态对象
+            test_status.overall_status = crate::models::enums::OverallTestStatus::ManualTestInProgress;
         }
 
         Ok(crate::models::structs::StartManualTestResponse {
@@ -944,55 +945,61 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn update_manual_test_subitem(&self, request: crate::models::structs::UpdateManualTestSubItemRequest) -> AppResult<crate::models::structs::UpdateManualTestSubItemResponse> {
         info!("🔧 [TEST_COORDINATION] 更新手动测试子项: {:?}", request);
 
-        // 创建手动测试状态（在实际实现中应该从状态管理器获取）
-        let mut test_status = crate::models::structs::ManualTestStatus::new(
-            request.instance_id.clone(),
-            crate::models::enums::ModuleType::AI, // 默认类型，实际应该从数据库获取
-            Some("操作员".to_string()),
-        );
+        // 将前端提交的子项状态转为 RawTestOutcome 并交由 ChannelStateManager 处理
+        use crate::models::{RawTestOutcome, SubTestItem, SubTestStatus};
 
-        // 更新子项状态
-        let updated = test_status.update_sub_item(
-            request.sub_item.clone(),
-            request.status.clone(),
-            request.operator_notes.clone(),
-            request.skip_reason.clone(),
-        );
+        let success_flag = matches!(request.status, crate::models::structs::ManualTestSubItemStatus::Passed | crate::models::structs::ManualTestSubItemStatus::Skipped);
 
-        // 检查是否所有子项都已完成
-        let is_completed = test_status.is_all_completed();
-
-        // 如果测试完成，更新实例状态
-        if is_completed {
-            if let Err(e) = self.channel_state_manager.update_overall_status(
-                &request.instance_id,
-                crate::models::enums::OverallTestStatus::TestCompletedPassed, // 简化处理，实际应该根据结果判断
-            ).await {
-                warn!("⚠️ [TEST_COORDINATION] 更新实例完成状态失败: {}", e);
+        let mut outcome = RawTestOutcome::success(request.instance_id.clone(), request.sub_item.clone().into());
+        if !success_flag {
+            outcome.success = false;
+            if let Some(note) = &request.operator_notes {
+                outcome.message = Some(note.clone());
             }
         }
 
-        Ok(crate::models::structs::UpdateManualTestSubItemResponse {
-            success: updated,
-            message: Some("子项状态已更新".to_string()),
-            test_status: Some(test_status.clone()),
-            is_completed: Some(is_completed),
-        })
+        // 更新状态管理器（内存 + 入库）
+        self.channel_state_manager.update_test_result(outcome).await?;
+
+        // 获取最新测试实例状态并转换为 ManualTestStatus 返回前端
+        match self.channel_state_manager.get_instance_state(&request.instance_id).await {
+            Ok(instance) => {
+                let status = crate::models::structs::ManualTestStatus::from_instance(&instance);
+                // 先计算完成标记，避免后续移动导致 borrow 错误
+                let is_completed = status.is_all_completed();
+                Ok(crate::models::structs::UpdateManualTestSubItemResponse {
+                    success: true,
+                    message: Some("子项状态已更新".to_string()),
+                    test_status: Some(status),
+                    is_completed: Some(is_completed),
+                })
+            }
+            Err(e) => {
+                warn!("⚠️ [TEST_COORDINATION] 获取实例状态失败: {}", e);
+                Ok(crate::models::structs::UpdateManualTestSubItemResponse {
+                    success: false,
+                    message: Some(e.to_string()),
+                    test_status: None,
+                    is_completed: None,
+                })
+            }
+        }
     }
 
     /// 获取手动测试状态
     async fn get_manual_test_status(&self, instance_id: &str) -> AppResult<Option<crate::models::structs::ManualTestStatus>> {
         info!("🔧 [TEST_COORDINATION] 获取手动测试状态: {}", instance_id);
 
-        // 在实际实现中，这里应该从状态管理器或数据库获取真实的测试状态
-        // 目前返回一个模拟状态
-        let test_status = crate::models::structs::ManualTestStatus::new(
-            instance_id.to_string(),
-            crate::models::enums::ModuleType::AI,
-            Some("操作员".to_string()),
-        );
-
-        Ok(Some(test_status))
+        match self.channel_state_manager.get_instance_state(instance_id).await {
+            Ok(instance) => {
+                let status = crate::models::structs::ManualTestStatus::from_instance(&instance);
+                Ok(Some(status))
+            }
+            Err(e) => {
+                warn!("⚠️ [TEST_COORDINATION] 获取实例状态失败: {}", e);
+                Ok(None)
+            }
+        }
     }
 
 }
@@ -1066,6 +1073,10 @@ mod tests {
         async fn publish_error(&self, _error: &crate::utils::error::AppError) -> AppResult<()> {
             Ok(())
         }
+
+        async fn publish_custom(&self, _event_name: &str, _payload: serde_json::Value) -> AppResult<()> {
+            Ok(())
+        }
     }
 
     /// Mock 通道分配服务
@@ -1110,6 +1121,7 @@ mod tests {
                     overall_status: OverallTestStatus::NotTested,
                     batch_name: batch_name.clone(),
                     custom_data: HashMap::new(),
+                    station_name: None,
                 };
 
                 // 计算此批次的通道范围
@@ -1134,6 +1146,7 @@ mod tests {
                         total_test_duration_ms: None,
                         sub_test_results: HashMap::new(),
                         hardpoint_readings: None,
+                        digital_test_steps: None,
                         manual_test_current_value_input: None,
                         manual_test_current_value_output: None,
                         test_plc_channel_tag: Some(format!("MockChannel{}", allocated_instances.len() + 1)),
@@ -1259,8 +1272,8 @@ mod tests {
             "DB1.DBD0".to_string(),
         );
 
-        definition.range_lower_limit = Some(0.0);
-        definition.range_upper_limit = Some(100.0);
+        definition.range_low_limit = Some(0.0);
+        definition.range_high_limit = Some(100.0);
         // 不再使用虚拟地址
         definition.test_rig_plc_address = None;
 
@@ -1337,7 +1350,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_empty_channel_definitions() {
-        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service, _test_plc_config_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
@@ -1346,6 +1359,7 @@ mod tests {
             persistence_service,
             event_publisher,
             channel_allocation_service,
+            _test_plc_config_service,
         );
 
         let request = TestExecutionRequest {
@@ -1419,7 +1433,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_batch_results() {
-        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service) =
+        let (channel_state_manager, test_execution_engine, persistence_service, event_publisher, channel_allocation_service, _test_plc_config_service) =
             create_test_services().await;
 
         let coordination_service = TestCoordinationService::new(
@@ -1428,6 +1442,7 @@ mod tests {
             persistence_service,
             event_publisher,
             channel_allocation_service,
+            _test_plc_config_service,
         );
 
         let batch_info = create_test_batch_info();

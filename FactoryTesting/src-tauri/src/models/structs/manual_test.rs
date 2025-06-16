@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
-use crate::models::enums::{ModuleType, OverallTestStatus};
+use crate::models::enums::{ModuleType, OverallTestStatus, SubTestItem, SubTestStatus};
+use crate::models::structs::ChannelTestInstance;
 
 /// 手动测试子项状态枚举
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,6 +35,7 @@ pub enum ManualTestSubItem {
 
 /// 手动测试子项结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManualTestSubItemResult {
     pub sub_item: ManualTestSubItem,
     pub status: ManualTestSubItemStatus,
@@ -44,6 +46,7 @@ pub struct ManualTestSubItemResult {
 
 /// 手动测试状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManualTestStatus {
     pub instance_id: String,
     pub overall_status: OverallTestStatus,
@@ -63,6 +66,7 @@ pub struct PlcMonitoringData {
 
 /// 手动测试请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartManualTestRequest {
     #[serde(rename = "instanceId")]
     pub instance_id: String,
@@ -74,6 +78,7 @@ pub struct StartManualTestRequest {
 
 /// 手动测试响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartManualTestResponse {
     pub success: bool,
     pub message: Option<String>,
@@ -82,6 +87,7 @@ pub struct StartManualTestResponse {
 
 /// 更新手动测试子项请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateManualTestSubItemRequest {
     #[serde(rename = "instanceId")]
     pub instance_id: String,
@@ -96,6 +102,7 @@ pub struct UpdateManualTestSubItemRequest {
 
 /// 更新手动测试子项响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateManualTestSubItemResponse {
     pub success: bool,
     pub message: Option<String>,
@@ -105,6 +112,7 @@ pub struct UpdateManualTestSubItemResponse {
 
 /// PLC监控请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartPlcMonitoringRequest {
     #[serde(rename = "instanceId")]
     pub instance_id: String,
@@ -116,6 +124,7 @@ pub struct StartPlcMonitoringRequest {
 
 /// PLC监控响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartPlcMonitoringResponse {
     pub success: bool,
     pub message: Option<String>,
@@ -124,6 +133,7 @@ pub struct StartPlcMonitoringResponse {
 
 /// 停止PLC监控请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StopPlcMonitoringRequest {
     #[serde(rename = "instanceId")]
     pub instance_id: String,
@@ -133,6 +143,7 @@ pub struct StopPlcMonitoringRequest {
 
 /// 手动测试配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ManualTestConfig {
     pub module_type: ModuleType,
     pub applicable_sub_items: Vec<ManualTestSubItem>,
@@ -285,6 +296,101 @@ impl ManualTestStatus {
             true
         } else {
             false
+        }
+    }
+
+    /// 根据 ChannelTestInstance 构造手动测试状态（用于前端刷新）
+    pub fn from_instance(instance: &ChannelTestInstance) -> Self {
+        // 暂时无法直接确定模块类型，此处简单推断：若数字量子测试步骤存在则认为 DI，否则 AI
+        let inferred_module_type = if let Some(digital_steps) = &instance.digital_test_steps {
+            if !digital_steps.is_empty() { ModuleType::DI } else { ModuleType::AI }
+        } else {
+            ModuleType::AI
+        };
+
+        let config = ManualTestConfig::for_module_type(inferred_module_type.clone());
+
+        // 初始化所有子项状态为 NotTested
+        let mut sub_item_results: HashMap<ManualTestSubItem, ManualTestSubItemResult> = config
+            .applicable_sub_items
+            .iter()
+            .map(|it| {
+                (
+                    it.clone(),
+                    ManualTestSubItemResult {
+                        sub_item: it.clone(),
+                        status: ManualTestSubItemStatus::NotTested,
+                        test_time: None,
+                        operator_notes: None,
+                        skip_reason: None,
+                    },
+                )
+            })
+            .collect();
+
+        // 将 instance.sub_test_results 映射过来
+        for (sub_item, exec_result) in &instance.sub_test_results {
+            let manual_item: ManualTestSubItem = sub_item.clone().into();
+            if let Some(result_slot) = sub_item_results.get_mut(&manual_item) {
+                result_slot.status = match exec_result.status {
+                    SubTestStatus::NotTested => ManualTestSubItemStatus::NotTested,
+                    SubTestStatus::Testing => ManualTestSubItemStatus::Testing,
+                    SubTestStatus::Passed => ManualTestSubItemStatus::Passed,
+                    SubTestStatus::Failed => ManualTestSubItemStatus::Failed,
+                    SubTestStatus::Skipped | SubTestStatus::NotApplicable => ManualTestSubItemStatus::Skipped,
+                };
+                result_slot.test_time = Some(exec_result.timestamp);
+                result_slot.operator_notes = exec_result.details.clone();
+            }
+        }
+
+        // 计算 overall_status：若全部完成则保持实例状态，否则 ManualTesting
+        let overall_status = if sub_item_results.values().all(|r| matches!(r.status, ManualTestSubItemStatus::Passed | ManualTestSubItemStatus::Skipped)) {
+            OverallTestStatus::TestCompletedPassed
+        } else {
+            OverallTestStatus::ManualTesting
+        };
+
+        Self {
+            instance_id: instance.instance_id.clone(),
+            overall_status,
+            sub_item_results,
+            start_time: instance.start_time,
+            completion_time: instance.final_test_time,
+            current_operator: instance.current_operator.clone(),
+        }
+    }
+}
+
+// ======================= ManualTestSubItem <-> SubTestItem =======================
+
+impl From<ManualTestSubItem> for SubTestItem {
+    fn from(item: ManualTestSubItem) -> Self {
+        match item {
+            ManualTestSubItem::ShowValueCheck => SubTestItem::StateDisplay,
+            ManualTestSubItem::LowLowAlarmTest => SubTestItem::LowLowAlarm,
+            ManualTestSubItem::LowAlarmTest => SubTestItem::LowAlarm,
+            ManualTestSubItem::HighAlarmTest => SubTestItem::HighAlarm,
+            ManualTestSubItem::HighHighAlarmTest => SubTestItem::HighHighAlarm,
+            ManualTestSubItem::TrendCheck => SubTestItem::Trend,
+            ManualTestSubItem::ReportCheck => SubTestItem::Report,
+            ManualTestSubItem::MaintenanceFunction => SubTestItem::MaintenanceFunction,
+        }
+    }
+}
+
+impl From<SubTestItem> for ManualTestSubItem {
+    fn from(item: SubTestItem) -> Self {
+        match item {
+            SubTestItem::StateDisplay => ManualTestSubItem::ShowValueCheck,
+            SubTestItem::LowLowAlarm => ManualTestSubItem::LowLowAlarmTest,
+            SubTestItem::LowAlarm => ManualTestSubItem::LowAlarmTest,
+            SubTestItem::HighAlarm => ManualTestSubItem::HighAlarmTest,
+            SubTestItem::HighHighAlarm => ManualTestSubItem::HighHighAlarmTest,
+            SubTestItem::Trend | SubTestItem::TrendCheck => ManualTestSubItem::TrendCheck,
+            SubTestItem::Report | SubTestItem::ReportCheck => ManualTestSubItem::ReportCheck,
+            SubTestItem::Maintenance | SubTestItem::MaintenanceFunction => ManualTestSubItem::MaintenanceFunction,
+            _ => ManualTestSubItem::ShowValueCheck, // 兜底
         }
     }
 }

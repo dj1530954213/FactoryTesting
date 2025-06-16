@@ -98,27 +98,9 @@ import {
 
       <nz-divider></nz-divider>
 
-      <!-- 测试进度和操作 -->
+      <!-- 测试进度 -->
       <div class="test-progress-section">
-        <div class="progress-info">
-          <span>测试进度: {{ getCompletedCount() }} / {{ getTotalCount() }}</span>
-          <div class="progress-actions">
-            <button 
-              nz-button 
-              nzType="primary"
-              [disabled]="!isAllCompleted()"
-              (click)="finishTest()">
-              <i nz-icon nzType="check-circle"></i>
-              完成测试
-            </button>
-            <button 
-              nz-button 
-              (click)="cancelTest()">
-              <i nz-icon nzType="close"></i>
-              取消测试
-            </button>
-          </div>
-        </div>
+        <span>测试进度: {{ getCompletedCount() }} / {{ getTotalCount() }}</span>
       </div>
 
     </div>
@@ -129,6 +111,7 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
   @Input() instance: ChannelTestInstance | null = null;
   @Input() definition: ChannelPointDefinition | null = null;
   @Input() testStatus: ManualTestStatus | null = null;
+
   @Output() testCompleted = new EventEmitter<void>();
   @Output() testCancelled = new EventEmitter<void>();
 
@@ -257,25 +240,5 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
    */
   isAllCompleted(): boolean {
     return this.manualTestService.areAllSubItemsCompleted(this.testConfig.applicableSubItems);
-  }
-
-  /**
-   * 完成测试
-   */
-  finishTest(): void {
-    this.testCompleted.emit();
-  }
-
-  /**
-   * 取消测试
-   */
-  cancelTest(): void {
-    this.modal.confirm({
-      nzTitle: '确认取消',
-      nzContent: '确定要取消手动测试吗？已完成的测试项将会保存。',
-      nzOnOk: () => {
-        this.testCancelled.emit();
-      }
-    });
   }
 }

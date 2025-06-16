@@ -199,6 +199,7 @@ export class DataImportComponent implements OnInit, OnDestroy {
     
     // 检查是否是测试文件，使用正确的路径
     if (file.name === '测试IO.xlsx') {
+      //TODO:路径需要修改为用户选择的路径，而不是写死的路径
       const testFilePath = 'D:\\GIT\\Git\\code\\FactoryTesting\\测试文件\\测试IO.xlsx';
       console.log('识别为测试文件，使用完整路径:', testFilePath);
       await this.handleFileSelection(testFilePath);

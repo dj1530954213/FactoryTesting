@@ -1029,8 +1029,8 @@ mod tests {
 
         definition.power_supply_type = power_supply_type.to_string();
         if matches!(module_type, ModuleType::AI | ModuleType::AO) {
-            definition.range_lower_limit = Some(0.0);
-            definition.range_upper_limit = Some(100.0);
+            definition.range_low_limit = Some(0.0);
+            definition.range_high_limit = Some(100.0);
             // 不再生成虚拟地址，测试台架地址将通过通道分配时从测试PLC配置表获取
             definition.test_rig_plc_address = None;
         }

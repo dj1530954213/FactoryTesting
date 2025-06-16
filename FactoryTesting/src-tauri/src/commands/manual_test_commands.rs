@@ -511,9 +511,14 @@ async fn get_test_plc_address(
     // 通过测试PLC通道标签获取通信地址
     match &instance.test_plc_channel_tag {
         Some(channel_id) => {
-            // 暂时返回一个模拟的地址，实际需要从测试PLC配置服务获取
-            // TODO: 实现测试PLC配置服务的调用
-            Ok(format!("40{:03}", channel_id.parse::<u32>().unwrap_or(1)))
+            // 解析测试PLC通道标签（可能包含字母/下划线等），仅提取数字部分作为序号
+            let digits: String = channel_id.chars().filter(|c| c.is_ascii_digit()).collect();
+            if digits.is_empty() {
+                return Err("测试PLC通道标签不包含数字，无法转换为地址".to_string());
+            }
+            let index: u32 = digits.parse().unwrap_or(1);
+            // 以保持寄存器 40xxx 形式返回；真实场景可改为从配置表查询
+            Ok(format!("40{:03}", index))
         }
         None => {
             error!("❌ [AI_MANUAL_TEST] 测试实例未分配测试PLC通道: {}", instance.instance_id);
@@ -652,11 +657,12 @@ async fn write_bool_to_target_plc(
 
 /// 规范化 Modbus 地址：不足 5 位时在左侧补零至 5 位
 fn normalize_modbus_address(address: &str) -> String {
-    let mut addr = address.trim().to_string();
-    if addr.len() < 5 {
-        addr = format!("{:0>5}", addr);
+    // 仅保留数字字符
+    let digits: String = address.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return address.to_string(); // 返回原样，后续写入会报错指出
     }
-    addr
+    format!("{:0>5}", digits)
 }
 
 /// ==================== DI 手动测试专用命令 ====================
@@ -698,9 +704,9 @@ pub async fn di_signal_test_cmd(
         }
     };
 
-    // 生成测试 PLC 线圈地址 (DO)
-    let test_plc_address = match &instance.test_plc_channel_tag {
-        Some(tag) => normalize_modbus_address(tag),
+    // 使用测试 PLC 通讯地址 (保持寄存器/线圈地址)，再进行数字化处理
+    let test_plc_address = match &instance.test_plc_communication_address {
+        Some(addr) => normalize_modbus_address(addr),
         None => {
             error!("❌ [DI_MANUAL_TEST] 测试实例未分配测试PLC通道: {}", request.instance_id);
             return Err("测试实例未分配测试PLC通道".to_string());

@@ -50,6 +50,18 @@ import {
             [nzValue]="getCurrentState()" 
             [nzValueStyle]="{ color: getCurrentStateColor() }">
           </nz-statistic>
+
+          <!-- 下发/复位按钮 -->
+          <div class="signal-actions">
+            <button nz-button nzType="primary" nzSize="small" [nzLoading]="isSending && sendingEnable" (click)="sendSignal(true)">
+              <i nz-icon nzType="play-circle"></i>
+              下发测试
+            </button>
+            <button nz-button nzSize="small" [nzLoading]="isSending && !sendingEnable" (click)="sendSignal(false)" style="margin-left:8px;">
+              <i nz-icon nzType="rollback"></i>
+              复位
+            </button>
+          </div>
         </div>
       </nz-card>
 
@@ -102,22 +114,6 @@ import {
       <div class="test-progress-section">
         <div class="progress-info">
           <span>测试进度: {{ getCompletedCount() }} / {{ getTotalCount() }}</span>
-          <div class="progress-actions">
-            <button 
-              nz-button 
-              nzType="primary"
-              [disabled]="!isAllCompleted()"
-              (click)="finishTest()">
-              <i nz-icon nzType="check-circle"></i>
-              完成测试
-            </button>
-            <button 
-              nz-button 
-              (click)="cancelTest()">
-              <i nz-icon nzType="close"></i>
-              取消测试
-            </button>
-          </div>
         </div>
       </div>
 
@@ -137,6 +133,10 @@ export class DiManualTestComponent implements OnInit, OnDestroy {
   
   // 订阅管理
   private subscriptions = new Subscription();
+
+  // 信号下发加载状态
+  isSending = false;
+  sendingEnable = true;
 
   // 枚举引用（用于模板）
   ManualTestSubItem = ManualTestSubItem;
@@ -260,22 +260,25 @@ export class DiManualTestComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * 完成测试
+   * 下发 / 复位 DI 信号
    */
-  finishTest(): void {
-    this.testCompleted.emit();
-  }
-
-  /**
-   * 取消测试
-   */
-  cancelTest(): void {
-    this.modal.confirm({
-      nzTitle: '确认取消',
-      nzContent: '确定要取消手动测试吗？已完成的测试项将会保存。',
-      nzOnOk: () => {
-        this.testCancelled.emit();
+  async sendSignal(enable: boolean): Promise<void> {
+    if (!this.instance) {
+      return;
+    }
+    this.isSending = true;
+    this.sendingEnable = enable;
+    try {
+      const res = await this.manualTestService.executeDiSignalTest(this.instance.instance_id, enable);
+      if (res.success) {
+        this.message.success(res.message || '操作成功');
+      } else {
+        this.message.error(res.message || '操作失败');
       }
-    });
+    } catch (err: any) {
+      this.message.error(err?.message || '操作失败');
+    } finally {
+      this.isSending = false;
+    }
   }
 }
