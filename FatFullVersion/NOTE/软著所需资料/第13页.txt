@@ -1,0 +1,57 @@
+软件源代码文档 - 第 13 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 13 / 578
+==================================================
+
+0601:         DO = 3,
+0602: 
+0603:         /// <summary>
+0604:         /// 模拟量输入无源
+0605:         /// </summary>
+0606:         AINone = 4,
+0607: 
+0608:         /// <summary>
+0609:         /// 模拟量输出无源
+0610:         /// </summary>
+0611:         AONone = 5,
+0612: 
+0613:         /// <summary>
+0614:         /// 数字量输入无源
+0615:         /// </summary>
+0616:         DINone = 6,
+0617: 
+0618:         /// <summary>
+0619:         /// 数字量输出无源
+0620:         /// </summary>
+0621:         DONone = 7
+0622:     }
+0623: 
+0624:     /// <summary>
+0625:     /// TestPlcChannelType 的扩展方法
+0626:     /// </summary>
+0627:     public static class TestPlcChannelTypeExtensions
+0628:     {
+0629:         /// <summary>
+0630:         /// 比较两个 TestPlcChannelType 值
+0631:         /// </summary>
+0632:         /// <param name="value">当前值</param>
+0633:         /// <param name="other">要比较的值</param>
+0634:         /// <returns>比较结果</returns>
+0635:         public static int CompareTo(this TestPlcChannelType value, TestPlcChannelType other)
+0636:         {
+0637:             return ((int)value).CompareTo((int)other);
+0638:         }
+0639:     }
+0640: }
+0641: 
+0642: // ==========================================
+0643: // 文件: FatFullVersion\FatFullVersion\Entities\PlcConnectionConfig.cs
+0644: // ==========================================
+0645: using System;
+0646: using System.Collections.Generic;
+0647: using System.Linq;
+0648: using System.Text;
+0649: using System.Threading.Tasks;
+0650: 

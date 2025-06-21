@@ -127,6 +127,7 @@ async fn main() -> Result<(), AppError> {
         save_history: None,
         power_failure_protection: None,
         test_rig_plc_address: None,
+        sequence_number: None,
     };
 
     persistence_service.save_channel_definition(&channel_definition).await?;

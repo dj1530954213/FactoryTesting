@@ -3,16 +3,71 @@
 /// 负责解析Excel文件中的通道点位定义数据
 /// 基于重构后的数据模型和原C#项目的点表结构
 use std::path::Path;
-use calamine::{Reader, Xlsx, open_workbook};
+use calamine::{Reader, Xlsx, open_workbook, DataType};
 use crate::models::structs::ChannelPointDefinition;
 use crate::models::enums::{ModuleType, PointDataType};
 use crate::error::AppError;
 use log::{info, error};
+use std::collections::HashMap;
 
 type AppResult<T> = Result<T, AppError>;
 
 /// Excel导入器
 pub struct ExcelImporter;
+
+/// 标题行关键列关键词常量
+const COL_KEY_MODULE_TYPE: &str = "模块类型";
+const COL_KEY_POWER_TYPE: &str = "供电";            // "供电类型" 或 "供电类型（有源/无源）" 均可
+const COL_KEY_CHANNEL_POS: &str = "通道位号";
+const COL_KEY_HMI_NAME: &str = "变量名称";           // 全称 "变量名称（HMI）"
+const COL_KEY_DESCRIPTION: &str = "变量描述";
+const COL_KEY_DATA_TYPE: &str = "数据类型";
+const COL_KEY_UNIT: &str = "单位";
+const COL_KEY_STATION: &str = "场站名";
+const COL_KEY_STATION_CODE: &str = "场站编号";
+const COL_KEY_PLC_ADDR: &str = "PLC绝对地址";
+const COL_KEY_COMM_ADDR: &str = "通讯地址";          // "上位机通讯地址" / "通讯地址"
+const COL_KEY_SEQUENCE: &str = "序号";
+
+/// 根据标题行生成列索引映射
+fn build_header_index(row: &[DataType]) -> HashMap<String, usize> {
+    let mut map = HashMap::new();
+    log::info!("构建头部索引映射，总列数: {}", row.len());
+
+    for (idx, cell) in row.iter().enumerate() {
+        let title = cell.to_string();
+        log::info!("列 {}: '{}'", idx, title);
+        if title.contains(COL_KEY_MODULE_TYPE) {
+            map.insert(COL_KEY_MODULE_TYPE.to_string(), idx);
+        } else if title.contains(COL_KEY_POWER_TYPE) {
+            map.insert(COL_KEY_POWER_TYPE.to_string(), idx);
+        } else if title.contains(COL_KEY_CHANNEL_POS) {
+            map.insert(COL_KEY_CHANNEL_POS.to_string(), idx);
+        } else if title.contains(COL_KEY_HMI_NAME) {
+            map.insert(COL_KEY_HMI_NAME.to_string(), idx);
+        } else if title.contains(COL_KEY_DESCRIPTION) {
+            map.insert(COL_KEY_DESCRIPTION.to_string(), idx);
+        } else if title.contains(COL_KEY_DATA_TYPE) {
+            map.insert(COL_KEY_DATA_TYPE.to_string(), idx);
+        } else if title.contains(COL_KEY_UNIT) {
+            map.insert(COL_KEY_UNIT.to_string(), idx);
+        } else if title.contains(COL_KEY_STATION) {
+            map.insert(COL_KEY_STATION.to_string(), idx);
+        } else if title.contains(COL_KEY_STATION_CODE) {
+            map.insert(COL_KEY_STATION_CODE.to_string(), idx);
+        } else if title.contains(COL_KEY_PLC_ADDR) {
+            map.insert(COL_KEY_PLC_ADDR.to_string(), idx);
+        } else if title.contains(COL_KEY_COMM_ADDR) {
+            map.insert(COL_KEY_COMM_ADDR.to_string(), idx);
+        } else if title.contains(COL_KEY_SEQUENCE) {
+            map.insert(COL_KEY_SEQUENCE.to_string(), idx);
+            log::info!("找到序号列，索引: {}", idx);
+        }
+    }
+
+    log::info!("头部映射完成: {:?}", map);
+    map
+}
 
 impl ExcelImporter {
     /// 解析Excel文件并返回通道点位定义列表
@@ -52,11 +107,22 @@ impl ExcelImporter {
         let mut definitions = Vec::new();
         let mut row_count = 0;
 
-        // 跳过标题行，从第二行开始解析
+        // 生成列索引映射
+        let mut header_map: Option<HashMap<String, usize>> = None;
+
         for (row_idx, row) in range.rows().enumerate() {
             if row_idx == 0 {
-                // 验证标题行格式
-                Self::validate_header_row(row)?;
+                // 构建标题映射
+                let map = build_header_index(row);
+
+                // 基本列检查
+                for key in [COL_KEY_MODULE_TYPE, COL_KEY_POWER_TYPE, COL_KEY_CHANNEL_POS,
+                            COL_KEY_HMI_NAME, COL_KEY_DATA_TYPE, COL_KEY_COMM_ADDR, COL_KEY_SEQUENCE] {
+                    if !map.contains_key(key) {
+                        return Err(AppError::validation_error(format!("Excel标题缺少关键列: {}", key)));
+                    }
+                }
+                header_map = Some(map);
                 continue;
             }
 
@@ -64,7 +130,7 @@ impl ExcelImporter {
             let actual_row_number = row_idx + 1; // Excel中的实际行号
 
             // 解析数据行
-            match Self::parse_data_row(row, actual_row_number) {
+            match Self::parse_data_row(row, actual_row_number, header_map.as_ref().unwrap()) {
                 Ok(definition) => {
                     definitions.push(definition);
                 },
@@ -125,53 +191,44 @@ impl ExcelImporter {
     }
 
     /// 解析Excel数据行为ChannelPointDefinition
-    fn parse_data_row(row: &[calamine::DataType], row_number: usize) -> AppResult<ChannelPointDefinition> {
+    fn parse_data_row(row: &[calamine::DataType], row_number: usize, header_map: &HashMap<String, usize>) -> AppResult<ChannelPointDefinition> {
 
 
-        if row.len() < 52 {  // 根据真实Excel文件，至少需要52列（从序号到上位机通讯地址）
-            error!("❌ [PARSE_ROW] 第{}行数据列数不足，期望52列，实际{}列", row_number, row.len());
-            return Err(AppError::validation_error(format!(
-                "第{}行数据列数不足，期望52列，实际{}列",
-                row_number,
-                row.len()
-            )));
+        // 根据标题映射动态检查列数
+        let max_required_index = header_map.values().max().copied().unwrap_or(0);
+        if row.len() <= max_required_index {
+            return Err(AppError::validation_error(format!("第{}行数据列数不足，实际{}列", row_number, row.len())));
         }
 
-        // 根据真实Excel文件的列索引提取数据
-        // 实际列映射：
-        // 第0列：序号
-        // 第1列：模块名称
-        // 第2列：模块类型
-        // 第3列：供电类型（有源/无源）
-        // 第4列：线制
-        // 第5列：通道位号
-        // 第6列：位号
-        // 第7列：场站名
-        // 第8列：变量名称（HMI）
-        // 第9列：变量描述
-        // 第10列：数据类型
-        // 第11列：读写属性
-        // 🔥 修复关键字段映射：
-        // 第52列（索引51）：PLC绝对地址（如%MD100）
-        // 第53列（索引52）：上位机通讯地址（如40001）
+        // 通过 header_map 获取列索引
+        let idx = |key: &str| header_map.get(key).copied().unwrap();
 
-        let tag = Self::get_string_value(&row[6], row_number, "位号")?;  // 第6列：位号
-        let variable_name = Self::get_string_value(&row[8], row_number, "变量名称（HMI）")?;  // 第8列：变量名称（HMI）
-        let description = Self::get_optional_string_value(&row[9], "变量描述");  // 第9列：变量描述（可能为空）
-        let station = Self::get_string_value(&row[7], row_number, "场站名")?;  // 第7列：场站名
-        let module = Self::get_string_value(&row[1], row_number, "模块名称")?;  // 第1列：模块名称
-        let module_type_str = Self::get_string_value(&row[2], row_number, "模块类型")?;  // 第2列：模块类型
-        let power_supply_type = Self::get_optional_string_value(&row[3], "供电类型");  // 第3列：供电类型（有源/无源）
-        let wire_system = Self::get_optional_string_value(&row[4], "线制");  // 第4列：线制
-        let channel_number = Self::get_string_value(&row[5], row_number, "通道位号")?;  // 第5列：通道位号
-        let data_type_str = Self::get_string_value(&row[10], row_number, "数据类型")?;  // 第10列：数据类型
-        let access_property = Self::get_optional_string_value(&row[11], "读写属性");  // 第11列：读写属性
+        let variable_name = Self::get_string_value(&row[idx(COL_KEY_HMI_NAME)], row_number, COL_KEY_HMI_NAME)?;
+        let tag = variable_name.clone(); // ➜ 用 HMI 名替代原位号
 
-        // 🔥 修复字段映射：正确读取PLC地址信息
-        let plc_absolute_address = Self::get_optional_string_value(&row[51], "PLC绝对地址");  // 第52列（索引51）：PLC绝对地址（如%MD100）
-        let modbus_communication_address = Self::get_string_value(&row[52], row_number, "上位机通讯地址")?;  // 第53列（索引52）：Modbus TCP通讯地址（如40001）
+        let description = Self::get_optional_string_value(&row[idx(COL_KEY_DESCRIPTION)], COL_KEY_DESCRIPTION);
+        let station = Self::get_string_value(&row[idx(COL_KEY_STATION)], row_number, COL_KEY_STATION)?;
 
+        // station_code 可选
+        let station_code = header_map.get(COL_KEY_STATION_CODE).map(|i| Self::get_optional_string_value(&row[*i], COL_KEY_STATION_CODE));
 
+        // 模块名称列固定索引1（表结构未变）
+        let module = Self::get_string_value(&row[1], row_number, "模块名称")?;
+
+        let module_type_str = Self::get_string_value(&row[idx(COL_KEY_MODULE_TYPE)], row_number, COL_KEY_MODULE_TYPE)?;
+        let power_supply_type = Self::get_optional_string_value(&row[idx(COL_KEY_POWER_TYPE)], COL_KEY_POWER_TYPE);
+        let wire_system = Self::get_optional_string_value(&row[4], "线制");
+        let channel_number = Self::get_string_value(&row[idx(COL_KEY_CHANNEL_POS)], row_number, COL_KEY_CHANNEL_POS)?;
+        let data_type_str = Self::get_string_value(&row[idx(COL_KEY_DATA_TYPE)], row_number, COL_KEY_DATA_TYPE)?;
+
+        let access_property_idx = header_map.get("读写属性").copied();
+        let access_property = access_property_idx.map(|i| Self::get_optional_string_value(&row[i], "读写属性"));
+
+        let plc_absolute_address = header_map.get(COL_KEY_PLC_ADDR).map(|i| Self::get_optional_string_value(&row[*i], COL_KEY_PLC_ADDR)).unwrap_or_default();
+        let modbus_communication_address = Self::get_string_value(&row[idx(COL_KEY_COMM_ADDR)], row_number, COL_KEY_COMM_ADDR)?;
+
+        // 单位可选
+        let engineering_unit = header_map.get(COL_KEY_UNIT).map(|i| Self::get_optional_string_value(&row[*i], COL_KEY_UNIT));
 
         // 解析模块类型
         let module_type = Self::parse_module_type(&module_type_str, row_number)?;
@@ -179,7 +236,10 @@ impl ExcelImporter {
         // 解析数据类型
         let data_type = Self::parse_data_type(&data_type_str, row_number)?;
 
-        // 创建通道定义（使用正确的上位机通讯地址）
+        // 序号（可能为浮点或整数字符串）
+        let sequence_number = Self::parse_sequence_number(&row[idx(COL_KEY_SEQUENCE)]);
+
+        // 创建通道定义
         let mut definition = ChannelPointDefinition::new(
             tag,
             variable_name,
@@ -189,8 +249,14 @@ impl ExcelImporter {
             module_type,
             channel_number,
             data_type,
-            modbus_communication_address,  // 这里是上位机通讯地址（被测PLC通道号，如40001）
+            modbus_communication_address,
         );
+
+        // 单位
+        if let Some(unit_val) = engineering_unit { if !unit_val.is_empty() { definition.engineering_unit = Some(unit_val); } }
+
+        // 场站编号
+        if let Some(code_opt) = station_code { if !code_opt.is_empty() { definition.station_name = format!("{}-{}", definition.station_name, code_opt); } }
 
         // 设置PLC绝对地址（如%MD100）
         if !plc_absolute_address.is_empty() && plc_absolute_address != "/" {
@@ -203,6 +269,8 @@ impl ExcelImporter {
 
         // 从Excel中提取更多字段（如果存在）
         Self::extract_additional_fields(&mut definition, row, row_number)?;
+
+        definition.sequence_number = sequence_number;
 
         Ok(definition)
     }
@@ -526,6 +594,17 @@ impl ExcelImporter {
                 row_number,
                 type_str
             )))
+        }
+    }
+
+    /// 解析序列号
+    fn parse_sequence_number(cell: &calamine::DataType) -> Option<u32> {
+        log::info!("解析序号: {:?}", cell);
+        match cell {
+            calamine::DataType::String(s) => s.trim().parse::<u32>().ok(),
+            calamine::DataType::Float(f) => Some(*f as u32),
+            calamine::DataType::Int(i) => Some(*i as u32),
+            _ => None,
         }
     }
 }

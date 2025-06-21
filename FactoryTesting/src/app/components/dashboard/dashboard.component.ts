@@ -27,6 +27,9 @@ import { NzMessageModule, NzMessageService } from 'ng-zorro-antd/message';
 import { NgxEchartsModule } from 'ngx-echarts';
 import { EChartsOption } from 'echarts';
 
+// 引入新批次会话列表组件
+import { BatchSessionListComponent } from './batch-session-list.component';
+
 interface AvailableBatch {
   id: string;
   productModel: string;
@@ -91,6 +94,27 @@ interface DashboardBatchDisplay {
   updated_at?: string;
 }
 
+interface StationBatchGroup {
+  station: string;
+  batches: DashboardBatchDisplay[];
+  total_points: number;
+  tested_points: number;
+  passed_points: number;
+  failed_points: number;
+  skipped_points: number;
+  creation_time: string; // 取最早批次
+  isCurrentSession: boolean; // 任一批次属于当前会话
+  overall_status: OverallTestStatus; // 简化：取第一个批次状态
+}
+
+interface ImportSessionGroup {
+  sessionKey: string; // 用creation_time秒级字符串
+  timestamp: string;
+  batches: DashboardBatchDisplay[];
+  total_batches: number;
+  stations: string[];
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -115,7 +139,8 @@ interface DashboardBatchDisplay {
     NzModalModule,
     NzMessageModule,
     // ECharts 模块
-    NgxEchartsModule
+    NgxEchartsModule,
+    BatchSessionListComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
@@ -123,7 +148,8 @@ interface DashboardBatchDisplay {
 export class DashboardComponent implements OnInit, OnDestroy {
   // 系统状态
   systemStatus: SystemStatus | null = null;
-  recentBatches: DashboardBatchDisplay[] = []; // 🔧 修复：使用正确的类型
+  recentBatches: DashboardBatchDisplay[] = []; // 🔧 原始批次数组
+  stationGroups: StationBatchGroup[] = [];     // 🔧 站场分组后的列表
   recentActivities: RecentActivity[] = [];
   totalChannels = 0;
   totalBatches = 0;
@@ -163,6 +189,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   batchStatusChartOption: EChartsOption = {};
 
   private subscriptions: Subscription[] = [];
+
+  importSessions: ImportSessionGroup[] = [];
 
   constructor(
     private tauriApi: TauriApiService,
@@ -243,60 +271,68 @@ export class DashboardComponent implements OnInit, OnDestroy {
                typeof batch.batch_id === 'string';
       });
 
-      this.recentBatches = validBatches
-        .sort((a: DashboardBatchInfo, b: DashboardBatchInfo) => {
-          // 使用正确的类型，因为现在 validBatches 是 DashboardBatchInfo[]
-          const timeA = a.creation_time ? new Date(a.creation_time).getTime() : 0;
-          const timeB = b.creation_time ? new Date(b.creation_time).getTime() : 0;
-          return timeB - timeA; // 最新的在前
-        })
-        .slice(0, 10)
-        .map(batch => {
-          try {
-            // 直接使用 batch 的会话信息，因为它本身就是 DashboardBatchInfo
-            const isCurrentSession = batch.is_current_session || false;
+      // 先将 DashboardBatchInfo → DashboardBatchDisplay
+      const displayBatches: DashboardBatchDisplay[] = validBatches.map(batch => ({
+        // 新字段
+        id: batch.batch_id,
+        name: batch.batch_name || '未命名批次',
+        station: batch.station_name || '未知站场',
+        createdAt: batch.creation_time || batch.created_at || new Date().toISOString(),
+        totalPoints: batch.total_points || 0,
+        testedCount: batch.tested_points || 0,
+        untestedCount: (batch.total_points || 0) - (batch.tested_points || 0),
+        successCount: batch.passed_points || 0,
+        failureCount: batch.failed_points || 0,
+        status: this.getStatusFromProgress(batch.tested_points || 0, batch.total_points || 0),
+        isCurrentSession: batch.is_current_session || false,
 
-            // 安全地获取站场信息
-            const stationName = batch.station_name || '未知站场';
+        // 保留原字段
+        batch_id: batch.batch_id,
+        batch_name: batch.batch_name,
+        product_model: batch.product_model,
+        serial_number: batch.serial_number,
+        station_name: batch.station_name,
+        creation_time: batch.creation_time,
+        last_updated_time: batch.last_updated_time,
+        total_points: batch.total_points,
+        tested_points: batch.tested_points,
+        passed_points: batch.passed_points,
+        failed_points: batch.failed_points,
+        skipped_points: batch.skipped_points,
+        overall_status: batch.overall_status,
+        operator_name: batch.operator_name,
+        created_at: batch.created_at,
+        updated_at: batch.updated_at
+      }));
 
-          return {
-            // 新的字段名
-            id: batch.batch_id,
-            name: batch.batch_name || '未命名批次',
-            station: stationName,
-            createdAt: batch.creation_time || batch.created_at || new Date().toISOString(),
-            totalPoints: batch.total_points || 0,
-            testedCount: batch.tested_points || 0,
-            untestedCount: (batch.total_points || 0) - (batch.tested_points || 0),
-            successCount: batch.passed_points || 0,
-            failureCount: batch.failed_points || 0,
-            status: this.getStatusFromProgress(batch.tested_points || 0, batch.total_points || 0),
-            isCurrentSession: isCurrentSession,
+      // 根据创建时间排序
+      displayBatches.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-            // 原始字段名（保持兼容性）
-            batch_id: batch.batch_id,
-            batch_name: batch.batch_name || '未命名批次',
-            product_model: batch.product_model,
-            serial_number: batch.serial_number,
-            station_name: stationName,
-            creation_time: batch.creation_time,
-            last_updated_time: batch.last_updated_time,
-            total_points: batch.total_points || 0,
-            tested_points: batch.tested_points || 0,
-            passed_points: batch.passed_points || 0,
-            failed_points: batch.failed_points || 0,
-            skipped_points: batch.skipped_points || 0,
-            overall_status: this.getStatusFromProgress(batch.tested_points || 0, batch.total_points || 0),
-            operator_name: batch.operator_name,
-            created_at: batch.created_at,
-            updated_at: batch.updated_at
-          };
-          } catch (error) {
-            console.error('处理批次数据时发生错误:', error, '批次:', batch);
-            return null;
-          }
-        })
-        .filter(batch => batch !== null); // 过滤掉null值
+      this.recentBatches = displayBatches;
+
+      // === 新增：按导入会话分组 ===
+      const sessionMap = new Map<string, DashboardBatchDisplay[]>();
+      const getSessionKey = (b: DashboardBatchDisplay) => (b.creation_time || b.created_at || b.createdAt).substring(0,19); // 到秒
+      for (const b of this.recentBatches) {
+        const key = getSessionKey(b);
+        if (!sessionMap.has(key)) sessionMap.set(key, []);
+        sessionMap.get(key)!.push(b);
+      }
+
+      this.importSessions = Array.from(sessionMap.entries()).map(([key, batches]) => {
+        const stationsSet = new Set<string>();
+        batches.forEach(b => stationsSet.add(b.station || b.station_name || '未知站场'));
+        return {
+          sessionKey: key,
+          timestamp: key.replace('T',' ').replace('Z',''),
+          batches: batches.sort((a,b)=> a.batch_name.localeCompare(b.batch_name)),
+          total_batches: batches.length,
+          stations: Array.from(stationsSet)
+        } as ImportSessionGroup;
+      }).sort((a,b)=> b.sessionKey.localeCompare(a.sessionKey));
+
+      // 兼容：显示最新session的第一批次
+      this.recentBatches = this.importSessions.map(g=>g.batches[0]);
 
       // 检查是否有导入的数据
       this.hasImportedData = this.totalBatches > 0;
@@ -1188,5 +1224,53 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.initTestProgressChart();
     this.initSystemStatusChart();
     this.initBatchStatusChart();
+  }
+
+  // === 视图/删除基于站场 ===
+  viewStationDetails(group: StationBatchGroup) {
+    // 简化：进入测试区域并自动选择第一批次
+    if (group.batches.length > 0) {
+      this.viewBatchDetails(group.batches[0]);
+    }
+  }
+
+  deleteStation(group: StationBatchGroup) {
+    this.modal.confirm({
+      nzTitle: `确认删除站场 "${group.station}" 的所有批次?`,
+      nzContent: `这将一次性删除 ${group.batches.length} 个批次及其所有测试数据，不可恢复！`,
+      nzOkDanger: true,
+      nzOnOk: async () => {
+        for (const b of group.batches) {
+          await this.deleteBatch(b);
+        }
+        this.message.success('已删除指定站场的所有批次');
+        this.loadDashboardData();
+      }
+    });
+  }
+
+  /**
+   * 删除整个导入会话 - 级联删除会话下所有批次
+   */
+  async deleteImportSession(session: ImportSessionGroup) {
+    this.modal.confirm({
+      nzTitle: `确认删除导入会话 (${session.timestamp})?`,
+      nzContent: `这将删除该会话下的 ${session.total_batches} 个批次及其所有测试数据，不可恢复！`,
+      nzOkDanger: true,
+      nzOnOk: async () => {
+        for (const b of session.batches) {
+          await this.performBatchDeletion(b);
+        }
+        this.message.success('已删除指定导入会话的所有批次');
+        this.loadDashboardData();
+      }
+    });
+  }
+
+  /**
+   * TODO: 恢复操作占位
+   */
+  onRestoreSession(_session: ImportSessionGroup) {
+    this.message.info('恢复功能暂未实现');
   }
 }

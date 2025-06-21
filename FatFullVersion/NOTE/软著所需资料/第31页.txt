@@ -1,0 +1,57 @@
+软件源代码文档 - 第 31 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 31 / 578
+==================================================
+
+1501:         /// <param name="channelMappings">需要测试的通道映射集合</param>
+1502:         /// <returns>创建的任务ID列表</returns>
+1503:         Task<IEnumerable<string>> CreateTestTasksAsync(IEnumerable<ChannelMapping> channelMappings);
+1504: 
+1505:         /// <summary>
+1506:         /// 启动所有测试任务
+1507:         /// </summary>
+1508:         /// <returns>操作是否成功</returns>
+1509:         Task<bool> StartAllTasksAsync();
+1510: 
+1511:         /// <summary>
+1512:         /// 停止所有测试任务
+1513:         /// </summary>
+1514:         /// <returns>操作是否成功</returns>
+1515:         Task<bool> StopAllTasksAsync();
+1516: 
+1517:         /// <summary>
+1518:         /// 暂停所有测试任务
+1519:         /// </summary>
+1520:         /// <returns>操作是否成功</returns>
+1521:         Task<bool> PauseAllTasksAsync();
+1522: 
+1523:         /// <summary>
+1524:         /// 恢复所有测试任务
+1525:         /// </summary>
+1526:         /// <returns>操作是否成功</returns>
+1527:         Task<bool> ResumeAllTasksAsync();
+1528: 
+1529:         /// <summary>
+1530:         /// 根据ID获取测试任务
+1531:         /// </summary>
+1532:         /// <param name="taskId">任务ID</param>
+1533:         /// <returns>测试任务实例，如果不存在则返回null</returns>
+1534:         TestTask GetTaskById(string taskId);
+1535: 
+1536:         /// <summary>
+1537:         /// 根据通道映射获取测试任务
+1538:         /// </summary>
+1539:         /// <param name="channelMapping">通道映射实例</param>
+1540:         /// <returns>测试任务实例，如果不存在则返回null</returns>
+1541:         TestTask GetTaskByChannel(ChannelMapping channelMapping);
+1542: 
+1543:         /// <summary>
+1544:         /// 获取所有活跃的测试任务
+1545:         /// </summary>
+1546:         /// <returns>所有活跃的测试任务集合</returns>
+1547:         IEnumerable<TestTask> GetAllTasks();
+1548: 
+1549:         /// <summary>
+1550:         /// 删除特定ID的测试任务

@@ -1,0 +1,57 @@
+软件源代码文档 - 第 27 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 27 / 578
+==================================================
+
+1301:         
+1302:         /// <summary>
+1303:         /// 根据测试标识删除测试记录
+1304:         /// </summary>
+1305:         /// <param name="testTag">测试标识</param>
+1306:         /// <returns>删除操作是否成功</returns>
+1307:         Task<bool> DeleteTestRecordsByTagAsync(string testTag);
+1308:         
+1309:         /// <summary>
+1310:         /// 获取所有测试记录
+1311:         /// </summary>
+1312:         /// <returns>所有测试记录集合</returns>
+1313:         Task<List<ChannelMapping>> GetAllTestRecordsAsync();
+1314:         
+1315:         #endregion
+1316:     }
+1317: }
+1318: 
+1319: // ==========================================
+1320: // 文件: FatFullVersion\FatFullVersion\IServices\IServiceLocator.cs
+1321: // ==========================================
+1322: using System;
+1323: 
+1324: namespace FatFullVersion.IServices
+1325: {
+1326:     /// <summary>
+1327:     /// 服务定位器接口，用于解析命名服务
+1328:     /// </summary>
+1329:     public interface IServiceLocator
+1330:     {
+1331:         /// <summary>
+1332:         /// 解析指定名称的服务
+1333:         /// </summary>
+1334:         /// <typeparam name="T">服务类型</typeparam>
+1335:         /// <param name="name">服务名称</param>
+1336:         /// <returns>服务实例</returns>
+1337:         T ResolveNamed<T>(string name);
+1338:     }
+1339: } 
+1340: 
+1341: // ==========================================
+1342: // 文件: FatFullVersion\FatFullVersion\IServices\ITestRecordService.cs
+1343: // ==========================================
+1344: using FatFullVersion.Models;
+1345: using System;
+1346: using System.Collections.Generic;
+1347: using System.Threading.Tasks;
+1348: 
+1349: namespace FatFullVersion.IServices
+1350: {

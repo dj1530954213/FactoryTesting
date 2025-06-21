@@ -319,56 +319,67 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       next: (result) => {
         console.log('🚀 后端一键导入和创建批次结果:', result);
 
-        // 修复版：result 是 ImportAndPrepareBatchResponse 结构
-        if (result && result.batch_info && result.instances) {
-          // 创建导入结果对象（用于显示）
-          const importResult = {
-            success: true,
-            totalChannels: result.instances.length,
-            successChannels: result.instances.length,
-            failedChannels: 0,
-            message: `成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`,
-            timestamp: new Date().toISOString(),
-            batchInfo: {
-              batch_id: result.batch_info.batch_id,
-              product_model: result.batch_info.product_model || this.extractProductModel(),
-              serial_number: result.batch_info.serial_number || this.generateSerialNumber(),
-              creation_time: result.batch_info.creation_time || new Date().toISOString(),
-              total_points: result.instances.length,
-              tested_points: 0,
-              passed_points: 0,
-              failed_points: 0,
-              status_summary: '已创建，等待测试'
-            },
-            // 标记这是已持久化的结果
-            isPersisted: true,
-            definitions: result.instances,
-            allocationResult: {
-              success: true,
-              allocated_count: result.instances.length,
-              conflict_count: 0,
-              total_count: result.instances.length,
-              total_batches: 1,
-              message: '一键导入和分配完成',
-              allocation_details: {
-                source: 'backend_service',
-                excel_file_name: this.selectedFile!.name,
-                allocation_algorithm: '后端一键导入Excel并创建批次服务',
-                backend_result: result
-              }
+        // 计算各类型数量
+        const typeCounts: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
+        result.instances.forEach((inst: any) => {
+          const t = inst.module_type || inst.moduleType;
+          if (t && typeCounts.hasOwnProperty(t)) {
+            typeCounts[t]++;
+          }
+        });
+
+        const importResult = {
+          success: true,
+          totalChannels: result.instances.length,
+          successChannels: result.instances.length,
+          failedChannels: 0,
+          message: `成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`,
+          timestamp: new Date().toISOString(),
+          batchInfo: {
+            batch_id: result.batch_info.batch_id,
+            product_model: result.batch_info.product_model || this.extractProductModel(),
+            serial_number: result.batch_info.serial_number || this.generateSerialNumber(),
+            creation_time: result.batch_info.creation_time || new Date().toISOString(),
+            total_points: result.instances.length,
+            tested_points: 0,
+            passed_points: 0,
+            failed_points: 0,
+            status_summary: '已创建，等待测试',
+            // 添加Excel列映射说明
+            excel_column_mapping: {
+              '变量名称(HMI)': '点位名称',
+              '变量描述': '通道位号', 
+              '通道位号': '被测PLC通道号',
+              'channel_address': '测试PLC通道号'
             }
-          };
+          },
+          // 标记这是已持久化的结果
+          isPersisted: true,
+          definitions: result.instances,
+          allocationResult: {
+            success: true,
+            allocated_count: result.instances.length,
+            conflict_count: 0,
+            total_count: result.instances.length,
+            total_batches: 1,
+            message: '一键导入和分配完成',
+            allocation_details: {
+              source: 'backend_service',
+              excel_file_name: this.selectedFile!.name,
+              allocation_algorithm: '后端一键导入Excel并创建批次服务',
+              backend_result: result,
+              module_distribution: typeCounts
+            }
+          }
+        };
 
-          this.dataStateService.updateImportState({
-            isImporting: false,
-            currentStep: 2,
-            importResult: importResult
-          });
+        this.dataStateService.updateImportState({
+          isImporting: false,
+          currentStep: 2,
+          importResult: importResult
+        });
 
-          this.message.success(`一键导入完成：成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`);
-        } else {
-          throw new Error('后端返回的分配结果无效');
-        }
+        this.message.success(`一键导入完成：成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`);
       },
       error: (error) => {
         console.error('🚀 后端一键导入失败:', error);
@@ -677,5 +688,42 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     } catch (error) {
       return dateTimeString;
     }
+  }
+
+  // 获取各类型通道数量（AI/AO/DI/DO）
+  get channelCounts(): any {
+    // 0) 后端汇总字段
+    const sum = this.importResult?.allocationResult?.allocation_summary?.by_module_type;
+    if (sum) {
+      const c: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
+      Object.keys(sum).forEach(k => {
+        const key = k as any;
+        c[key] = sum[key]?.definition_count || 0;
+      });
+      return c;
+    }
+
+    // 1) allocation_details.module_distribution
+    const dist = this.importResult?.allocationResult?.allocation_details?.module_distribution;
+    if (dist) return dist;
+
+    // 2) 统计 definitions
+    const defs = this.importResult?.definitions;
+    if (defs && Array.isArray(defs)) {
+      const counts: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
+      defs.forEach((d: any) => {
+        const t = d.module_type || d.moduleType;
+        if (counts.hasOwnProperty(t)) counts[t]++;
+      });
+      return counts;
+    }
+    return null;
+  }
+
+  // 获取批次数量
+  get batchCount(): number {
+    const n = this.importResult?.allocationResult?.total_batches;
+    if (n && n > 0) return n;
+    return 1; // 默认单批次
   }
 } 

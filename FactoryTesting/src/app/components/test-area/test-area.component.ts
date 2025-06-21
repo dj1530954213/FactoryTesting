@@ -1108,7 +1108,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   private computeFilteredInstances(): ChannelTestInstance[] {
     if (!this.batchDetails?.instances) return [];
 
-    return this.batchDetails.instances.filter(instance => {
+    const filtered = this.batchDetails.instances.filter(instance => {
       const definition = this.getDefinitionByInstanceIdCached(instance.instance_id);
 
       // 模块类型筛选 - 保持原有逻辑
@@ -1145,6 +1145,33 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       }
 
       return true;
+    });
+
+    // 按序号排序：有序号的在前，按序号升序；无序号的在后，按tag排序
+    return filtered.sort((a, b) => {
+      const defA = this.getDefinitionByInstanceIdCached(a.instance_id);
+      const defB = this.getDefinitionByInstanceIdCached(b.instance_id);
+      
+      const seqA = defA?.sequenceNumber;
+      const seqB = defB?.sequenceNumber;
+      
+      // 如果都有序号，按序号排序
+      if (seqA !== undefined && seqB !== undefined) {
+        return seqA - seqB;
+      }
+      
+      // 有序号的排在无序号的前面
+      if (seqA !== undefined && seqB === undefined) {
+        return -1;
+      }
+      if (seqA === undefined && seqB !== undefined) {
+        return 1;
+      }
+      
+      // 都没有序号时，按tag排序
+      const tagA = defA?.tag || '';
+      const tagB = defB?.tag || '';
+      return tagA.localeCompare(tagB);
     });
   }
 

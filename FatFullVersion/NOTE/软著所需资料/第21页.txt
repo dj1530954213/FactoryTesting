@@ -1,0 +1,57 @@
+软件源代码文档 - 第 21 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 21 / 578
+==================================================
+
+1001:         /// <param name="allChannels">所有通道集合</param>
+1002:         /// <returns>提取的批次信息集合</returns>
+1003:         Task<IEnumerable<ViewModels.BatchInfo>> ExtractBatchInfoAsync(
+1004:             IEnumerable<ChannelMapping> allChannels);
+1005: 
+1006:         /// <summary>
+1007:         /// 清除所有通道分配信息
+1008:         /// </summary>
+1009:         /// <param name="channels">需要清除分配信息的通道集合</param>
+1010:         /// <returns>清除分配信息后的通道集合</returns>
+1011:         Task<IEnumerable<ChannelMapping>> ClearAllChannelAllocationsAsync(IEnumerable<ChannelMapping> channels);
+1012:     }
+1013: }
+1014: 
+1015: // ==========================================
+1016: // 文件: FatFullVersion\FatFullVersion\IServices\IMessageService.cs
+1017: // ==========================================
+1018: using System.Threading.Tasks;
+1019: using System.Windows;
+1020: 
+1021: namespace FatFullVersion.IServices
+1022: {
+1023:     /// <summary>
+1024:     /// 消息服务接口，定义显示消息和对话框的功能
+1025:     /// </summary>
+1026:     public interface IMessageService
+1027:     {
+1028:         /// <summary>
+1029:         /// 获取消息
+1030:         /// </summary>
+1031:         /// <returns>消息内容</returns>
+1032:         string GetMessage();
+1033: 
+1034:         /// <summary>
+1035:         /// 显示消息对话框
+1036:         /// </summary>
+1037:         /// <param name="title">标题</param>
+1038:         /// <param name="message">消息内容</param>
+1039:         /// <param name="button">按钮选项</param>
+1040:         /// <returns>用户选择的结果</returns>
+1041:         Task<MessageBoxResult> ShowAsync(string title, string message, MessageBoxButton button);
+1042:     }
+1043: } 
+1044: 
+1045: // ==========================================
+1046: // 文件: FatFullVersion\FatFullVersion\IServices\IPlcCommunication.cs
+1047: // ==========================================
+1048: using System;
+1049: using System.Collections.Generic;
+1050: using System.Linq;

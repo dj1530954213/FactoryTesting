@@ -1,0 +1,57 @@
+软件源代码文档 - 第 25 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 25 / 578
+==================================================
+
+1201:         /// <returns>PLC连接配置</returns>
+1202:         Task<PlcConnectionConfig> GetTargetPlcConnectionConfigAsync();
+1203: 
+1204:         /// <summary>
+1205:         /// 保存PLC连接配置
+1206:         /// </summary>
+1207:         /// <param name="config">PLC连接配置</param>
+1208:         /// <returns>保存操作是否成功</returns>
+1209:         Task<bool> SavePlcConnectionConfigAsync(PlcConnectionConfig config);
+1210: 
+1211:         /// <summary>
+1212:         /// 获取所有PLC连接配置
+1213:         /// </summary>
+1214:         /// <returns>PLC连接配置列表</returns>
+1215:         Task<List<PlcConnectionConfig>> GetAllPlcConnectionConfigsAsync();
+1216: 
+1217:         #endregion
+1218: 
+1219:         #region 通道比较表操作
+1220: 
+1221:         /// <summary>
+1222:         /// 通过通道位号获取通讯地址
+1223:         /// </summary>
+1224:         /// <param name="channelTag">通道位号</param>
+1225:         /// <returns>通讯地址</returns>
+1226:         Task<string> GetPlcCommunicationAddress(string channelTag);
+1227: 
+1228:         /// <summary>
+1229:         /// 获取所有测试PLC的通道与通讯地址的对应关系
+1230:         /// </summary>
+1231:         /// <returns>通道比较表列表</returns>
+1232:         Task<List<ComparisonTable>> GetComparisonTablesAsync();
+1233: 
+1234:         /// <summary>
+1235:         /// 添加通道比较表项
+1236:         /// </summary>
+1237:         /// <param name="comparisonTable">通道比较表项</param>
+1238:         /// <returns>添加操作是否成功</returns>
+1239:         Task<bool> AddComparisonTableAsync(ComparisonTable comparisonTable);
+1240: 
+1241:         /// <summary>
+1242:         /// 添加多个通道比较表项
+1243:         /// </summary>
+1244:         /// <param name="comparisonTables">通道比较表项列表</param>
+1245:         /// <returns>添加操作是否成功</returns>
+1246:         Task<bool> AddComparisonTablesAsync(List<ComparisonTable> comparisonTables);
+1247: 
+1248:         /// <summary>
+1249:         /// 更新通道比较表项
+1250:         /// </summary>

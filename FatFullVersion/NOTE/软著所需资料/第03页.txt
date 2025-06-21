@@ -1,0 +1,57 @@
+软件源代码文档 - 第 3 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:03
+页码: 3 / 578
+==================================================
+
+0101:                 
+0102:                 return window;
+0103:             }
+0104:             catch (Exception ex)
+0105:             {
+0106:                 MessageBox.Show($"创建主窗口失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+0107:                 return null;
+0108:             }
+0109:         }
+0110:         
+0111:         //依赖注入点
+0112:         protected override void RegisterTypes(IContainerRegistry containerRegistry)
+0113:         {
+0114:             try
+0115:             {
+0116:                 var container = containerRegistry.GetContainer();
+0117: 
+0118:                 // 注册数据库上下文
+0119:                 containerRegistry.RegisterSingleton<ApplicationDbContext>();
+0120:                 
+0121:                 // 获取数据库上下文实例
+0122:                 var dbContext = container.Resolve<ApplicationDbContext>();
+0123:                 // 注册 EF Core 的 DbContext
+0124:                 containerRegistry.Register<ApplicationDbContext>(() =>
+0125:                 {
+0126:                     string str =
+0127:                         $"Data Source={System.IO.Path.Combine($"{AppContext.BaseDirectory}Data", "fattest.db")}";
+0128:                     var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+0129:                         .UseSqlite($"Data Source={System.IO.Path.Combine($"{AppContext.BaseDirectory}Data", "fattest.db")}")
+0130:                         .Options;
+0131: 
+0132:                     return new ApplicationDbContext(options);
+0133:                 });
+0134: 
+0135:                 containerRegistry.RegisterSingleton<IMessageService, MessageService>();
+0136:                 //注册点位表处理服务，选择Excel实现
+0137:                 containerRegistry.RegisterSingleton<IPointDataService, ExcelPointDataService>();
+0138:                 
+0139:                 // 注册通道映射服务
+0140:                 containerRegistry.RegisterSingleton<IChannelMappingService, ChannelMappingService>();
+0141: 
+0142:                 // 注册仓储层服务，需要传入数据库上下文
+0143:                 containerRegistry.RegisterSingleton<IRepository, Repository>();
+0144: 
+0145:                 // 注册服务定位器
+0146:                 containerRegistry.RegisterSingleton<IServiceLocator, ServiceLocator>();
+0147: 
+0148:                 // 初始化数据库数据
+0149:                 try
+0150:                 {

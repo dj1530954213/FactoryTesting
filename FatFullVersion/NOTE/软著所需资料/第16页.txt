@@ -1,0 +1,57 @@
+软件源代码文档 - 第 16 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 16 / 578
+==================================================
+
+0751:         /// <summary>
+0752:         /// 无参构造函数，供EF Core使用
+0753:         /// </summary>
+0754:         public ComparisonTable()
+0755:         {
+0756:             ChannelAddress = string.Empty;
+0757:             CommunicationAddress = string.Empty;
+0758:         }
+0759: 
+0760:         /// <summary>
+0761:         /// 带参数构造函数
+0762:         /// </summary>
+0763:         /// <param name="channelAddress">通道地址</param>
+0764:         /// <param name="communicationAddress">通讯地址</param>
+0765:         /// <param name="channelType">通道类型</param>
+0766:         public ComparisonTable(string channelAddress, string communicationAddress, TestPlcChannelType channelType)
+0767:         {
+0768:             ChannelAddress = channelAddress ?? string.Empty;
+0769:             CommunicationAddress = communicationAddress ?? string.Empty;
+0770:             ChannelType = channelType;
+0771:         }
+0772: 
+0773:         /// <summary>
+0774:         /// 实现IComparable接口的比较方法
+0775:         /// </summary>
+0776:         /// <param name="other">要比较的另一个通道比较表项</param>
+0777:         /// <returns>比较结果</returns>
+0778:         public int CompareTo(ComparisonTable? other)
+0779:         {
+0780:             if (other == null) return 1;
+0781: 
+0782:             // 首先按通道类型比较（使用枚举的整数值）
+0783:             int typeComparison = ((int)ChannelType).CompareTo((int)other.ChannelType);
+0784:             if (typeComparison != 0) return typeComparison;
+0785: 
+0786:             // 然后按通道地址比较
+0787:             int channelAddressComparison = string.Compare(ChannelAddress, other.ChannelAddress, StringComparison.Ordinal);
+0788:             if (channelAddressComparison != 0) return channelAddressComparison;
+0789: 
+0790:             // 最后按通讯地址比较
+0791:             return string.Compare(CommunicationAddress, other.CommunicationAddress, StringComparison.Ordinal);
+0792:         }
+0793: 
+0794:         public override bool Equals(object? obj)
+0795:         {
+0796:             if (obj is not ComparisonTable other) return false;
+0797:             return Id == other.Id &&
+0798:                    ChannelAddress == other.ChannelAddress &&
+0799:                    CommunicationAddress == other.CommunicationAddress &&
+0800:                    ChannelType == other.ChannelType;

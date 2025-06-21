@@ -1,0 +1,57 @@
+软件源代码文档 - 第 30 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 30 / 578
+==================================================
+
+1451:         /// <summary>
+1452:         /// 导出测试结果到Excel文件
+1453:         /// </summary>
+1454:         /// <param name="testResults">测试结果数据</param>
+1455:         /// <param name="filePath">导出文件路径，如果为null则通过文件对话框选择</param>
+1456:         /// <returns>导出是否成功</returns>
+1457:         Task<bool> ExportToExcelAsync(IEnumerable<ChannelMapping> testResults, string filePath = null);
+1458:         
+1459:         /// <summary>
+1460:         /// 检查是否所有测试点位都已通过
+1461:         /// </summary>
+1462:         /// <param name="testResults">测试结果数据</param>
+1463:         /// <returns>是否所有点位都已通过测试</returns>
+1464:         bool AreAllTestsPassed(IEnumerable<ChannelMapping> testResults);
+1465: 
+1466:         /// <summary>
+1467:         /// 导出通道映射到Excel文件
+1468:         /// </summary>
+1469:         /// <param name="channelMappings">通道映射数据</param>
+1470:         /// <param name="filePath">导出文件路径，如果为null则通过文件对话框选择</param>
+1471:         /// <returns>导出是否成功</returns>
+1472:         Task<bool> ExportChannelMapToExcelAsync(IEnumerable<ChannelMapping> channelMappings, string filePath = null);
+1473:     }
+1474: } 
+1475: 
+1476: // ==========================================
+1477: // 文件: FatFullVersion\FatFullVersion\IServices\ITestTaskManager.cs
+1478: // ==========================================
+1479: using System;
+1480: using System.Collections.Generic;
+1481: using System.Linq;
+1482: using System.Text;
+1483: using System.Threading.Tasks;
+1484: using FatFullVersion.Models;
+1485: 
+1486: namespace FatFullVersion.IServices
+1487: {
+1488:     /// <summary>
+1489:     /// 测试任务管理器接口，定义测试任务的创建、启动、停止和管理功能
+1490:     /// </summary>
+1491:     public interface ITestTaskManager : IDisposable
+1492:     {
+1493:         /// <summary>
+1494:         /// 获取接线是否已完成的标志
+1495:         /// </summary>
+1496:         bool IsWiringCompleted { get; }
+1497:         
+1498:         /// <summary>
+1499:         /// 从通道映射集合创建测试任务
+1500:         /// </summary>

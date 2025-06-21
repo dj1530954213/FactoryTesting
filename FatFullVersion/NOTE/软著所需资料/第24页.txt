@@ -1,0 +1,57 @@
+软件源代码文档 - 第 24 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 24 / 578
+==================================================
+
+1151:         /// <returns>操作结果</returns>
+1152:         Task<bool> SavePointDataAsync(IEnumerable<ExcelPointData> pointDataList);
+1153: 
+1154:         /// <summary>
+1155:         /// 导入点表配置
+1156:         /// </summary>
+1157:         /// <param name="importAction">导入完成后的回调动作，参数为导入的点表数据列表</param>
+1158:         /// <returns></returns>
+1159:         Task ImportPointConfigurationAsync(Action<IEnumerable<ExcelPointData>> importAction = null);
+1160:     }
+1161: 
+1162:     
+1163: } 
+1164: 
+1165: // ==========================================
+1166: // 文件: FatFullVersion\FatFullVersion\IServices\IRepository.cs
+1167: // ==========================================
+1168: using System;
+1169: using System.Collections.Generic;
+1170: using System.Linq;
+1171: using System.Text;
+1172: using System.Threading.Tasks;
+1173: using FatFullVersion.Entities;
+1174: using FatFullVersion.Entities.ValueObject;
+1175: using FatFullVersion.Models;
+1176: 
+1177: namespace FatFullVersion.IServices
+1178: {
+1179:     /// <summary>
+1180:     /// 仓储层接口，提供数据持久化服务
+1181:     /// </summary>
+1182:     public interface IRepository
+1183:     {
+1184:         /// <summary>
+1185:         /// 初始化数据库
+1186:         /// </summary>
+1187:         /// <returns>初始化是否成功</returns>
+1188:         Task<bool> InitializeDatabaseAsync();
+1189: 
+1190:         #region PLC连接配置操作
+1191: 
+1192:         /// <summary>
+1193:         /// 获取测试PLC连接配置
+1194:         /// </summary>
+1195:         /// <returns>PLC连接配置</returns>
+1196:         Task<PlcConnectionConfig> GetTestPlcConnectionConfigAsync();
+1197: 
+1198:         /// <summary>
+1199:         /// 获取被测PLC连接配置
+1200:         /// </summary>

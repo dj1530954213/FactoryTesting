@@ -1,0 +1,57 @@
+软件源代码文档 - 第 11 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 11 / 578
+==================================================
+
+0501: 
+0502:         /// <summary>
+0503:         /// 迁移数据库到最新版本
+0504:         /// </summary>
+0505:         /// <param name="context">数据库上下文</param>
+0506:         /// <returns>异步任务</returns>
+0507:         public static async Task MigrateDatabaseAsync(ApplicationDbContext context)
+0508:         {
+0509:             try
+0510:             {
+0511:                 // 检查是否有待应用的迁移
+0512:                 var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+0513:                 if (pendingMigrations.Any())
+0514:                 {
+0515:                     // 应用所有挂起的迁移
+0516:                     await context.Database.MigrateAsync();
+0517:                 }
+0518:             }
+0519:             catch (Exception ex)
+0520:             {
+0521:                 throw new Exception($"迁移数据库失败：{ex.Message}", ex);
+0522:             }
+0523:         }
+0524:     }
+0525: } 
+0526: 
+0527: // ==========================================
+0528: // 文件: FatFullVersion\FatFullVersion\Entities\EntitiesEnum\PlcBrandTypeEnum.cs
+0529: // ==========================================
+0530: using System;
+0531: using System.Collections.Generic;
+0532: using System.Linq;
+0533: using System.Text;
+0534: using System.Threading.Tasks;
+0535: 
+0536: namespace FatFullVersion.Entities.EntitiesEnum
+0537: {
+0538:     public enum PlcBrandTypeEnum
+0539:     {
+0540:         Micro850,
+0541:         HollySys_LKS,
+0542:     }
+0543: }
+0544: 
+0545: // ==========================================
+0546: // 文件: FatFullVersion\FatFullVersion\Entities\EntitiesEnum\PlcTypeEnum.cs
+0547: // ==========================================
+0548: namespace FatFullVersion.Entities.EntitiesEnum
+0549: {
+0550:     /// <summary>

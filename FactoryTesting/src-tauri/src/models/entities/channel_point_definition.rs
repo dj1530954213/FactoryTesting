@@ -163,15 +163,13 @@ impl From<&crate::models::structs::ChannelPointDefinition> for ActiveModel {
         Self {
             id: Set(definition.id.clone()),
             batch_id: Set(definition.batch_id.clone()),
-
-            // === 基础信息字段 ===
-            sequence_number: Set(None),
+            sequence_number: Set(definition.sequence_number.map(|n| n as i32)),
+            tag: Set(definition.tag.clone()),
             module_name: Set(Some(definition.module_name.clone())),
             module_type: Set(definition.module_type.to_string()),
             power_supply_type: Set(definition.power_supply_type.clone()),
             wire_system: Set(Some(definition.wire_system.clone())),
             channel_position: Set(definition.channel_tag_in_module.clone()),
-            tag: Set(definition.tag.clone()),
             station_name: Set(Some(definition.station_name.clone())),
             variable_name: Set(definition.variable_name.clone()),
             variable_description: Set(Some(definition.variable_description.clone())),
@@ -250,6 +248,7 @@ impl From<&Model> for crate::models::structs::ChannelPointDefinition {
         crate::models::structs::ChannelPointDefinition {
             id: model.id.clone(),
             batch_id: model.batch_id.clone(),
+            sequence_number: model.sequence_number.map(|n| n as u32),
             tag: model.tag.clone(),
             variable_name: model.variable_name.clone(),
             variable_description: model.variable_description.clone().unwrap_or_default(),

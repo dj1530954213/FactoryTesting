@@ -292,6 +292,7 @@
 
             <thead>
               <tr>
+                <th nzWidth="80px">序号</th>
                 <th>点位名称</th>
                 <th>测试PLC通道号</th>
                 <th>被测PLC通道号</th>
@@ -307,6 +308,11 @@
             <tbody>
               <tr *ngFor="let instance of filteredInstances; trackBy: trackByInstanceId"
                   [class]="getRowClassName(instance, 0)">
+                <td>
+                  <span class="sequence-number">
+                    {{ getDefinitionByInstanceId(instance.instance_id)?.sequenceNumber || '-' }}
+                  </span>
+                </td>
                 <td>
                   <strong>{{ getDefinitionByInstanceId(instance.instance_id)?.tag || 'N/A' }}</strong>
                 </td>

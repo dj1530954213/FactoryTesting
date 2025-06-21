@@ -1,0 +1,57 @@
+软件源代码文档 - 第 5 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:03
+页码: 5 / 578
+==================================================
+
+0201:                 containerRegistry.RegisterForNavigation<ConfigEditView>();
+0202:                 
+0203:                 try
+0204:                 {
+0205:                     // 直接在容器中注册 DataEditView 的自定义构造函数
+0206:                     container.Register<DataEditView>(made: Parameters.Of
+0207:                         .Type<IPointDataService>()
+0208:                         .Type<IChannelMappingService>()
+0209:                         .Type<IEventAggregator>()
+0210:                         .Type<ITestTaskManager>()
+0211:                         .Type<IPlcCommunication>(serviceKey: "TestPlc")
+0212:                         .Type<IPlcCommunication>(serviceKey: "TargetPlc")
+0213:                         .Type<IMessageService>());
+0214:                 }
+0215:                 catch (Exception ex)
+0216:                 {
+0217:                     MessageBox.Show($"注册DataEditView失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+0218:                     // 继续运行程序，但后续可能出现DataEditView相关错误
+0219:                 }
+0220: 
+0221:                 // 注册测试结果导出服务
+0222:                 containerRegistry.RegisterSingleton<ITestResultExportService, TestResultExportService>();
+0223:             }
+0224:             catch (Exception ex)
+0225:             {
+0226:                 MessageBox.Show($"注册服务失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+0227:                 throw; // 如果注册服务失败，则应用无法正常运行，需要抛出异常终止
+0228:             }
+0229:         }
+0230: 
+0231: 
+0232:         //模块注册点
+0233:         protected override void ConfigureModuleCatalog(IModuleCatalog moduleCatalog)
+0234:         {
+0235:         }
+0236: 
+0237:         /// <summary>
+0238:         /// 应用程序启动事件
+0239:         /// </summary>
+0240:         /// <param name="e">启动事件参数</param>
+0241:         protected override void OnStartup(StartupEventArgs e)
+0242:         {
+0243:             try
+0244:             {
+0245:                 base.OnStartup(e);
+0246:             }
+0247:             catch (Exception ex)
+0248:             {
+0249:                 MessageBox.Show($"应用程序启动失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+0250:                 Current.Shutdown(-1);

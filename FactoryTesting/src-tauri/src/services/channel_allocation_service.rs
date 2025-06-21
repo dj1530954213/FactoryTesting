@@ -120,6 +120,132 @@ impl ChannelAllocationService {
         Self
     }
 
+    /// 解析通道位号获得机架号。例如 "1_2_AI_0" → 1。
+    /// 解析失败返回 None（这些点位将排在最后一个机架批次）。
+    fn get_rack_number(&self, tag: &str) -> Option<u32> {
+        tag.split('_').next()?.parse::<u32>().ok()
+    }
+
+    /// 按机架顺序进行通道分配。
+    /// 先分配完同一机架内的所有批次，再继续下一个机架。
+    fn allocate_channels_by_rack(
+        &self,
+        definitions: Vec<ChannelPointDefinition>,
+        test_plc_config: TestPlcConfig,
+        product_model: Option<String>,
+        serial_number: Option<String>,
+    ) -> Result<BatchAllocationResult, AppError> {
+        use std::collections::{HashMap, HashSet};
+
+        // 将定义按照机架号分组
+        let mut rack_map: HashMap<u32, Vec<ChannelPointDefinition>> = HashMap::new();
+        for def in definitions.iter() {
+            // 使用通道位号字段（形如 "1_2_AI_0"）解析机架号
+            let rack_key = self.get_rack_number(&def.channel_tag_in_module).unwrap_or(u32::MAX);
+            rack_map.entry(rack_key).or_default().push(def.clone());
+        }
+
+        // 机架号升序排序
+        let mut rack_numbers: Vec<u32> = rack_map.keys().copied().collect();
+        rack_numbers.sort();
+
+        let mut all_batches: Vec<TestBatchInfo> = Vec::new();
+        let mut all_instances: Vec<ChannelTestInstance> = Vec::new();
+        let mut allocation_errors: Vec<String> = Vec::new();
+        let mut batch_counter: u32 = 1;
+
+        for rack in rack_numbers {
+            let defs_of_rack = rack_map.remove(&rack).unwrap_or_default();
+            if defs_of_rack.is_empty() {
+                continue;
+            }
+
+            // 针对单个机架执行批次分配
+            let (
+                rack_batches,
+                rack_instances,
+                rack_errors,
+                next_batch_counter,
+            ) = self.allocate_channels_for_rack(
+                defs_of_rack,
+                &test_plc_config,
+                batch_counter,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            all_batches.extend(rack_batches);
+            all_instances.extend(rack_instances);
+            allocation_errors.extend(rack_errors);
+            batch_counter = next_batch_counter; // 更新批次起始号
+        }
+
+        Ok(BatchAllocationResult {
+            batches: all_batches.clone(),
+            allocated_instances: all_instances.clone(),
+            errors: allocation_errors.clone(),
+            allocation_summary: self.calculate_allocation_summary(&definitions, &all_instances, allocation_errors),
+        })
+    }
+
+    /// 为单个机架分配通道，直到该机架所有通道分配完毕。
+    /// 返回：
+    /// (生成的批次列表, 生成的实例列表, 错误列表, 下一机架的批次起始号)
+    fn allocate_channels_for_rack(
+        &self,
+        mut remaining_channels: Vec<ChannelPointDefinition>,
+        test_plc_config: &TestPlcConfig,
+        start_batch_number: u32,
+        product_model: Option<String>,
+        serial_number: Option<String>,
+    ) -> Result<(Vec<TestBatchInfo>, Vec<ChannelTestInstance>, Vec<String>, u32), AppError> {
+        let mut batches = Vec::<TestBatchInfo>::new();
+        let mut instances = Vec::<ChannelTestInstance>::new();
+        let mut errors = Vec::<String>::new();
+        let mut batch_number = start_batch_number;
+
+        while !remaining_channels.is_empty() {
+            // 每个批次都创建新的测试PLC通道池
+            let mut test_channel_pools = self.create_test_channel_pools(test_plc_config);
+
+            // 调用现有单批次分配函数
+            let (batch_instances, used_def_ids) = self.allocate_single_batch_with_capacity_limit(
+                &remaining_channels,
+                &mut test_channel_pools,
+                batch_number,
+                test_plc_config,
+                product_model.clone(),
+                serial_number.clone(),
+            )?;
+
+            // 若当前批次无法分配任何实例，则终止，避免死循环
+            if batch_instances.is_empty() {
+                errors.push(format!("机架分配失败: 机架批次{}无法分配任何实例", batch_number));
+                break;
+            }
+
+            // 创建批次信息
+            let batch_info = self.create_batch_info(
+                batch_number,
+                &batch_instances,
+                &remaining_channels,
+                product_model.clone(),
+                serial_number.clone(),
+            );
+
+            batches.push(batch_info);
+            instances.extend(batch_instances);
+
+            // 移除已使用的通道定义
+            let used_set: std::collections::HashSet<String> = used_def_ids.into_iter().collect();
+            remaining_channels.retain(|d| !used_set.contains(&d.id));
+
+            batch_number += 1;
+        }
+
+        Ok((batches, instances, errors, batch_number))
+    }
+
     /// 执行统一的通道分配
     ///
     /// 正确的分配逻辑：
@@ -789,6 +915,13 @@ impl ChannelAllocationService {
     /// 判断通道是否为有源
     /// 根据真实数据规则：power_supply_type字段中包含"无源"就是无源通道，否则为有源
     fn is_powered_channel(&self, definition: &ChannelPointDefinition) -> bool {
+        // 特殊处理：DI模块型号包含 "S"（安全型模块）按无源处理
+        if matches!(definition.module_type, ModuleType::DI) {
+            if definition.module_name.to_uppercase().contains('S') {
+                return false; // 无源
+            }
+        }
+
         // 首先检查power_supply_type字段
         if !definition.power_supply_type.is_empty() {
             return !definition.power_supply_type.contains("无源");
@@ -913,8 +1046,8 @@ impl IChannelAllocationService for ChannelAllocationService {
         serial_number: Option<String>,
     ) -> Result<BatchAllocationResult, AppError> {
 
-        // 调用统一分配方法
-        let result = self.allocate_channels_unified(definitions, test_plc_config, product_model, serial_number)?;
+        // 调用按机架顺序的分配方法
+        let result = self.allocate_channels_by_rack(definitions, test_plc_config, product_model, serial_number)?;
 
         log::info!("[ChannelAllocation] ===== 分配完成 =====");
         log::info!("[ChannelAllocation] 结果: {} 个批次, {} 个实例",
@@ -1165,7 +1298,7 @@ mod tests {
         let test_plc_config = create_default_test_plc_config();
 
         // 执行分配
-        let result = service.allocate_channels_unified(
+        let result = service.allocate_channels_by_rack(
             definitions,
             test_plc_config,
             Some("TestProduct".to_string()),
@@ -1259,7 +1392,7 @@ mod tests {
         let test_plc_config = create_default_test_plc_config();
 
         // 执行分配
-        let result = service.allocate_channels_unified(
+        let result = service.allocate_channels_by_rack(
             definitions,
             test_plc_config,
             Some("TestProduct".to_string()),
@@ -1293,7 +1426,7 @@ mod tests {
         let test_plc_config = create_default_test_plc_config();
 
         // 执行分配
-        let result = service.allocate_channels_unified(
+        let result = service.allocate_channels_by_rack(
             vec![], // 空的定义列表
             test_plc_config,
             Some("TestProduct".to_string()),

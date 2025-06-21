@@ -23,6 +23,9 @@ pub struct ChannelPointDefinition {
     pub batch_id: Option<String>,
     /// 位号
     pub tag: String,
+    /// 序号（Excel第一列，可用于排序）
+    #[serde(rename = "sequenceNumber")]
+    pub sequence_number: Option<u32>,
     /// 变量名（HMI）
     pub variable_name: String,
     /// 变量描述
@@ -169,6 +172,7 @@ impl ChannelPointDefinition {
             id: default_id(),
             batch_id: None,
             tag,
+            sequence_number: None,
             variable_name,
             variable_description,
             station_name,
@@ -242,6 +246,7 @@ impl ChannelPointDefinition {
             id: default_id(),
             batch_id: None,
             tag,
+            sequence_number: None,
             variable_name,
             variable_description,
             station_name,
@@ -304,6 +309,7 @@ impl Default for ChannelPointDefinition {
             id: default_id(),
             batch_id: None,
             tag: String::new(),
+            sequence_number: None,
             variable_name: String::new(),
             variable_description: String::new(),
             station_name: String::new(),

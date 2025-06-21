@@ -1,0 +1,57 @@
+软件源代码文档 - 第 1 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:03
+页码: 1 / 578
+==================================================
+
+0001: // ==========================================
+0002: // 文件: FatFullVersion\FatFullVersion\App.xaml
+0003: // ==========================================
+0004: <prism:PrismApplication
+0005:     x:Class="FatFullVersion.App"
+0006:     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+0007:     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+0008:     xmlns:local="clr-namespace:FatFullVersion"
+0009:     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+0010:     xmlns:prism="http://prismlibrary.com/"
+0011:     DispatcherUnhandledException="Application_DispatcherUnhandledException">
+0012:     <Application.Resources>
+0013:         <ResourceDictionary>
+0014:             <ResourceDictionary.MergedDictionaries>
+0015:                 <materialDesign:BundledTheme
+0016:                     BaseTheme="Dark"
+0017:                     PrimaryColor="BlueGrey"
+0018:                     SecondaryColor="Lime" />
+0019:                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+0020:             </ResourceDictionary.MergedDictionaries>
+0021:             <!--  为左边选择框的ListBoxItem设计一个样式  -->
+0022:             <Style x:Key="MenuListBoxStyle" TargetType="ListBoxItem">
+0023:                 <!--  设置最小高度为40  -->
+0024:                 <Setter Property="MinHeight" Value="40" />
+0025:                 <!--  设置控件模板  -->
+0026:                 <Setter Property="Template">
+0027:                     <Setter.Value>
+0028:                         <ControlTemplate TargetType="ListBoxItem">
+0029:                             <Grid Background="Transparent">
+0030:                                 <Border Name="borderHeader" />
+0031:                                 <Border Name="border" />
+0032:                                 <!--  内容呈现的方式  -->
+0033:                                 <ContentPresenter
+0034:                                     HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+0035:                                     VerticalAlignment="{TemplateBinding VerticalAlignment}"
+0036:                                     IsHitTestVisible="True" />
+0037:                             </Grid>
+0038:                             <!--  设置触发器  -->
+0039:                             <ControlTemplate.Triggers>
+0040:                                 <Trigger Property="IsSelected" Value="True">
+0041:                                     <!--  设定左侧边框的宽度为4 并且将边框样式指定为与系统颜色同步  -->
+0042:                                     <Setter TargetName="borderHeader" Property="BorderThickness" Value="4,0,0,0" />
+0043:                                     <Setter TargetName="borderHeader" Property="BorderBrush" Value="#FF673AB7" />
+0044:                                     <Setter TargetName="border" Property="Background" Value="#FF673AB7" />
+0045:                                     <!--  设置第二个border的透明度  -->
+0046:                                     <Setter TargetName="border" Property="Opacity" Value="0.5" />
+0047:                                 </Trigger>
+0048:                                 <Trigger Property="IsMouseOver" Value="True">
+0049:                                     <Setter TargetName="border" Property="Background" Value="#FF673AB7" />
+0050:                                     <Setter TargetName="border" Property="Opacity" Value="0.2" />

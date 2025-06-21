@@ -165,8 +165,6 @@ impl DatabaseMigration {
         Ok(())
     }
 
-
-
     /// 检查表是否存在
     async fn check_table_exists(db: &DatabaseConnection, table_name: &str) -> Result<bool, AppError> {
         let sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?";
@@ -205,8 +203,6 @@ impl DatabaseMigration {
             CREATE TABLE IF NOT EXISTS channel_point_definitions (
                 id TEXT PRIMARY KEY NOT NULL,
                 batch_id TEXT,
-
-                -- === 基础信息字段（14个）===
                 sequence_number INTEGER,
                 module_name TEXT,
                 module_type TEXT NOT NULL,
@@ -221,56 +217,36 @@ impl DatabaseMigration {
                 read_write_property TEXT,
                 save_history TEXT,
                 power_off_protection TEXT,
-
-                -- === 量程字段（2个）===
                 range_low_limit REAL,
                 range_high_limit REAL,
-
-                -- === SLL设定字段（4个）===
                 sll_set_value REAL,
                 sll_set_point TEXT,
                 sll_set_point_plc_address TEXT,
                 sll_set_point_communication_address TEXT,
-
-                -- === SL设定字段（4个）===
                 sl_set_value REAL,
                 sl_set_point TEXT,
                 sl_set_point_plc_address TEXT,
                 sl_set_point_communication_address TEXT,
-
-                -- === SH设定字段（4个）===
                 sh_set_value REAL,
                 sh_set_point TEXT,
                 sh_set_point_plc_address TEXT,
                 sh_set_point_communication_address TEXT,
-
-                -- === SHH设定字段（4个）===
                 shh_set_value REAL,
                 shh_set_point TEXT,
                 shh_set_point_plc_address TEXT,
                 shh_set_point_communication_address TEXT,
-
-                -- === LL报警字段（3个）===
                 ll_alarm TEXT,
                 ll_alarm_plc_address TEXT,
                 ll_alarm_communication_address TEXT,
-
-                -- === L报警字段（3个）===
                 l_alarm TEXT,
                 l_alarm_plc_address TEXT,
                 l_alarm_communication_address TEXT,
-
-                -- === H报警字段（3个）===
                 h_alarm TEXT,
                 h_alarm_plc_address TEXT,
                 h_alarm_communication_address TEXT,
-
-                -- === HH报警字段（3个）===
                 hh_alarm TEXT,
                 hh_alarm_plc_address TEXT,
                 hh_alarm_communication_address TEXT,
-
-                -- === 维护字段（6个）===
                 maintenance_value_setting TEXT,
                 maintenance_value_set_point TEXT,
                 maintenance_value_set_point_plc_address TEXT,
@@ -278,12 +254,8 @@ impl DatabaseMigration {
                 maintenance_enable_switch_point TEXT,
                 maintenance_enable_switch_point_plc_address TEXT,
                 maintenance_enable_switch_point_communication_address TEXT,
-
-                -- === 地址字段（2个）===
                 plc_absolute_address TEXT,
                 plc_communication_address TEXT NOT NULL,
-
-                -- === 时间戳字段（2个）===
                 created_time TEXT NOT NULL,
                 updated_time TEXT NOT NULL
             )
@@ -294,11 +266,33 @@ impl DatabaseMigration {
             sql.to_string()
         )).await.map_err(|e| AppError::persistence_error(format!("创建channel_point_definitions表失败: {}", e)))?;
 
+        // 兼容旧库：若缺少 sequence_number 列则补充
+        let columns = db
+            .query_all(Statement::from_string(
+                db.get_database_backend(),
+                "PRAGMA table_info(channel_point_definitions);".to_string(),
+            ))
+            .await
+            .map_err(|e| AppError::persistence_error(format!("获取表结构失败: {}", e)))?;
+
+        let has_seq_col = columns.iter().any(|column| {
+            let name: String = column.try_get("", "name").unwrap_or_default();
+            name == "sequence_number"
+        });
+
+        if !has_seq_col {
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                "ALTER TABLE channel_point_definitions ADD COLUMN sequence_number INTEGER;".to_string(),
+            ))
+            .await
+            .map_err(|e| AppError::persistence_error(format!("添加sequence_number列失败: {}", e)))?;
+            log::info!("数据库已添加 sequence_number 列");
+        }
+
         log::info!("成功创建channel_point_definitions表");
         Ok(())
     }
-
-
 
     /// 创建通道测试实例表
     async fn create_channel_test_instances_table(db: &DatabaseConnection) -> Result<(), AppError> {
@@ -341,14 +335,11 @@ impl DatabaseMigration {
                 test_plc_channel_tag TEXT,
                 test_plc_communication_address TEXT,
                 test_result_status INTEGER,
-
-                -- 百分比测试结果字段 - 存储实际工程量
                 test_result_0_percent REAL,
                 test_result_25_percent REAL,
                 test_result_50_percent REAL,
                 test_result_75_percent REAL,
                 test_result_100_percent REAL,
-
                 current_operator TEXT,
                 retries_count INTEGER DEFAULT 0,
                 sub_test_results_json TEXT,
@@ -731,8 +722,6 @@ impl DatabaseMigration {
                 .map_err(|e| AppError::persistence_error(format!("获取定义ID失败: {}", e)))?;
             let tag = row.try_get::<String>("", "tag").unwrap_or_default();
             let station_name = row.try_get::<String>("", "station_name").unwrap_or_default();
-
-
 
             // 尝试通过测试实例找到对应的批次ID
             match Self::find_batch_id_for_definition(db, &definition_id).await {

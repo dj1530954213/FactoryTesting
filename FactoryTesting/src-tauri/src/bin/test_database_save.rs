@@ -77,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         save_history: Some(true),
         power_failure_protection: Some(false),
         test_rig_plc_address: None,
+        sequence_number: None,
     };
 
     println!("📝 创建测试通道定义: ID={}, Tag={}", test_definition.id, test_definition.tag);

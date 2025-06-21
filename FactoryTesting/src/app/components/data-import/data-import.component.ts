@@ -3,6 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TauriApiService } from '../../services/tauri-api.service';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzSpinModule } from 'ng-zorro-antd/spin';
 
 interface RecentFile {
   name: string;
@@ -27,7 +31,14 @@ interface PreviewDataItem {
 @Component({
   selector: 'app-data-import',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    NzButtonModule,
+    NzIconModule,
+    NzAlertModule,
+    NzSpinModule
+  ],
   templateUrl: './data-import.component.html',
   styleUrl: './data-import.component.css'
 })
@@ -52,6 +63,10 @@ export class DataImportComponent implements OnInit, OnDestroy {
 
   // 添加属性来存储分配结果
   allocationResult: any = null;
+  createdBatchesCount = 0;
+
+  // 统计各类型点位数量
+  pointTypeCounts: { [key: string]: number } = { AI: 0, AO: 0, DI: 0, DO: 0 };
 
   constructor(
     private router: Router,
@@ -239,26 +254,34 @@ export class DataImportComponent implements OnInit, OnDestroy {
             const importResult = result.import_result;
             const allocationResult = result.allocation_result;
 
+            this.createdBatchesCount = allocationResult.batches.length;
             console.log(`导入成功: ${importResult.successful_imports}个通道定义`);
-            console.log(`批次分配完成: 生成${allocationResult.batches.length}个批次，${allocationResult.allocated_instances.length}个测试实例`);
+            console.log(`批次分配完成: 生成${this.createdBatchesCount}个批次，${allocationResult.allocated_instances.length}个测试实例`);
 
             // 从导入结果中获取通道定义，用于前端预览
             if (importResult.imported_definitions && importResult.imported_definitions.length > 0) {
-              this.previewData = importResult.imported_definitions.map(def => ({
+              this.previewData = (importResult.imported_definitions as any[]).map((def: any) => ({
                 tag: def.tag,
                 description: def.description || '',
                 moduleType: def.module_type,
-                channelNumber: def.channel_number,
+                channelNumber: def.channel_tag_in_module,
                 plcAddress: def.plc_communication_address,
                 variableName: def.variable_name,
                 stationName: def.station_name,
                 moduleName: def.module_name,
-                dataType: def.point_data_type,
-                analogRangeMin: def.analog_range_min,
-                analogRangeMax: def.analog_range_max
+                dataType: def.data_type,
+                analogRangeMin: def.range_low_limit,
+                analogRangeMax: def.range_high_limit
               }));
 
-              console.log('转换后的预览数据:', this.previewData.slice(0, 3)); // 只显示前3个
+              // 统计各类型数量
+              this.pointTypeCounts = { AI: 0, AO: 0, DI: 0, DO: 0 };
+              this.previewData.forEach(item => {
+                const mt = item.moduleType;
+                if (this.pointTypeCounts.hasOwnProperty(mt)) {
+                  this.pointTypeCounts[mt]++;
+                }
+              });
             }
 
             // 保存分配结果到组件状态，供后续使用

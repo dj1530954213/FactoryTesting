@@ -2,7 +2,7 @@
   <div class="page-header">
     <h2>
       <span nz-icon nzType="database" nzTheme="outline"></span>
-      数据导入及恢复
+      数据导入
     </h2>
     <p>导入新的点表或恢复之前的数据继续测试</p>
   </div>
@@ -79,13 +79,7 @@
       </div>
 
       <div *ngIf="currentStep === 2 && importResult" class="import-result">
-        <nz-alert 
-          [nzType]="importResult.success ? 'success' : 'error'" 
-          [nzMessage]="importResult.success ? '数据解析成功' : '解析失败'" 
-          [nzDescription]="getImportResultDescription()"
-          nzShowIcon
-          class="import-alert">
-        </nz-alert>
+        
 
         <!-- 数据状态提示 -->
         <div *ngIf="importResult.success && !importResult.isPersisted" class="data-status-warning">
@@ -121,205 +115,17 @@
           </nz-space>
         </div>
 
-        <!-- 自动生成的批次信息 -->
-        <div *ngIf="importResult.batchInfo" class="batch-info">
-          <h4>
-            <span nz-icon nzType="container" nzTheme="outline"></span>
-            自动创建的测试批次
-          </h4>
-          <nz-card nzSize="small" class="batch-card">
-            <nz-space nzDirection="vertical" style="width: 100%;">
-              <div *nzSpaceItem class="batch-item">
-                <span class="batch-label">批次ID:</span>
-                <nz-tag nzColor="purple">{{ importResult.batchInfo.batch_id }}</nz-tag>
-              </div>
-              <div *nzSpaceItem class="batch-item">
-                <span class="batch-label">产品型号:</span>
-                <nz-tag nzColor="blue">{{ importResult.batchInfo.product_model }}</nz-tag>
-              </div>
-              <div *nzSpaceItem class="batch-item">
-                <span class="batch-label">序列号:</span>
-                <nz-tag nzColor="cyan">{{ importResult.batchInfo.serial_number }}</nz-tag>
-              </div>
-              <div *nzSpaceItem class="batch-item">
-                <span class="batch-label">创建时间:</span>
-                <span class="batch-value">{{ formatDateTime(importResult.batchInfo.creation_time) }}</span>
-              </div>
-              <div *nzSpaceItem class="batch-item">
-                <span class="batch-label">状态:</span>
-                <nz-tag nzColor="orange">{{ importResult.batchInfo.status_summary }}</nz-tag>
-              </div>
-            </nz-space>
-          </nz-card>
-        </div>
-
-        <!-- 智能分配结果 -->
-        <div *ngIf="importResult.allocationResult" class="allocation-info">
-          <h4>
-            <span nz-icon nzType="deployment-unit" nzTheme="outline"></span>
-            智能分配结果
-          </h4>
-          <nz-card nzSize="small" class="allocation-card">
-            <nz-space nzDirection="vertical" style="width: 100%;">
-              <div *nzSpaceItem class="allocation-item">
-                <span class="allocation-label">分配状态:</span>
-                <nz-tag [nzColor]="importResult.allocationResult.success ? 'green' : 'red'">
-                  {{ importResult.allocationResult.success ? '成功' : '失败' }}
-                </nz-tag>
-              </div>
-              <div *nzSpaceItem class="allocation-item">
-                <span class="allocation-label">已分配通道:</span>
-                <nz-tag nzColor="green">{{ importResult.allocationResult.allocated_count || 0 }}</nz-tag>
-              </div>
-              <div *nzSpaceItem class="allocation-item">
-                <span class="allocation-label">生成批次数:</span>
-                <nz-tag nzColor="purple">{{ importResult.allocationResult.total_batches || 1 }}</nz-tag>
-              </div>
-              <div *nzSpaceItem class="allocation-item">
-                <span class="allocation-label">分配冲突:</span>
-                <nz-tag nzColor="orange" *ngIf="importResult.allocationResult.conflict_count > 0">{{ importResult.allocationResult.conflict_count }}</nz-tag>
-                <nz-tag nzColor="green" *ngIf="!importResult.allocationResult.conflict_count || importResult.allocationResult.conflict_count === 0">无冲突</nz-tag>
-              </div>
-              <div *nzSpaceItem class="allocation-item">
-                <span class="allocation-label">分配率:</span>
-                <nz-tag nzColor="blue">{{ getAllocationRate() }}%</nz-tag>
-              </div>
-              <div class="allocation-item" *ngIf="importResult.allocationResult.message">
-                <span class="allocation-label">详情:</span>
-                <span class="allocation-value">{{ importResult.allocationResult.message }}</span>
-              </div>
-            </nz-space>
-          </nz-card>
-          
-          <!-- 详细分配信息 -->
-          <div *ngIf="importResult.allocationResult.allocation_details" class="allocation-details">
-            <h5>
-              <span nz-icon nzType="info-circle" nzTheme="outline"></span>
-              分配详情
-            </h5>
-            <nz-card nzSize="small" class="details-card">
-              <!-- 正确分配结果 -->
-              <div *ngIf="importResult.allocationResult.allocation_details.correct_allocation" class="correct-allocation-section">
-                <h6>批次分配结果</h6>
-                <nz-space nzWrap>
-                  <nz-tag *nzSpaceItem nzColor="blue">
-                    批次1: {{ importResult.allocationResult.allocation_details.correct_allocation.batch1 }}个通道
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="green">
-                    批次2: {{ importResult.allocationResult.allocation_details.correct_allocation.batch2 }}个通道
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="purple">
-                    总计: {{ importResult.allocationResult.allocation_details.correct_allocation.total }}个通道
-                  </nz-tag>
-                </nz-space>
-              </div>
-              
-              <!-- 模块类型分布 -->
-              <div *ngIf="importResult.allocationResult.allocation_details.module_distribution" class="module-distribution-section">
-                <h6>模块类型分布</h6>
-                <nz-space nzWrap>
-                  <nz-tag *nzSpaceItem nzColor="blue">
-                    AI模块: {{ importResult.allocationResult.allocation_details.module_distribution.AI }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="green">
-                    AO模块: {{ importResult.allocationResult.allocation_details.module_distribution.AO }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="orange">
-                    DI模块: {{ importResult.allocationResult.allocation_details.module_distribution.DI }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="purple">
-                    DO模块: {{ importResult.allocationResult.allocation_details.module_distribution.DO }}个
-                  </nz-tag>
-                </nz-space>
-              </div>
-              
-              <!-- 测试PLC配置 -->
-              <div *ngIf="importResult.allocationResult.allocation_details.test_plc_config" class="plc-config-section">
-                <h6>测试PLC通道配置</h6>
-                <nz-space nzWrap>
-                  <nz-tag *nzSpaceItem nzColor="blue">
-                    AO2通道: {{ importResult.allocationResult.allocation_details.test_plc_config.AO2_channels }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="cyan">
-                    AO1通道: {{ importResult.allocationResult.allocation_details.test_plc_config.AO1_channels }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="green">
-                    AI1通道: {{ importResult.allocationResult.allocation_details.test_plc_config.AI1_channels }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="orange">
-                    DO通道: {{ importResult.allocationResult.allocation_details.test_plc_config.DO_channels }}个
-                  </nz-tag>
-                  <nz-tag *nzSpaceItem nzColor="purple">
-                    DI通道: {{ importResult.allocationResult.allocation_details.test_plc_config.DI_channels }}个
-                  </nz-tag>
-                </nz-space>
-              </div>
-              
-              <!-- 批次分配详情 -->
-              <div *ngIf="importResult.allocationResult.allocation_details.batch_allocation" class="batch-allocation-section">
-                <h6>批次分配详情</h6>
-                <nz-space nzDirection="vertical" style="width: 100%;">
-                  <div *nzSpaceItem class="batch-detail-item">
-                    <span class="batch-detail-label">批次1:</span>
-                    <nz-tag nzColor="blue">{{ importResult.allocationResult.allocation_details.batch_allocation.batch1.channels }}个通道</nz-tag>
-                    <span class="batch-detail-desc">{{ importResult.allocationResult.allocation_details.batch_allocation.batch1.description }}</span>
-                  </div>
-                  <div *nzSpaceItem class="batch-detail-item">
-                    <span class="batch-detail-label">批次2:</span>
-                    <nz-tag nzColor="green">{{ importResult.allocationResult.allocation_details.batch_allocation.batch2.channels }}个通道</nz-tag>
-                    <span class="batch-detail-desc">{{ importResult.allocationResult.allocation_details.batch_allocation.batch2.description }}</span>
-                  </div>
-                </nz-space>
-              </div>
-              
-              <!-- 分配策略说明 -->
-              <div class="allocation-strategy-section">
-                <h6>分配策略</h6>
-                <nz-space nzDirection="vertical" style="width: 100%;">
-                  <div *nzSpaceItem class="strategy-item">
-                    <span class="strategy-label">分配方式:</span>
-                    <nz-tag nzColor="blue">{{ importResult.allocationResult.allocation_details.mapping_strategy }}</nz-tag>
-                  </div>
-                  <div *nzSpaceItem class="strategy-item">
-                    <span class="strategy-label">分配公式:</span>
-                    <span class="strategy-value">{{ importResult.allocationResult.allocation_details.allocation_formula }}</span>
-                  </div>
-                </nz-space>
-              </div>
-            </nz-card>
-          </div>
-          
-          <!-- Excel列映射说明 -->
-          <div *ngIf="importResult.batchInfo.excel_column_mapping" class="column-mapping">
-            <h5>
-              <span nz-icon nzType="table" nzTheme="outline"></span>
-              Excel列映射关系
-            </h5>
-            <nz-card nzSize="small" class="mapping-card">
-              <nz-space nzDirection="vertical" style="width: 100%;">
-                <div *nzSpaceItem class="mapping-item">
-                  <span class="mapping-excel">变量名称(HMI)</span>
-                  <span nz-icon nzType="arrow-right"></span>
-                  <span class="mapping-system">点位名称</span>
-                </div>
-                <div *nzSpaceItem class="mapping-item">
-                  <span class="mapping-excel">变量描述</span>
-                  <span nz-icon nzType="arrow-right"></span>
-                  <span class="mapping-system">通道位号</span>
-                </div>
-                <div *nzSpaceItem class="mapping-item">
-                  <span class="mapping-excel">通道位号</span>
-                  <span nz-icon nzType="arrow-right"></span>
-                  <span class="mapping-system">被测PLC通道号</span>
-                </div>
-                <div *nzSpaceItem class="mapping-item">
-                  <span class="mapping-excel">数据库channel_address</span>
-                  <span nz-icon nzType="arrow-right"></span>
-                  <span class="mapping-system">测试PLC通道号</span>
-                </div>
-              </nz-space>
-            </nz-card>
-          </div>
+        <!-- 批次信息展示 -->
+        <div class="batch-summary" *ngIf="importResult.batchInfo" style="margin-top: 24px;">
+          <nz-descriptions nzTitle="批次信息" [nzColumn]="2" nzBordered>
+            <nz-descriptions-item nzTitle="批次ID">{{ importResult.batchInfo.batch_id }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="批次数量">{{ batchCount }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="创建时间">{{ formatDateTime(importResult.batchInfo.creation_time) }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="AI点位数" *ngIf="channelCounts">{{ channelCounts.AI || 0 }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="AO点位数" *ngIf="channelCounts">{{ channelCounts.AO || 0 }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="DI点位数" *ngIf="channelCounts">{{ channelCounts.DI || 0 }}</nz-descriptions-item>
+            <nz-descriptions-item nzTitle="DO点位数" *ngIf="channelCounts">{{ channelCounts.DO || 0 }}</nz-descriptions-item>
+          </nz-descriptions>
         </div>
 
         <nz-space style="margin-top: 24px;">
@@ -327,8 +133,8 @@
             <span nz-icon nzType="plus" nzTheme="outline"></span>
             导入新文件
           </button>
-          <button *nzSpaceItem nz-button nzType="default" routerLink="/test-area">
-            <span nz-icon nzType="arrow-right" nzTheme="outline"></span>
+          <button *nzSpaceItem nz-button nzType="default" [disabled]="!importResult?.success" routerLink="/test-area">
+            <span nz-icon nzType="play-circle"></span>
             开始测试
           </button>
           <button *nzSpaceItem nz-button nzType="default" routerLink="/dashboard">
@@ -339,65 +145,4 @@
       </div>
     </nz-card>
   </div>
-
-  <!-- 历史数据恢复区域 -->
-  <nz-card nzTitle="历史数据恢复" class="history-card">
-    <nz-alert 
-      nzType="info" 
-      nzMessage="数据恢复" 
-      nzDescription="可以恢复之前保存的测试数据，继续未完成的测试任务。"
-      nzShowIcon
-      class="history-alert">
-    </nz-alert>
-
-    <div class="history-actions">
-      <nz-space>
-        <button *nzSpaceItem nz-button nzType="primary" (click)="showHistoryModal()">
-          <span nz-icon nzType="history" nzTheme="outline"></span>
-          查看历史数据
-        </button>
-        <button *nzSpaceItem nz-button nzType="default" (click)="exportCurrentData()">
-          <span nz-icon nzType="download" nzTheme="outline"></span>
-          导出当前数据
-        </button>
-      </nz-space>
-    </div>
-  </nz-card>
-
-  <!-- 历史数据模态框 -->
-  <nz-modal 
-    [(nzVisible)]="isHistoryModalVisible"
-    nzTitle="历史数据管理"
-    nzWidth="800px"
-    (nzOnCancel)="closeHistoryModal()"
-    [nzFooter]="null">
-    
-    <ng-container *nzModalContent>
-      <div *ngIf="historicalData.length === 0" class="empty-state">
-        <nz-empty nzNotFoundContent="暂无历史数据"></nz-empty>
-      </div>
-      
-      <nz-list *ngIf="historicalData.length > 0" [nzDataSource]="historicalData" nzBordered>
-        <nz-list-item *ngFor="let item of historicalData">
-          <nz-list-item-meta
-            [nzTitle]="item.name"
-            [nzDescription]="'创建时间: ' + item.date + ' | 通道数: ' + item.channelCount">
-          </nz-list-item-meta>
-          
-          <ul nz-list-item-actions>
-            <nz-list-item-action>
-              <nz-tag [nzColor]="getStatusColor(item.status)">
-                {{ getStatusText(item.status) }}
-              </nz-tag>
-            </nz-list-item-action>
-            <nz-list-item-action>
-              <button nz-button nzType="primary" nzSize="small" (click)="restoreData(item)">
-                恢复
-              </button>
-            </nz-list-item-action>
-          </ul>
-        </nz-list-item>
-      </nz-list>
-    </ng-container>
-  </nz-modal>
 </div> 

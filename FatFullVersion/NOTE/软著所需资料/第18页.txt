@@ -1,0 +1,57 @@
+软件源代码文档 - 第 18 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 18 / 578
+==================================================
+
+0851: 
+0852:         /// <summary>
+0853:         /// 根据批次名称获取通道映射
+0854:         /// </summary>
+0855:         /// <param name="batchName">批次名称</param>
+0856:         /// <returns>该批次的通道映射列表</returns>
+0857:         Task<IEnumerable<ChannelMapping>> GetChannelMappingsByBatchNameAsync(string batchName);
+0858: 
+0859:         /// <summary>
+0860:         /// 根据通道类型获取通道映射
+0861:         /// </summary>
+0862:         /// <param name="moduleType">通道类型</param>
+0863:         /// <returns>该类型的通道映射列表</returns>
+0864:         Task<IEnumerable<ChannelMapping>> GetChannelMappingsByModuleTypeAsync(string moduleType);
+0865: 
+0866:         /// <summary>
+0867:         /// 添加通道映射
+0868:         /// </summary>
+0869:         /// <param name="channelMapping">通道映射实体</param>
+0870:         /// <returns>操作结果</returns>
+0871:         Task<bool> AddChannelMappingAsync(ChannelMapping channelMapping);
+0872: 
+0873:         /// <summary>
+0874:         /// 批量添加通道映射
+0875:         /// </summary>
+0876:         /// <param name="channelMappings">通道映射列表</param>
+0877:         /// <returns>操作结果</returns>
+0878:         Task<bool> AddChannelMappingsAsync(IEnumerable<ChannelMapping> channelMappings);
+0879: 
+0880:         /// <summary>
+0881:         /// 更新通道映射
+0882:         /// </summary>
+0883:         /// <param name="channelMapping">通道映射实体</param>
+0884:         /// <returns>操作结果</returns>
+0885:         Task<bool> UpdateChannelMappingAsync(ChannelMapping channelMapping);
+0886: 
+0887:         /// <summary>
+0888:         /// 批量更新通道映射
+0889:         /// </summary>
+0890:         /// <param name="channelMappings">通道映射列表</param>
+0891:         /// <returns>操作结果</returns>
+0892:         Task<bool> UpdateChannelMappingsAsync(IEnumerable<ChannelMapping> channelMappings);
+0893: 
+0894:         /// <summary>
+0895:         /// 删除通道映射
+0896:         /// </summary>
+0897:         /// <param name="id">通道映射ID</param>
+0898:         /// <returns>操作结果</returns>
+0899:         Task<bool> DeleteChannelMappingAsync(string id);
+0900: 

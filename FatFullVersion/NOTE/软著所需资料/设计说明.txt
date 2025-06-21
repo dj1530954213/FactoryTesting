@@ -1,0 +1,336 @@
+FatFullVersion 工业自动化测试系统 - 设计说明
+==================================================
+版本: V1.0
+编制日期: 2025年1月
+适用范围: FatFullVersion工业自动化测试系统
+==================================================
+
+目录
+1. 软件总体设计
+2. 软件架构设计
+3. 功能模块设计
+4. 接口设计
+5. 数据库设计
+6. 算法设计
+7. 运行设计
+
+==================================================
+
+1. 软件总体设计
+
+1.1 设计目标
+FatFullVersion工业自动化测试系统采用模块化设计，为工业自动化设备提供PLC测试解决方案。
+
+1.2 技术选型
+- 开发框架：.NET 8.0 + WPF
+- 架构模式：MVVM (Model-View-ViewModel)
+- 依赖注入：Prism + DryIoc
+- 数据库：SQLite + Entity Framework Core
+- 通信协议：Modbus TCP
+
+【插入图片位置：系统总体架构图】
+
+==================================================
+
+2. 软件架构设计
+
+2.1 整体架构
+系统采用分层架构设计：
+- 表示层：用户界面展示和交互
+- 业务逻辑层：处理核心业务逻辑
+- 数据访问层：封装数据库操作
+- 数据存储层：数据持久化存储
+
+【插入图片位置：软件分层架构图】
+
+2.2 MVVM架构模式
+- Model层：ExcelPointData、ChannelMapping、PlcConnectionConfig
+- View层：MainWindow、ConfigEditView、DataEditView
+- ViewModel层：MainWindowViewModel、ConfigEditViewModel、DataEditViewModel
+
+【插入图片位置：MVVM架构图】
+
+2.3 依赖注入架构
+- IContainerRegistry：容器注册接口
+- IServiceLocator：服务定位器接口
+- IEventAggregator：事件聚合器接口
+
+【插入图片位置：依赖注入架构图】
+
+==================================================
+
+3. 功能模块设计
+
+3.1 配置管理模块
+主要类和方法：
+- ConfigEditViewModel类
+  * InitializeAsync()：初始化配置数据
+  * SaveConfigurationAsync()：保存配置信息
+  * TestConnectionAsync()：测试PLC连接
+  * ImportPointConfigurationAsync()：导入点表配置
+  * AllocateChannelsAsync()：分配通道地址
+
+【插入图片位置：配置管理模块结构图】
+
+3.2 数据管理模块
+主要类和方法：
+- DataEditViewModel类
+  * LoadBatchDataAsync()：加载批次数据
+  * FilterChannelsByType()：按类型筛选通道
+  * ExecuteChannelRetestAsync()：执行通道复测
+
+- ChannelMapping类
+  * ValidateChannelData()：验证通道数据
+  * CalculateTestProgress()：计算测试进度
+
+【插入图片位置：数据管理模块结构图】
+
+3.3 通信管理模块
+主要类和方法：
+- IPlcCommunication接口
+  * ConnectAsync()：建立PLC连接
+  * DisconnectAsync()：断开PLC连接
+  * ReadAnalogValueAsync()：读取模拟量值
+  * WriteAnalogValueAsync()：写入模拟量值
+  * ReadDigitalValueAsync()：读取数字量值
+  * WriteDigitalValueAsync()：写入数字量值
+
+- ModbusTcpCommunication类
+  * InitializeConnection()：初始化连接
+  * HandleCommunicationError()：处理通信错误
+
+【插入图片位置：通信管理模块结构图】
+
+3.4 测试执行模块
+主要类和方法：
+- ITestTaskManager接口
+  * CreateTestTasksAsync()：创建测试任务
+  * StartAllTasksAsync()：启动所有任务
+  * StopAllTasksAsync()：停止所有任务
+
+- TestTask抽象类
+  * ExecuteAsync()：执行测试任务
+  * ValidateTestConditions()：验证测试条件
+  * RecordTestResult()：记录测试结果
+
+- AITestTask类
+  * SetTestValue()：设置测试值
+  * ReadFeedbackValue()：读取反馈值
+  * CheckAlarmStatus()：检查报警状态
+
+【插入图片位置：测试执行模块结构图】
+
+3.5 数据存储模块
+主要类和方法：
+- IRepository接口
+  * InitializeDatabaseAsync()：初始化数据库
+  * SaveTestRecordsAsync()：保存测试记录
+  * GetHistoryRecordsAsync()：获取历史记录
+
+- ApplicationDbContext类
+  * OnModelCreating()：配置实体映射
+  * SaveChangesAsync()：保存数据变更
+
+【插入图片位置：数据存储模块结构图】
+
+==================================================
+
+4. 接口设计
+
+4.1 服务接口设计
+- IPlcCommunication：PLC通信接口
+- IPointDataService：点表数据服务接口
+- ITestTaskManager：测试任务管理接口
+
+【插入图片位置：服务接口关系图】
+
+4.2 数据传输接口
+- PlcCommunicationResult：通信结果封装
+- ValidationResult：验证结果封装
+- TestExecutionResult：测试执行结果封装
+
+4.3 外部接口设计
+- IExcelImporter：Excel文件导入接口
+- ICsvImporter：CSV文件导入接口
+- IReportExporter：报告导出接口
+
+【插入图片位置：外部接口流程图】
+
+==================================================
+
+5. 数据库设计
+
+5.1 数据库架构
+系统使用SQLite作为嵌入式数据库，通过Entity Framework Core进行数据访问。
+
+主要数据表：
+- PlcConnectionConfigs：PLC连接配置表
+- ComparisonTables：通道比较表
+- ChannelMappings：通道映射表
+
+【插入图片位置：数据库ER图】
+
+5.2 表结构设计
+PlcConnectionConfigs表字段：
+- Id：主键标识
+- IpAddress：IP地址
+- Port：端口号
+- Station：站号
+- ConnectTimeOut：连接超时
+- IsTestPlc：是否为测试PLC
+
+ChannelMappings表字段：
+- Id：主键标识
+- TestId：测试标识
+- VariableName：变量名称
+- ModuleType：模块类型
+- ChannelTag：通道标签
+- TestResultStatus：测试结果状态
+
+【插入图片位置：数据表关系图】
+
+5.3 数据访问层设计
+- IRepository：数据访问接口
+- Repository：数据访问实现类
+- ApplicationDbContext：数据库上下文
+
+【插入图片位置：数据访问层架构图】
+
+==================================================
+
+6. 算法设计
+
+6.1 通道分配算法
+算法流程：
+- 按通道类型分组 (AI, AO, DI, DO)
+- 按供电类型细分 (有源, 无源)
+- 从配置表中获取可用地址范围
+- 按顺序分配地址并记录结果
+
+核心方法：
+- AllocateChannelsAsync()：主分配方法
+- AllocateChannelsByType()：按类型分配
+- ValidateAllocation()：验证分配结果
+
+【插入图片位置：通道分配算法流程图】
+
+6.2 测试执行算法
+AI通道测试算法：
+- 设置测试PLC输出值 (0%, 25%, 50%, 75%, 100%)
+- 读取被测PLC反馈值
+- 计算误差并判断是否在允许范围内
+
+核心方法：
+- ExecuteAITest()：执行AI测试
+- SetTestValue()：设置测试值
+- ReadFeedbackValue()：读取反馈值
+- CalculateError()：计算误差
+
+【插入图片位置：测试执行算法流程图】
+
+6.3 数据验证算法
+点表数据验证：
+- 验证必填字段
+- 验证数据类型
+- 验证数值范围
+
+核心方法：
+- ValidatePointDataAsync()：验证点表数据
+- ValidateRequiredFields()：验证必填字段
+- ValidateDataType()：验证数据类型
+
+【插入图片位置：数据验证算法流程图】
+
+==================================================
+
+7. 运行设计
+
+7.1 系统启动流程
+启动序列：
+- 应用程序初始化
+- 依赖注入容器配置
+- 数据库连接和迁移
+- 服务注册和初始化
+- 主窗口创建和显示
+
+初始化方法：
+- App.OnStartup()：应用启动方法
+- RegisterTypes()：注册服务类型
+- CreateShell()：创建主窗口
+
+【插入图片位置：系统启动流程图】
+
+7.2 任务调度设计
+- TestTaskManager：任务管理器
+- TaskScheduler：任务调度器
+- ConcurrentTaskExecutor：并发任务执行器
+
+并发控制方法：
+- StartAllTasksAsync()：启动所有任务
+- ManageConcurrency()：管理并发
+- HandleTaskException()：处理任务异常
+
+【插入图片位置：任务调度架构图】
+
+7.3 内存管理设计
+内存优化策略：
+- MemoryOptimizations：内存优化类
+- GarbageCollectionManager：垃圾回收管理
+
+优化方法：
+- EnableOptimizations()：启用优化
+- OptimizeRendering()：优化渲染
+- ScheduleGarbageCollection()：调度垃圾回收
+
+【插入图片位置：内存管理流程图】
+
+7.4 异常处理设计
+异常处理策略：
+- GlobalExceptionHandler：全局异常处理器
+- CommunicationExceptionHandler：通信异常处理器
+
+异常处理方法：
+- HandleUnhandledException()：处理未处理异常
+- LogException()：记录异常
+- RecoverFromException()：异常恢复
+
+【插入图片位置：异常处理架构图】
+
+==================================================
+
+附录A：逻辑框架图
+
+A.1 系统逻辑框架
+【插入图片位置：系统逻辑框架图】
+
+A.2 模块交互逻辑
+【插入图片位置：模块交互逻辑图】
+
+==================================================
+
+附录B：功能流程图
+
+B.1 配置管理流程
+【插入图片位置：配置管理流程图】
+
+B.2 测试执行流程
+【插入图片位置：测试执行流程图】
+
+==================================================
+
+附录C：软件结构图
+
+C.1 整体软件结构
+【插入图片位置：整体软件结构图】
+
+C.2 模块结构分解
+【插入图片位置：模块结构分解图】
+
+==================================================
+
+版权声明：
+本设计说明文档版权归FatFullVersion工业自动化测试系统开发团队所有。
+
+软件名称：FatFullVersion工业自动化测试系统
+文档版本：V1.0
+最后更新：2025年1月 

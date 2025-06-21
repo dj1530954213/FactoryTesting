@@ -51,6 +51,7 @@ export enum SubTestStatus {
 // 核心数据模型
 export interface ChannelPointDefinition {
   id: string;
+  sequenceNumber?: number;
   tag: string;
   variable_name: string;
   description: string;

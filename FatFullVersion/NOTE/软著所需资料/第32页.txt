@@ -1,0 +1,57 @@
+软件源代码文档 - 第 32 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 32 / 578
+==================================================
+
+1551:         /// </summary>
+1552:         /// <param name="taskId">待删除的任务ID</param>
+1553:         /// <returns>操作是否成功</returns>
+1554:         Task<bool> RemoveTaskAsync(string taskId);
+1555: 
+1556:         /// <summary>
+1557:         /// 添加新的测试任务
+1558:         /// </summary>
+1559:         /// <param name="task">要添加的测试任务</param>
+1560:         /// <returns>操作是否成功</returns>
+1561:         bool AddTask(TestTask task);
+1562: 
+1563:         /// <summary>
+1564:         /// 清空所有测试任务
+1565:         /// </summary>
+1566:         /// <returns>操作是否成功</returns>
+1567:         Task<bool> ClearAllTasksAsync();
+1568: 
+1569:         /// <summary>
+1570:         /// 确认接线已完成，启用测试功能
+1571:         /// </summary>
+1572:         /// <param name="batchInfo">批次信息</param>
+1573:         /// <param name="autoStart">是否自动开始测试</param>
+1574:         /// <param name="testMap">测试映射集合</param>
+1575:         /// <returns>确认操作是否成功</returns>
+1576:         Task<bool> ConfirmWiringCompleteAsync(BatchInfo batchInfo, bool autoStart, IEnumerable<ChannelMapping> testMap);
+1577: 
+1578:         /// <summary>
+1579:         /// 显示测试进度对话框
+1580:         /// </summary>
+1581:         /// <param name="isRetestMode">是否为复测模式，默认为false表示全自动测试</param>
+1582:         /// <param name="channelInfo">复测的通道信息（复测模式下使用）</param>
+1583:         /// <returns>异步任务</returns>
+1584:         Task ShowTestProgressDialogAsync(bool isRetestMode = false, ChannelMapping channelInfo = null);
+1585:         
+1586:         /// <summary>
+1587:         /// 更新批次状态为全部已完成
+1588:         /// 只有在所有手动测试完成后才调用此方法
+1589:         /// </summary>
+1590:         /// <returns>操作是否成功</returns>
+1591:         Task<bool> CompleteAllTestsAsync();
+1592: 
+1593:         /// <summary>
+1594:         /// 对单个通道进行复测
+1595:         /// </summary>
+1596:         /// <param name="channelMapping">需要复测的通道映射</param>
+1597:         /// <returns>操作是否成功</returns>
+1598:         Task<bool> RetestChannelAsync(ChannelMapping channelMapping);
+1599: 
+1600:         /// <summary>

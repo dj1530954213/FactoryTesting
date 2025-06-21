@@ -1,0 +1,57 @@
+软件源代码文档 - 第 6 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:03
+页码: 6 / 578
+==================================================
+
+0251:             }
+0252:         }
+0253: 
+0254:         /// <summary>
+0255:         /// 应用程序异常处理
+0256:         /// </summary>
+0257:         /// <param name="sender">发送者</param>
+0258:         /// <param name="e">异常事件参数</param>
+0259:         private void Application_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+0260:         {
+0261:             MessageBox.Show($"发生未处理的异常：{e.Exception.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+0262:             e.Handled = true; // 设置为已处理，防止应用程序崩溃
+0263:         }
+0264:     }
+0265: }
+0266: 
+0267: // ==========================================
+0268: // 文件: FatFullVersion\FatFullVersion\Common\ContainerExtensions.cs
+0269: // ==========================================
+0270: using DryIoc;
+0271: using Prism.DryIoc;
+0272: using Prism.Ioc;
+0273: 
+0274: namespace FatFullVersion.Common
+0275: {
+0276:     /// <summary>
+0277:     /// 容器扩展方法
+0278:     /// </summary>
+0279:     public static class ContainerExtensions
+0280:     {
+0281:         /// <summary>
+0282:         /// 获取DryIoc容器实例
+0283:         /// </summary>
+0284:         /// <param name="containerRegistry">容器注册器</param>
+0285:         /// <returns>DryIoc容器实例</returns>
+0286:         public static IContainer GetContainer(this IContainerRegistry containerRegistry)
+0287:         {
+0288:             return ((IContainerExtension<IContainer>)containerRegistry).Instance;
+0289:         }
+0290:     }
+0291: } 
+0292: 
+0293: // ==========================================
+0294: // 文件: FatFullVersion\FatFullVersion\Common\Models\MenuBar.cs
+0295: // ==========================================
+0296: using Prism.Mvvm;
+0297: using System;
+0298: using System.Collections.Generic;
+0299: using System.Linq;
+0300: using System.Text;

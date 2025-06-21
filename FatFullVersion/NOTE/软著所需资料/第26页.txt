@@ -1,0 +1,57 @@
+软件源代码文档 - 第 26 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 26 / 578
+==================================================
+
+1251:         /// <param name="comparisonTable">通道比较表项</param>
+1252:         /// <returns>更新操作是否成功</returns>
+1253:         Task<bool> UpdateComparisonTableAsync(ComparisonTable comparisonTable);
+1254: 
+1255:         /// <summary>
+1256:         /// 删除通道比较表项
+1257:         /// </summary>
+1258:         /// <param name="id">通道比较表项ID</param>
+1259:         /// <returns>删除操作是否成功</returns>
+1260:         Task<bool> DeleteComparisonTableAsync(int id);
+1261: 
+1262:         /// <summary>
+1263:         /// 保存所有通道比较表项（删除旧数据并添加新数据）
+1264:         /// </summary>
+1265:         /// <param name="comparisonTables">通道比较表项列表</param>
+1266:         /// <returns>保存操作是否成功</returns>
+1267:         Task<bool> SaveAllComparisonTablesAsync(List<ComparisonTable> comparisonTables);
+1268: 
+1269:         #endregion
+1270:         
+1271:         #region 测试记录操作
+1272:         
+1273:         /// <summary>
+1274:         /// 保存测试记录集合
+1275:         /// </summary>
+1276:         /// <param name="records">测试记录集合</param>
+1277:         /// <returns>保存操作是否成功</returns>
+1278:         Task<bool> SaveTestRecordsAsync(IEnumerable<ChannelMapping> records);
+1279:         Task<bool> SaveTestRecordsWithSqlAsync(IEnumerable<ChannelMapping> records);
+1280:         /// <summary>
+1281:         /// 保存单个测试记录
+1282:         /// </summary>
+1283:         /// <param name="record">测试记录</param>
+1284:         /// <returns>保存操作是否成功</returns>
+1285:         Task<bool> SaveTestRecordAsync(ChannelMapping record);
+1286:         Task<bool> SaveTestRecordWithSqlAsync(ChannelMapping record);
+1287: 
+1288: 
+1289:         /// <summary>
+1290:         /// 根据测试标识获取测试记录
+1291:         /// </summary>
+1292:         /// <param name="testTag">测试标识</param>
+1293:         /// <returns>测试记录集合</returns>
+1294:         Task<List<ChannelMapping>> GetTestRecordsByTagAsync(string testTag);
+1295:         
+1296:         /// <summary>
+1297:         /// 获取所有不同的测试标识
+1298:         /// </summary>
+1299:         /// <returns>测试标识集合</returns>
+1300:         Task<List<string>> GetAllTestTagsAsync();

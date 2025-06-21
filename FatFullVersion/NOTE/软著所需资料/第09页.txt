@@ -1,0 +1,57 @@
+软件源代码文档 - 第 9 页
+==================================================
+项目名称: FatFullVersion - 工业自动化测试系统
+文档生成时间: 2025-05-26 10:49:04
+页码: 9 / 578
+==================================================
+
+0401: 
+0402:                 // 指定对应的表名
+0403:                 entity.ToTable("ChannelMappings");
+0404:             });
+0405:         }
+0406:     }
+0407: } 
+0408: 
+0409: // ==========================================
+0410: // 文件: FatFullVersion\FatFullVersion\Data\ApplicationDbContextFactory.cs
+0411: // ==========================================
+0412: using System;
+0413: using System.IO;
+0414: using Microsoft.EntityFrameworkCore;
+0415: using Microsoft.EntityFrameworkCore.Design;
+0416: 
+0417: namespace FatFullVersion.Data
+0418: {
+0419:     /// <summary>
+0420:     /// 设计时数据库上下文工厂类
+0421:     /// 用于EF Core工具（如迁移命令）创建数据库上下文实例
+0422:     /// </summary>
+0423:     public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
+0424:     {
+0425:         /// <summary>
+0426:         /// 创建数据库上下文实例
+0427:         /// </summary>
+0428:         /// <param name="args">命令行参数</param>
+0429:         /// <returns>数据库上下文实例</returns>
+0430:         public ApplicationDbContext CreateDbContext(string[] args)
+0431:         {
+0432:             try
+0433:             {
+0434:                 // 获取应用程序根目录
+0435:                 string appRootPath = AppDomain.CurrentDomain.BaseDirectory;
+0436:                 
+0437:                 // 确保Data目录存在
+0438:                 string dataPath = Path.Combine(appRootPath, "Data");
+0439:                 Directory.CreateDirectory(dataPath);
+0440:                 
+0441:                 // 数据库文件路径
+0442:                 string dbPath = Path.Combine(dataPath, "fattest.db");
+0443: 
+0444:                 // 创建数据库选项构建器
+0445:                 var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+0446:                 
+0447:                 // 配置SQLite数据库连接
+0448:                 optionsBuilder.UseSqlite($"Data Source={dbPath}");
+0449: 
+0450:                 // 返回新的数据库上下文实例
