@@ -1797,22 +1797,6 @@
             "rid": "win"
           }
         }
-      },
-      "FatFullVersion.Core/1.0.0": {
-        "type": "project",
-        "framework": ".NETCoreApp,Version=v8.0",
-        "dependencies": {
-          "Prism.Wpf": "9.0.537"
-        },
-        "compile": {
-          "bin/placeholder/FatFullVersion.Core.dll": {}
-        },
-        "runtime": {
-          "bin/placeholder/FatFullVersion.Core.dll": {}
-        },
-        "frameworkReferences": [
-          "Microsoft.WindowsDesktop.App.WPF"
-        ]
       }
     }
   },
@@ -4450,16 +4434,10 @@
         "system.windows.extensions.nuspec",
         "useSharedDesignerContext.txt"
       ]
-    },
-    "FatFullVersion.Core/1.0.0": {
-      "type": "project",
-      "path": "../FatFullVersion.Core/FatFullVersion.Core.csproj",
-      "msbuildProject": "../FatFullVersion.Core/FatFullVersion.Core.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net8.0-windows7.0": [
-      "FatFullVersion.Core >= 1.0.0",
       "MaterialDesignThemes >= 5.2.1",
       "Microsoft.EntityFrameworkCore >= 8.0.3",
       "Microsoft.EntityFrameworkCore.Sqlite >= 8.0.3",
@@ -4480,11 +4458,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion\\FatFullVersion.csproj",
+      "projectUniqueName": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
       "projectName": "FatFullVersion",
-      "projectPath": "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion\\FatFullVersion.csproj",
+      "projectPath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
       "packagesPath": "C:\\Users\\DELL\\.nuget\\packages\\",
-      "outputPath": "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion\\obj\\",
+      "outputPath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -4504,11 +4482,7 @@
       "frameworks": {
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows7.0",
-          "projectReferences": {
-            "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion.Core\\FatFullVersion.Core.csproj": {
-              "projectPath": "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion.Core\\FatFullVersion.Core.csproj"
-            }
-          }
+          "projectReferences": {}
         }
       },
       "warningProperties": {

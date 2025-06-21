@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "g5XHLgVyJNA=",
+  "dgSpecHash": "wBwMMW1dwj8=",
   "success": true,
-  "projectFilePath": "C:\\Program Files\\Git\\code\\FAT_TEST\\FAT_TEST\\FatFullVersion\\FatFullVersion\\FatFullVersion.csproj",
+  "projectFilePath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\DELL\\.nuget\\packages\\bouncycastle.cryptography\\2.2.1\\bouncycastle.cryptography.2.2.1.nupkg.sha512",
     "C:\\Users\\DELL\\.nuget\\packages\\dryioc.dll\\5.4.3\\dryioc.dll.5.4.3.nupkg.sha512",
