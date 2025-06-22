@@ -163,9 +163,6 @@ pub trait ExtendedPersistenceService: PersistenceService {
     
     /// 重建索引（如果适用）
     async fn rebuild_indexes(&self) -> AppResult<()>;
-
-    /// 获取单个PLC连接配置
-    async fn get_plc_connection_config(&self, config_id: &str) -> AppResult<PlcConnectionConfig>;
 }
 
 /// 备份信息

@@ -17,18 +17,4 @@ pub mod tests;
 
 // 重新导出主要接口和实现
 pub use persistence_service::*;
-pub use json_persistence_service::*;
-
-pub use persistence_service::{
-    PersistenceConfig,
-    QueryCriteria,
-    QueryResult,
-    PersistenceStats,
-    ExtendedPersistenceService,
-    BackupInfo,
-    IntegrityReport,
-    IntegrityStatus,
-    IntegrityCheckResult,
-    PersistenceServiceFactory,
-    PersistenceServiceHelper,
-}; 
+pub use json_persistence_service::*; 

@@ -8,7 +8,7 @@ use log::{info, debug, warn};
 
 use crate::models::test_plc_config::*;
 use crate::services::traits::BaseService;
-use crate::services::infrastructure::database::ExtendedPersistenceService;
+use crate::services::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use crate::domain::services::plc_communication_service::{IPlcCommunicationService, PlcConnectionConfig as DomainPlcConnectionConfig, PlcProtocol, ConnectionTestResult};
 
@@ -24,12 +24,6 @@ enum ModbusRegisterType {
 /// 测试PLC配置管理服务接口
 #[async_trait]
 pub trait ITestPlcConfigService: BaseService + Send + Sync {
-    /// 获取测试PLC的连接配置
-    async fn get_test_plc_config(&self) -> AppResult<PlcConnectionConfig>;
-    
-    /// 获取被测PLC的连接配置
-    async fn get_target_plc_config(&self) -> AppResult<PlcConnectionConfig>;
-    
     /// 获取所有测试PLC通道配置
     async fn get_test_plc_channels(&self, request: GetTestPlcChannelsRequest) -> AppResult<Vec<TestPlcChannelConfig>>;
     
@@ -62,16 +56,19 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
     
     /// 初始化默认测试PLC通道配置
     async fn initialize_default_test_plc_channels(&self) -> AppResult<()>;
+    
+    /// 获取测试PLC配置 (用于通道分配服务)
+    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig>;
 }
 
 /// 测试PLC配置管理服务实现
 pub struct TestPlcConfigService {
-    persistence_service: Arc<dyn ExtendedPersistenceService>,
+    persistence_service: Arc<dyn IPersistenceService>,
 }
 
 impl TestPlcConfigService {
     /// 创建新的测试PLC配置服务实例
-    pub fn new(persistence_service: Arc<dyn ExtendedPersistenceService>) -> Self {
+    pub fn new(persistence_service: Arc<dyn IPersistenceService>) -> Self {
         Self {
             persistence_service,
         }
@@ -259,14 +256,6 @@ impl BaseService for TestPlcConfigService {
 
 #[async_trait]
 impl ITestPlcConfigService for TestPlcConfigService {
-    async fn get_test_plc_config(&self) -> AppResult<PlcConnectionConfig> {
-        self.persistence_service.get_plc_connection_config("test_plc_1").await
-    }
-    
-    async fn get_target_plc_config(&self) -> AppResult<PlcConnectionConfig> {
-        self.persistence_service.get_plc_connection_config("target_plc_1").await
-    }
-
     async fn get_test_plc_channels(&self, request: GetTestPlcChannelsRequest) -> AppResult<Vec<TestPlcChannelConfig>> {
         debug!("获取测试PLC通道配置，过滤条件: {:?}", request);
         
@@ -540,6 +529,56 @@ impl ITestPlcConfigService for TestPlcConfigService {
         
         info!("默认测试PLC配置初始化完成");
         Ok(())
+    }
+
+    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig> {
+        debug!("获取测试PLC配置");
+        
+        // 获取所有测试PLC通道配置
+        let request = GetTestPlcChannelsRequest {
+            channel_type_filter: None,
+            enabled_only: Some(true), // 只获取启用的通道
+        };
+        let test_channels = self.get_test_plc_channels(request).await?;
+        
+        // 获取第一个PLC连接配置作为默认配置
+        let plc_connections = self.get_plc_connections().await?;
+        let test_plc_connection = plc_connections.iter()
+            .find(|conn| conn.is_test_plc && conn.is_enabled)
+            .ok_or_else(|| AppError::not_found_error("测试PLC连接", "没有找到启用的测试PLC连接配置"))?;
+        
+        // 转换TestPlcChannelConfig到ComparisonTable
+        let mut comparison_tables = Vec::new();
+        for channel in test_channels {
+            let is_powered = !channel.power_supply_type.trim().is_empty() 
+                && !channel.power_supply_type.contains("无源");
+            
+            let module_type = match channel.channel_type {
+                crate::models::test_plc_config::TestPlcChannelType::AI => crate::models::ModuleType::AI,
+                crate::models::test_plc_config::TestPlcChannelType::AINone => crate::models::ModuleType::AI,
+                crate::models::test_plc_config::TestPlcChannelType::AO => crate::models::ModuleType::AO,
+                crate::models::test_plc_config::TestPlcChannelType::AONone => crate::models::ModuleType::AO,
+                crate::models::test_plc_config::TestPlcChannelType::DI => crate::models::ModuleType::DI,
+                crate::models::test_plc_config::TestPlcChannelType::DINone => crate::models::ModuleType::DI,
+                crate::models::test_plc_config::TestPlcChannelType::DO => crate::models::ModuleType::DO,
+                crate::models::test_plc_config::TestPlcChannelType::DONone => crate::models::ModuleType::DO,
+            };
+            
+            comparison_tables.push(crate::services::ComparisonTable {
+                channel_address: channel.channel_address,
+                communication_address: channel.communication_address,
+                channel_type: module_type,
+                is_powered,
+            });
+        }
+        
+        debug!("转换完成：{} 个通道映射表", comparison_tables.len());
+        
+        Ok(crate::services::TestPlcConfig {
+            brand_type: format!("{:?}", test_plc_connection.plc_type),
+            ip_address: test_plc_connection.ip_address.clone(),
+            comparison_tables,
+        })
     }
 }
 

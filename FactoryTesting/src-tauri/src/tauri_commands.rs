@@ -34,7 +34,6 @@ use tauri::State;
 use tokio::sync::Mutex;
 use std::collections::HashSet;
 use chrono::{DateTime, Utc};
-use crate::infrastructure::di_container::{ServiceContainer, ContainerFactory};
 
 // ============================================================================
 // 应用状态管理
@@ -68,24 +67,184 @@ pub struct SystemStatus {
 
 impl AppState {
     /// 创建新的应用状态
-    ///
-    /// 这个函数现在会使用DI容器来初始化所有服务
     pub async fn new() -> AppResult<Self> {
-        // 使用工厂创建服务容器
-        let container = ContainerFactory::create_from_environment().await?;
-        
-        // 从容器中获取所有需要的服务
+        // 创建数据库配置
+        let config = crate::services::infrastructure::persistence::PersistenceConfig::default();
+
+        // 创建持久化服务 - 使用实际的SQLite文件而不是内存数据库
+        let db_file_path = config.storage_root_dir.join("factory_testing_data.sqlite");
+
+        // 确保数据库目录存在
+        if let Some(parent_dir) = db_file_path.parent() {
+            tokio::fs::create_dir_all(parent_dir).await.map_err(|e|
+                AppError::io_error(
+                    format!("创建数据库目录失败: {:?}", parent_dir),
+                    e.kind().to_string()
+                )
+            )?;
+        }
+
+        // 如果数据库文件不存在，创建一个空文件
+        if !db_file_path.exists() {
+            tokio::fs::write(&db_file_path, "").await.map_err(|e|
+                AppError::io_error(
+                    format!("创建数据库文件失败: {:?}", db_file_path),
+                    e.kind().to_string()
+                )
+            )?;
+        }
+
+        let sqlite_persistence_service = SqliteOrmPersistenceService::new(config.clone(), Some(&db_file_path)).await?;
+
+        // 执行数据库迁移
+        let db_conn = sqlite_persistence_service.get_database_connection();
+        if let Err(e) = crate::database_migration::DatabaseMigration::migrate(db_conn).await {
+            log::error!("数据库迁移失败: {}", e);
+            return Err(e);
+        }
+
+        let persistence_service: Arc<dyn IPersistenceService> = Arc::new(sqlite_persistence_service);
+
+        // 创建应用配置服务
+        let app_settings_config = AppSettingsConfig::default();
+        let mut app_settings_service: Arc<dyn AppSettingsService> = Arc::new(
+            JsonAppSettingsService::new(app_settings_config)
+        );
+
+        // 初始化应用配置服务
+        if let Some(service) = Arc::get_mut(&mut app_settings_service) {
+            service.initialize().await?;
+        }
+
+        // 创建测试PLC配置服务（需要先创建，因为后面要用到）
+        let test_plc_config_service: Arc<dyn ITestPlcConfigService> = Arc::new(
+            TestPlcConfigService::new(persistence_service.clone())
+        );
+
+        // 创建通道状态管理器
+        let channel_state_manager: Arc<dyn IChannelStateManager> = Arc::new(
+            ChannelStateManager::new(persistence_service.clone())
+        );
+
+        // 🔧 修复：从数据库读取PLC连接配置，不使用硬编码IP
+        let plc_connections = test_plc_config_service.get_plc_connections().await
+            .map_err(|e| format!("获取PLC连接配置失败: {}", e))?;
+
+        let test_plc_connection = plc_connections.iter()
+            .find(|conn| conn.is_test_plc && conn.is_enabled)
+            .ok_or_else(|| "没有找到启用的测试PLC连接配置".to_string())?;
+
+        let target_plc_connection = plc_connections.iter()
+            .find(|conn| !conn.is_test_plc && conn.is_enabled)
+            .ok_or_else(|| "没有找到启用的被测PLC连接配置".to_string())?;
+
+        log::info!("🔗 使用数据库PLC配置 - 测试PLC: {}:{}, 被测PLC: {}:{}",
+            test_plc_connection.ip_address, test_plc_connection.port,
+            target_plc_connection.ip_address, target_plc_connection.port);
+
+        let test_rig_config = crate::services::infrastructure::plc::ModbusConfig {
+            ip_address: test_plc_connection.ip_address.clone(),
+            port: test_plc_connection.port as u16,
+            slave_id: 1,
+            byte_order: crate::models::ByteOrder::default(),
+            connection_timeout_ms: test_plc_connection.timeout as u64,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+            zero_based_address: false,
+        };
+        let target_config = crate::services::infrastructure::plc::ModbusConfig {
+            ip_address: target_plc_connection.ip_address.clone(),
+            port: target_plc_connection.port as u16,
+            slave_id: 1,
+            byte_order: crate::models::ByteOrder::default(),
+            connection_timeout_ms: target_plc_connection.timeout as u64,
+            read_timeout_ms: 3000,
+            write_timeout_ms: 3000,
+            zero_based_address: false,
+        };
+
+        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
+            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(test_rig_config)
+        );
+        let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(
+            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(target_config)
+        );
+
+        // 创建测试执行引擎
+        let test_execution_engine: Arc<dyn ITestExecutionEngine> = Arc::new(
+            TestExecutionEngine::new(
+                10, // 最大并发测试数
+                plc_service_test_rig,
+                plc_service_target.clone(),
+            )
+        );
+
+        // 创建事件发布器
+        let event_publisher: Arc<dyn crate::services::traits::EventPublisher> = Arc::new(
+            SimpleEventPublisher::new()
+        );
+
+        // 创建通道分配服务
+        let channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService> = Arc::new(
+            ChannelAllocationService::new()
+        );
+
+        // test_plc_config_service 已在上面创建
+
+
+
+        // 创建测试协调服务
+        let test_coordination_service: Arc<dyn ITestCoordinationService> = Arc::new(
+            TestCoordinationService::new(
+                channel_state_manager.clone(),
+                test_execution_engine.clone(),
+                persistence_service.clone(),
+                event_publisher,
+                channel_allocation_service.clone(),
+                test_plc_config_service.clone(),
+            )
+        );
+
+        // 创建报告生成服务
+        let reports_dir = std::path::PathBuf::from("reports");
+        let report_generation_service: Arc<dyn IReportGenerationService> = Arc::new(
+            ReportGenerationService::new(
+                persistence_service.clone(),
+                reports_dir,
+            )?
+        );
+
+        // 创建PLC连接管理器
+        let plc_connection_manager = Arc::new(PlcConnectionManager::new(
+            test_plc_config_service.clone(),
+        ));
+
+        // 设置全局PLC连接管理器，让ModbusPlcService能够访问
+        crate::services::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
+
+        // 创建PLC监控服务 - 使用真实的PLC监控服务
+        let plc_monitoring_service: Arc<dyn crate::services::infrastructure::IPlcMonitoringService> = Arc::new(
+            crate::services::infrastructure::plc_monitoring_service::PlcMonitoringService::new(
+                plc_service_target.clone(),
+                Arc::new(crate::services::infrastructure::event_publisher::SimpleEventPublisher::new()),
+            )
+        );
+
+
+
         Ok(Self {
-            test_coordination_service: container.get_test_orchestration_service(),
-            channel_state_manager: container.get_channel_state_manager(),
-            test_execution_engine: container.get_test_execution_engine(),
-            persistence_service: container.get_persistence_service(),
-            report_generation_service: Arc::new(crate::domain::services::mocks::MockReportGenerationService::new(Default::default())), // Placeholder
-            app_settings_service: Arc::new(crate::services::infrastructure::persistence::JsonAppSettingsService::new(Default::default())), // Placeholder
-            test_plc_config_service: container.get_test_plc_config_service(),
-            channel_allocation_service: container.get_batch_allocation_service(),
-            plc_connection_manager: Arc::new(crate::services::infrastructure::plc::PlcConnectionManager::new(Default::default())), // Placeholder
-            plc_monitoring_service: Arc::new(crate::services::infrastructure::mock_plc_monitoring_service::MockPlcMonitoringService::new()), // Placeholder
+            test_coordination_service,
+            channel_state_manager,
+            test_execution_engine,
+            persistence_service,
+            report_generation_service,
+            app_settings_service,
+            test_plc_config_service,
+            channel_allocation_service,
+            plc_connection_manager,
+            plc_monitoring_service,
+
+            // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),
             session_start_time: Utc::now(),
         })

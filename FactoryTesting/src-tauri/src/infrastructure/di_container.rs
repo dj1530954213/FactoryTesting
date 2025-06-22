@@ -3,14 +3,6 @@
 //! 负责管理所有服务的生命周期和依赖关系
 
 use std::sync::Arc;
-use sea_orm::{Database, DatabaseConnection};
-
-use crate::services::application::batch_allocation_service::BatchAllocationService;
-use crate::services::application::test_orchestration_service::TestOrchestrationService;
-use crate::services::domain::test_execution_engine::{ITestExecutionEngine, TestExecutionEngine};
-use crate::services::domain::test_plc_config_service::{ITestPlcConfigService, TestPlcConfigService};
-use crate::services::domain::channel_state_manager::{IChannelStateManager, ChannelStateManager};
-use crate::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use crate::domain::services::*;
 use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::AppError;
@@ -53,6 +45,8 @@ pub trait AppConfig: Send + Sync {
     /// 获取日志级别
     fn log_level(&self) -> &str;
 
+
+
     /// 获取测试数据目录
     fn test_data_directory(&self) -> &str;
 
@@ -77,7 +71,7 @@ impl Default for DefaultAppConfig {
         Self {
             max_concurrent_tests: 88,
             plc_timeout_ms: 5000,
-            database_url: "sqlite:../fat_test.db".to_string(), // Adjusted path for being in src-tauri
+            database_url: "sqlite://fat_test.db".to_string(),
             log_level: "info".to_string(),
 
             test_data_directory: "./test_data".to_string(),
@@ -102,6 +96,8 @@ impl AppConfig for DefaultAppConfig {
     fn log_level(&self) -> &str {
         &self.log_level
     }
+
+
 
     fn test_data_directory(&self) -> &str {
         &self.test_data_directory
@@ -134,12 +130,14 @@ impl AppConfig for ConfigBasedAppConfig {
 
     fn database_url(&self) -> &str {
         // 注意：这里需要处理生命周期问题，实际实现中可能需要调整
-        "sqlite:../fat_test.db" // Adjusted path
+        "sqlite://fat_test.db"
     }
 
     fn log_level(&self) -> &str {
         "info"
     }
+
+
 
     fn test_data_directory(&self) -> &str {
         "./test_data"
@@ -153,109 +151,26 @@ impl AppConfig for ConfigBasedAppConfig {
 /// 应用服务容器实现
 pub struct AppServiceContainer {
     config: Arc<dyn AppConfig>,
-    db_connection: Arc<DatabaseConnection>,
-    persistence_service: Arc<dyn IPersistenceService>,
-    test_plc_config_service: Arc<dyn ITestPlcConfigService>,
-    channel_state_manager: Arc<dyn IChannelStateManager>,
-    test_execution_engine: Arc<dyn ITestExecutionEngine>,
-    batch_allocation_service: Arc<dyn IBatchAllocationService>,
-    test_orchestration_service: Arc<dyn ITestOrchestrationService>,
 }
 
 impl AppServiceContainer {
     /// 创建新的服务容器
-    pub async fn new() -> Result<Self, AppError> {
+    pub fn new() -> Result<Self, AppError> {
         let config = Arc::new(DefaultAppConfig::default());
-        
-        // 创建数据库连接
-        let conn = Database::connect(config.database_url()).await
-            .map_err(|e| AppError::database_error(format!("Failed to connect to database: {}", e)))?;
-        let db_connection = Arc::new(conn);
-        
-        // 实例化持久化服务
-        let persistence_service = Arc::new(SqliteOrmPersistenceService::with_connection(db_connection.clone(), PersistenceConfig::default()));
-
-        // 实例化领域服务
-        let test_plc_config_service = Arc::new(TestPlcConfigService::new(persistence_service.clone()));
-        let channel_state_manager = Arc::new(ChannelStateManager::new(persistence_service.clone()));
-        let test_execution_engine = Arc::new(TestExecutionEngine::new(
-            config.max_concurrent_tests(),
-            test_plc_config_service.clone(),
-        ));
-        let batch_allocation_service = Arc::new(BatchAllocationService::new(db_connection.clone()));
-
-        // EventPublisher和PersistenceService暂时使用Mock
-        let event_publisher_mock = Arc::new(crate::domain::services::mocks::MockEventPublisher::new(Default::default()));
-        let persistence_service_mock = Arc::new(crate::domain::services::mocks::MockPersistenceService::new(Default::default()));
-
-        let test_orchestration_service = Arc::new(TestOrchestrationService::new(
-            channel_state_manager.clone(),
-            test_execution_engine.clone(),
-            batch_allocation_service.clone(),
-            event_publisher_mock,
-            persistence_service_mock,
-        ));
-
-        Ok(Self { 
-            config,
-            db_connection,
-            persistence_service,
-            test_plc_config_service,
-            channel_state_manager,
-            test_execution_engine,
-            batch_allocation_service,
-            test_orchestration_service,
-        })
+        Ok(Self { config })
     }
 
     /// 从配置文件创建服务容器
-    pub async fn from_config(config_path: &str) -> Result<Self, AppError> {
+    pub fn from_config(config_path: &str) -> Result<Self, AppError> {
+        // 加载配置文件
         let settings = config::Config::builder()
             .add_source(config::File::with_name(config_path))
             .build()
             .map_err(|e| AppError::configuration_error(e.to_string()))?;
 
+        // 使用配置创建容器
         let config = Arc::new(ConfigBasedAppConfig::new(settings));
-        
-        // 创建数据库连接
-        let conn = Database::connect(config.database_url()).await
-            .map_err(|e| AppError::database_error(format!("Failed to connect to database: {}", e)))?;
-        let db_connection = Arc::new(conn);
-        
-        // 实例化持久化服务
-        let persistence_service = Arc::new(SqliteOrmPersistenceService::with_connection(db_connection.clone(), PersistenceConfig::default()));
-
-        // 实例化领域服务
-        let test_plc_config_service = Arc::new(TestPlcConfigService::new(persistence_service.clone()));
-        let channel_state_manager = Arc::new(ChannelStateManager::new(persistence_service.clone()));
-        let test_execution_engine = Arc::new(TestExecutionEngine::new(
-            config.max_concurrent_tests(),
-            test_plc_config_service.clone(),
-        ));
-        let batch_allocation_service = Arc::new(BatchAllocationService::new(db_connection.clone()));
-        
-        // EventPublisher和PersistenceService暂时使用Mock
-        let event_publisher_mock = Arc::new(crate::domain::services::mocks::MockEventPublisher::new(Default::default()));
-        let persistence_service_mock = Arc::new(crate::domain::services::mocks::MockPersistenceService::new(Default::default()));
-
-        let test_orchestration_service = Arc::new(TestOrchestrationService::new(
-            channel_state_manager.clone(),
-            test_execution_engine.clone(),
-            batch_allocation_service.clone(),
-            event_publisher_mock,
-            persistence_service_mock,
-        ));
-        
-        Ok(Self { 
-            config,
-            db_connection,
-            persistence_service,
-            test_plc_config_service,
-            channel_state_manager,
-            test_execution_engine,
-            batch_allocation_service,
-            test_orchestration_service,
-        })
+        Ok(Self { config })
     }
 
     /// 创建Mock模式的服务容器
@@ -266,15 +181,23 @@ impl AppServiceContainer {
 
 impl ServiceContainer for AppServiceContainer {
     fn get_test_orchestration_service(&self) -> Arc<dyn ITestOrchestrationService> {
-        self.test_orchestration_service.clone()
+        // 在实际实现中，这里应该创建真实的服务实例
+        // 目前返回Mock实现作为占位符
+        Arc::new(crate::domain::services::mocks::MockTestOrchestrationService::new(
+            crate::domain::services::mocks::MockConfig::default()
+        ))
     }
 
     fn get_channel_state_manager(&self) -> Arc<dyn IChannelStateManager> {
-        self.channel_state_manager.clone()
+        Arc::new(crate::domain::services::mocks::MockChannelStateManager::new(
+            crate::domain::services::mocks::MockConfig::default()
+        ))
     }
 
     fn get_test_execution_engine(&self) -> Arc<dyn ITestExecutionEngine> {
-        self.test_execution_engine.clone()
+        Arc::new(crate::domain::services::mocks::MockTestExecutionEngine::new(
+            crate::domain::services::mocks::MockConfig::default()
+        ))
     }
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
@@ -293,7 +216,9 @@ impl ServiceContainer for AppServiceContainer {
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
-        self.batch_allocation_service.clone()
+        Arc::new(crate::domain::services::mocks::MockBatchAllocationService::new(
+            crate::domain::services::mocks::MockConfig::default()
+        ))
     }
 
     fn get_event_publisher(&self) -> Arc<dyn IEventPublisher> {
@@ -372,8 +297,8 @@ pub struct ContainerFactory;
 
 impl ContainerFactory {
     /// 创建生产环境容器
-    pub async fn create_production_container() -> Result<Box<dyn ServiceContainer>, AppError> {
-        let container = AppServiceContainer::new().await?;
+    pub fn create_production_container() -> Result<Box<dyn ServiceContainer>, AppError> {
+        let container = AppServiceContainer::new()?;
         Ok(Box::new(container))
     }
 
@@ -384,24 +309,24 @@ impl ContainerFactory {
     }
 
     /// 从配置创建容器
-    pub async fn create_from_config(config_path: &str) -> Result<Box<dyn ServiceContainer>, AppError> {
-        let container = AppServiceContainer::from_config(config_path).await?;
+    pub fn create_from_config(config_path: &str) -> Result<Box<dyn ServiceContainer>, AppError> {
+        let container = AppServiceContainer::from_config(config_path)?;
         Ok(Box::new(container))
     }
 
     /// 根据环境变量创建容器
-    pub async fn create_from_environment() -> Result<Box<dyn ServiceContainer>, AppError> {
+    pub fn create_from_environment() -> Result<Box<dyn ServiceContainer>, AppError> {
         let env = std::env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string());
 
         match env.as_str() {
-            "production" => Self::create_production_container().await,
+            "production" => Self::create_production_container(),
             "test" => Self::create_test_container(),
             _ => {
                 // 开发环境，尝试从配置文件加载
                 if std::path::Path::new("config/development.toml").exists() {
-                    Self::create_from_config("config/development").await
+                    Self::create_from_config("config/development")
                 } else {
-                    Self::create_production_container().await
+                    Self::create_production_container()
                 }
             }
         }
