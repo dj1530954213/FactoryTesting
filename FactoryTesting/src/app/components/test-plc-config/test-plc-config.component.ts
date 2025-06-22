@@ -34,9 +34,11 @@ import {
   ConnectionStatusLabels,
   getChannelTypeColor,
   getConnectionStatusColor,
-  TestPlcConnectionResponse
+  TestPlcConnectionResponse,
+  ByteOrder
 } from '../../models/test-plc-config.model';
 import { Subscription } from 'rxjs';
+import { PlcAdvancedTestWindowComponent } from './plc-advanced-test-window.component';
 
 @Component({
   selector: 'app-test-plc-config',
@@ -60,7 +62,8 @@ import { Subscription } from 'rxjs';
     NzDividerModule,
     NzInputNumberModule,
     NzAlertModule,
-    NzSpinModule
+    NzSpinModule,
+    PlcAdvancedTestWindowComponent
   ],
   template: `
     <div class="test-plc-config-container">
@@ -126,6 +129,11 @@ import { Subscription } from 'rxjs';
                           (click)="testConnection(connection.id)">
                     <span nz-icon nzType="api" nzTheme="outline"></span>
                     测试连接
+                  </button>
+                  <button *nzSpaceItem nz-button nzType="default" nzSize="small" 
+                          (click)="openAdvancedTestWindow(connection)">
+                    <span nz-icon nzType="experiment" nzTheme="outline"></span>
+                    高级测试
                   </button>
                   <button *nzSpaceItem nz-button nzType="default" nzSize="small" 
                           (click)="editConnection(connection)">
@@ -302,6 +310,22 @@ import { Subscription } from 'rxjs';
             </nz-form-item>
 
             <nz-form-item>
+              <nz-form-label [nzSpan]="6">字节顺序</nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <nz-select formControlName="byteOrder" nzPlaceHolder="选择字节顺序">
+                  <nz-option *ngFor="let order of byteOrders" [nzValue]="order" [nzLabel]="order"></nz-option>
+                </nz-select>
+              </nz-form-control>
+            </nz-form-item>
+
+            <nz-form-item>
+              <nz-form-label [nzSpan]="6">地址从0开始</nz-form-label>
+              <nz-form-control [nzSpan]="18">
+                <nz-switch formControlName="zeroBasedAddress" nzCheckedChildren="是" nzUnCheckedChildren="否"></nz-switch>
+              </nz-form-control>
+            </nz-form-item>
+
+            <nz-form-item>
               <nz-form-label [nzSpan]="6">PLC用途</nz-form-label>
               <nz-form-control [nzSpan]="18">
                 <nz-switch formControlName="isTestPlc" 
@@ -421,6 +445,13 @@ import { Subscription } from 'rxjs';
           </form>
         </ng-container>
       </nz-modal>
+
+      <!-- PLC高级测试窗口 -->
+      <app-plc-advanced-test-window 
+        [(visible)]="isAdvancedTestWindowVisible"
+        [originalConnection]="currentTestingConnection"
+        (onConfigSaved)="loadData()">
+      </app-plc-advanced-test-window>
     </div>
   `,
   styles: [`
@@ -516,6 +547,7 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
   // 模态框状态
   isConnectionModalVisible = false;
   isChannelModalVisible = false;
+  isAdvancedTestWindowVisible = false;
   isEditingConnection = false;
   isEditingChannel = false;
   
@@ -528,6 +560,7 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
   channelForm!: FormGroup;
   editingConnection: PlcConnectionConfig | null = null;
   editingChannel: TestPlcChannelConfig | null = null;
+  currentTestingConnection: PlcConnectionConfig | null = null;
   
   // 枚举数据
   channelTypes = [
@@ -541,6 +574,7 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
     TestPlcChannelType.DONone
   ];
   plcTypes = Object.values(PlcType);
+  byteOrders = Object.values(ByteOrder);
   
   // 测试连接状态
   testingConnections = new Set<string>();
@@ -575,6 +609,8 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
       port: [502, [Validators.required, Validators.min(1), Validators.max(65535)]],
       timeout: [5000, [Validators.min(1000), Validators.max(30000)]],
       retryCount: [3, [Validators.min(0), Validators.max(10)]],
+      byteOrder: [ByteOrder.CDAB, [Validators.required]],
+      zeroBasedAddress: [false],
       isTestPlc: [true],
       description: [''],
       isEnabled: [true]
@@ -590,7 +626,7 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadData(): void {
+  loadData(): void {
     this.loading = true;
     
     // 加载测试PLC通道配置
@@ -753,6 +789,11 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
         this.plcConnections = [...this.plcConnections];
       }
     });
+  }
+
+  openAdvancedTestWindow(connection: PlcConnectionConfig): void {
+    this.currentTestingConnection = connection;
+    this.isAdvancedTestWindowVisible = true;
   }
 
   // ============================================================================

@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use crate::models::ByteOrder;
 
 /// 通道类型枚举 - 对应数据库中的ChannelType字段
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,6 +73,10 @@ pub struct PlcConnectionConfig {
     pub timeout: i32,                          // 超时时间(ms)
     #[serde(rename = "retryCount")]
     pub retry_count: i32,                      // 重试次数
+    #[serde(rename = "byteOrder", default = "default_byte_order")]  // 字节顺序
+    pub byte_order: String,                    // 保存为字符串，方便前后端兼容
+    #[serde(rename = "zeroBasedAddress", default)]
+    pub zero_based_address: bool,              // 地址是否从0开始
     #[serde(rename = "isTestPlc")]
     pub is_test_plc: bool,                     // 是否为测试PLC
     pub description: Option<String>,           // 描述
@@ -138,6 +143,15 @@ pub struct TestPlcConnectionResponse {
     pub connection_time_ms: Option<u64>,
 }
 
+/// 地址读取测试响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddressReadTestResponse {
+    pub success: bool,
+    pub value: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub read_time_ms: Option<u64>,
+}
+
 /// 自动生成通道映射请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateChannelMappingsRequest {
@@ -189,6 +203,8 @@ impl Default for PlcConnectionConfig {
             port: 502,
             timeout: 5000,
             retry_count: 3,
+            byte_order: "CDAB".to_string(),
+            zero_based_address: false,
             is_test_plc: true,
             description: None,
             is_enabled: true,
@@ -250,4 +266,6 @@ impl From<i32> for TestPlcChannelType {
             _ => TestPlcChannelType::AI, // 默认值
         }
     }
-} 
+}
+
+fn default_byte_order() -> String { "CDAB".to_string() } 

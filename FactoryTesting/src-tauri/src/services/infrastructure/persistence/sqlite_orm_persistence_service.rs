@@ -44,6 +44,17 @@ pub struct SqliteOrmPersistenceService {
 }
 
 impl SqliteOrmPersistenceService {
+    /// 使用已有的数据库连接创建新的实例
+    pub fn with_connection(conn: Arc<DatabaseConnection>, config: PersistenceConfig) -> Self {
+        let db_file_path = PathBuf::from("database_from_connection"); // Placeholder
+        Self {
+            db_conn: conn,
+            db_file_path,
+            is_active: Arc::new(Mutex::new(true)),
+            config,
+        }
+    }
+
     /// 创建新的 SqliteOrmPersistenceService 实例
     ///
     /// # Arguments

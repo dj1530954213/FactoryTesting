@@ -8,6 +8,7 @@ pub mod test_coordination_service;
 pub mod report_generation_service;
 pub mod data_import_service;
 pub mod batch_allocation_service;
+pub mod test_orchestration_service;
 
 // 重新导出主要的服务
 pub use data_import_service::{DataImportService, ImportResult};

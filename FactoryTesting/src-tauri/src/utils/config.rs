@@ -2,6 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use crate::utils::error::{AppError, AppResult};
 
+/// 提供给 serde 的默认字节顺序（CDAB）
+fn default_byte_order() -> String {
+    "CDAB".to_string()
+}
+
 /// 应用程序主配置结构
 /// 包含应用程序运行所需的所有配置信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +61,12 @@ pub struct PlcConfig {
     pub retry_count: u32,
     /// 重试间隔（毫秒）
     pub retry_interval_ms: u64,
+    /// 字节顺序配置 (ABCD / CDAB / BADC / DCBA)
+    #[serde(default="default_byte_order")]
+    pub byte_order: String,
+    /// Modbus 地址是否使用 0 基
+    #[serde(default)]
+    pub zero_based_address: bool,
 }
 
 /// 测试配置
@@ -148,6 +159,8 @@ impl Default for PlcConfig {
             write_timeout_ms: 3000,
             retry_count: 3,
             retry_interval_ms: 1000,
+            byte_order: "CDAB".to_string(),
+            zero_based_address: false,
         }
     }
 }

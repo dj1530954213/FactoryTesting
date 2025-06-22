@@ -27,23 +27,8 @@ pub fn get_global_plc_manager() -> Option<Arc<crate::services::domain::plc_conne
     GLOBAL_PLC_MANAGER.get().cloned()
 }
 
-// 假设 ByteOrder 和 ByteOrderConverter 存在于项目中
-// 如果它们在另一个路径，需要调整 use 语句
-// use crate::utils::byte_order::{ByteOrder, ByteOrderConverter};
-// 暂时定义一个简单的 ByteOrder enum 以便编译，实际应使用项目中的定义
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ByteOrder {
-    ABCD, // Float: AB CD, Int32: AB CD
-    CDAB, // Float: CD AB, Int32: CD AB
-    BADC, // Float: BA DC, Int32: BA DC
-    DCBA, // Float: DC BA, Int32: DC BA
-}
-
-impl Default for ByteOrder {
-    fn default() -> Self {
-        ByteOrder::CDAB // 常见默认值
-    }
-}
+// 引入全局 ByteOrder 枚举，替代本文件的临时定义
+use crate::models::ByteOrder;
 
 // ByteOrderConverter 实现
 struct ByteOrderConverter;
@@ -133,6 +118,8 @@ pub struct ModbusConfig {
     pub port: u16,
     pub slave_id: u8,
     pub byte_order: ByteOrder,
+    /// 是否使用 0 基地址（true 表示用户输入已是 0 基，不再 -1 偏移）
+    pub zero_based_address: bool,
     pub connection_timeout_ms: u64,
     pub read_timeout_ms: u64,
     pub write_timeout_ms: u64,
@@ -145,6 +132,7 @@ impl Default for ModbusConfig {
             port: 502,
             slave_id: 1,
             byte_order: ByteOrder::default(),
+            zero_based_address: false,
             connection_timeout_ms: 2000,
             read_timeout_ms: 1000,
             write_timeout_ms: 1000,
@@ -197,8 +185,12 @@ impl ModbusPlcService {
              return Err(AppError::PlcCommunicationError { message: "Modbus地址偏移量通常从1开始".to_string() });
         }
 
-        // Modbus protocol addresses are 0-indexed. User addresses are 1-indexed.
-        let final_offset = offset - 1;
+        // 根据配置决定是否需要 -1 偏移
+        let final_offset = if self.config.zero_based_address {
+            offset
+        } else {
+            offset - 1
+        };
 
         match first_char {
             '0' | '1' | '3' | '4' => Ok((first_char, final_offset)),

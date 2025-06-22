@@ -21,6 +21,9 @@ impl DatabaseMigration {
         Self::migrate_raw_test_outcomes(db).await?;
         Self::create_missing_tables(db).await?;
 
+        // 补充：PLC连接配置表新增字节顺序与地址基数列
+        Self::add_plc_connection_config_columns(db).await?;
+
         // 阶段三：数据完整性检查和修复
         Self::verify_data_integrity(db).await?;
 
@@ -839,5 +842,37 @@ impl DatabaseMigration {
         Self::update_definition_batch_id(db, definition_id, &batch_id).await?;
 
         Ok(batch_id)
+    }
+
+    /// 为plc_connection_configs表添加缺失列
+    async fn add_plc_connection_config_columns(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("检查并添加plc_connection_configs表缺失列...");
+
+        let table_exists = Self::check_table_exists(db, "plc_connection_configs").await?;
+        if !table_exists {
+            // 表不存在时，新建由SeaORM迁移器处理，这里直接返回
+            log::warn!("plc_connection_configs表不存在，跳过列检查");
+            return Ok(());
+        }
+
+        let existing_columns = Self::get_existing_columns(db, "plc_connection_configs").await?;
+
+        let new_columns = vec![
+            ("byte_order", "TEXT DEFAULT 'CDAB'"),
+            ("zero_based_address", "INTEGER DEFAULT 0"),
+        ];
+
+        for (column_name, column_def) in new_columns {
+            if !existing_columns.contains(&column_name.to_string()) {
+                log::info!("添加{}列到plc_connection_configs表", column_name);
+                let sql = format!("ALTER TABLE plc_connection_configs ADD COLUMN {} {}", column_name, column_def);
+                db.execute(Statement::from_string(sea_orm::DatabaseBackend::Sqlite, sql))
+                    .await
+                    .map_err(|e| AppError::persistence_error(format!("添加列{}失败: {}", column_name, e)))?;
+            }
+        }
+
+        log::info!("✅ plc_connection_configs表列检查完成");
+        Ok(())
     }
 }

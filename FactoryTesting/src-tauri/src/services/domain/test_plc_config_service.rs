@@ -8,13 +8,28 @@ use log::{info, debug, warn};
 
 use crate::models::test_plc_config::*;
 use crate::services::traits::BaseService;
-use crate::services::infrastructure::IPersistenceService;
+use crate::services::infrastructure::database::ExtendedPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use crate::domain::services::plc_communication_service::{IPlcCommunicationService, PlcConnectionConfig as DomainPlcConnectionConfig, PlcProtocol, ConnectionTestResult};
+
+/// Modbus寄存器类型枚举
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ModbusRegisterType {
+    Coil,                  // 线圈 (0xxxxx)
+    DiscreteInput,         // 离散输入 (1xxxxx)
+    InputRegister,         // 输入寄存器 (3xxxxx)
+    HoldingRegister,       // 保持寄存器 (4xxxxx)
+}
 
 /// 测试PLC配置管理服务接口
 #[async_trait]
 pub trait ITestPlcConfigService: BaseService + Send + Sync {
+    /// 获取测试PLC的连接配置
+    async fn get_test_plc_config(&self) -> AppResult<PlcConnectionConfig>;
+    
+    /// 获取被测PLC的连接配置
+    async fn get_target_plc_config(&self) -> AppResult<PlcConnectionConfig>;
+    
     /// 获取所有测试PLC通道配置
     async fn get_test_plc_channels(&self, request: GetTestPlcChannelsRequest) -> AppResult<Vec<TestPlcChannelConfig>>;
     
@@ -33,6 +48,12 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
     /// 测试PLC连接
     async fn test_plc_connection(&self, connection_id: &str) -> AppResult<TestPlcConnectionResponse>;
     
+    /// 测试临时PLC连接配置
+    async fn test_temp_plc_connection(&self, connection: &PlcConnectionConfig) -> AppResult<TestPlcConnectionResponse>;
+    
+    /// 测试地址读取
+    async fn test_address_read(&self, connection: &PlcConnectionConfig, address: &str, data_type: &str) -> AppResult<crate::models::test_plc_config::AddressReadTestResponse>;
+    
     /// 获取通道映射配置
     async fn get_channel_mappings(&self) -> AppResult<Vec<ChannelMappingConfig>>;
     
@@ -41,19 +62,16 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
     
     /// 初始化默认测试PLC通道配置
     async fn initialize_default_test_plc_channels(&self) -> AppResult<()>;
-    
-    /// 获取测试PLC配置 (用于通道分配服务)
-    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig>;
 }
 
 /// 测试PLC配置管理服务实现
 pub struct TestPlcConfigService {
-    persistence_service: Arc<dyn IPersistenceService>,
+    persistence_service: Arc<dyn ExtendedPersistenceService>,
 }
 
 impl TestPlcConfigService {
     /// 创建新的测试PLC配置服务实例
-    pub fn new(persistence_service: Arc<dyn IPersistenceService>) -> Self {
+    pub fn new(persistence_service: Arc<dyn ExtendedPersistenceService>) -> Self {
         Self {
             persistence_service,
         }
@@ -182,6 +200,8 @@ impl TestPlcConfigService {
                 port: 502,
                 timeout: 5000,
                 retry_count: 3,
+                byte_order: "CDAB".to_string(),
+                zero_based_address: false,
                 is_test_plc: true,
                 description: Some("用于测试的PLC设备".to_string()),
                 is_enabled: true,
@@ -196,6 +216,8 @@ impl TestPlcConfigService {
                 port: 502,
                 timeout: 5000,
                 retry_count: 3,
+                byte_order: "CDAB".to_string(),
+                zero_based_address: false,
                 is_test_plc: false,
                 description: Some("被测试的PLC设备".to_string()),
                 is_enabled: true,
@@ -237,6 +259,14 @@ impl BaseService for TestPlcConfigService {
 
 #[async_trait]
 impl ITestPlcConfigService for TestPlcConfigService {
+    async fn get_test_plc_config(&self) -> AppResult<PlcConnectionConfig> {
+        self.persistence_service.get_plc_connection_config("test_plc_1").await
+    }
+    
+    async fn get_target_plc_config(&self) -> AppResult<PlcConnectionConfig> {
+        self.persistence_service.get_plc_connection_config("target_plc_1").await
+    }
+
     async fn get_test_plc_channels(&self, request: GetTestPlcChannelsRequest) -> AppResult<Vec<TestPlcChannelConfig>> {
         debug!("获取测试PLC通道配置，过滤条件: {:?}", request);
         
@@ -357,6 +387,51 @@ impl ITestPlcConfigService for TestPlcConfigService {
         Ok(response)
     }
 
+    async fn test_temp_plc_connection(&self, connection: &PlcConnectionConfig) -> AppResult<TestPlcConnectionResponse> {
+        debug!("测试临时PLC连接: {} ({}:{})", connection.name, connection.ip_address, connection.port);
+
+        // 直接使用提供的连接配置进行测试，不需要从数据库查找
+        let test_result = match connection.plc_type {
+            crate::models::test_plc_config::PlcType::ModbusTcp => {
+                self.test_modbus_tcp_connection(connection).await
+            }
+
+            _ => {
+                // 其他协议暂未实现
+                Ok(TestPlcConnectionResponse {
+                    success: false,
+                    message: format!("暂不支持的PLC类型: {:?}", connection.plc_type),
+                    connection_time_ms: None,
+                })
+            }
+        };
+
+        let response = test_result?;
+        info!("临时PLC连接测试完成: {} - {}", connection.name, if response.success { "成功" } else { "失败" });
+        Ok(response)
+    }
+
+    async fn test_address_read(&self, connection: &PlcConnectionConfig, address: &str, data_type: &str) -> AppResult<crate::models::test_plc_config::AddressReadTestResponse> {
+        debug!("测试地址读取: {} - 地址: {}, 类型: {}", connection.name, address, data_type);
+
+        // 根据PLC类型进行地址读取测试
+        match connection.plc_type {
+            crate::models::test_plc_config::PlcType::ModbusTcp => {
+                self.test_modbus_address_read(connection, address, data_type).await
+            }
+
+            _ => {
+                // 其他协议暂未实现
+                Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: false,
+                    value: None,
+                    error: Some(format!("暂不支持的PLC类型: {:?}", connection.plc_type)),
+                    read_time_ms: None,
+                })
+            }
+        }
+    }
+
     async fn get_channel_mappings(&self) -> AppResult<Vec<ChannelMappingConfig>> {
         debug!("获取通道映射配置");
         
@@ -466,59 +541,227 @@ impl ITestPlcConfigService for TestPlcConfigService {
         info!("默认测试PLC配置初始化完成");
         Ok(())
     }
-
-    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig> {
-        debug!("获取测试PLC配置");
-        
-        // 获取所有测试PLC通道配置
-        let request = GetTestPlcChannelsRequest {
-            channel_type_filter: None,
-            enabled_only: Some(true), // 只获取启用的通道
-        };
-        let test_channels = self.get_test_plc_channels(request).await?;
-        
-        // 获取第一个PLC连接配置作为默认配置
-        let plc_connections = self.get_plc_connections().await?;
-        let test_plc_connection = plc_connections.iter()
-            .find(|conn| conn.is_test_plc && conn.is_enabled)
-            .ok_or_else(|| AppError::not_found_error("测试PLC连接", "没有找到启用的测试PLC连接配置"))?;
-        
-        // 转换TestPlcChannelConfig到ComparisonTable
-        let mut comparison_tables = Vec::new();
-        for channel in test_channels {
-            let is_powered = !channel.power_supply_type.trim().is_empty() 
-                && !channel.power_supply_type.contains("无源");
-            
-            let module_type = match channel.channel_type {
-                crate::models::test_plc_config::TestPlcChannelType::AI => crate::models::ModuleType::AI,
-                crate::models::test_plc_config::TestPlcChannelType::AINone => crate::models::ModuleType::AI,
-                crate::models::test_plc_config::TestPlcChannelType::AO => crate::models::ModuleType::AO,
-                crate::models::test_plc_config::TestPlcChannelType::AONone => crate::models::ModuleType::AO,
-                crate::models::test_plc_config::TestPlcChannelType::DI => crate::models::ModuleType::DI,
-                crate::models::test_plc_config::TestPlcChannelType::DINone => crate::models::ModuleType::DI,
-                crate::models::test_plc_config::TestPlcChannelType::DO => crate::models::ModuleType::DO,
-                crate::models::test_plc_config::TestPlcChannelType::DONone => crate::models::ModuleType::DO,
-            };
-            
-            comparison_tables.push(crate::services::ComparisonTable {
-                channel_address: channel.channel_address,
-                communication_address: channel.communication_address,
-                channel_type: module_type,
-                is_powered,
-            });
-        }
-        
-        debug!("转换完成：{} 个通道映射表", comparison_tables.len());
-        
-        Ok(crate::services::TestPlcConfig {
-            brand_type: format!("{:?}", test_plc_connection.plc_type),
-            ip_address: test_plc_connection.ip_address.clone(),
-            comparison_tables,
-        })
-    }
 }
 
 impl TestPlcConfigService {
+    /// 测试Modbus TCP地址读取
+    async fn test_modbus_address_read(&self, connection: &PlcConnectionConfig, address: &str, data_type: &str) -> AppResult<crate::models::test_plc_config::AddressReadTestResponse> {
+        use std::time::Instant;
+        use tokio::time::{timeout, Duration};
+        use tokio_modbus::prelude::*;
+
+        let start_time = Instant::now();
+        debug!("开始测试Modbus地址读取: {}:{} - 地址: {}, 类型: {}", connection.ip_address, connection.port, address, data_type);
+
+        // 设置超时时间
+        let timeout_duration = Duration::from_millis(connection.timeout as u64);
+
+        // 解析地址
+        let (register_type, register_offset) = match Self::parse_modbus_address(address, connection.zero_based_address) {
+            Ok(result) => result,
+            Err(e) => {
+                return Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: false,
+                    value: None,
+                    error: Some(format!("地址解析失败: {}", e)),
+                    read_time_ms: Some(start_time.elapsed().as_millis() as u64),
+                });
+            }
+        };
+
+        // 建立连接并读取数据
+        let socket_addr = format!("{}:{}", connection.ip_address, connection.port);
+        let socket_addr = match socket_addr.parse::<std::net::SocketAddr>() {
+            Ok(addr) => addr,
+            Err(e) => {
+                return Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: false,
+                    value: None,
+                    error: Some(format!("无效的地址格式: {}", e)),
+                    read_time_ms: Some(start_time.elapsed().as_millis() as u64),
+                });
+            }
+        };
+
+        let read_result = timeout(timeout_duration, async {
+            // 建立Modbus连接
+            let mut ctx = tokio_modbus::client::tcp::connect_slave(socket_addr, Slave(1)).await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("Modbus连接失败: {:?}", e)))?;
+
+            // 根据寄存器类型和数据类型进行读取
+            match (register_type, data_type.to_lowercase().as_str()) {
+                (ModbusRegisterType::Coil, "bool") => {
+                    // 先获取线圈向量，再取首值
+                    let coils_vec: Vec<bool> = ctx.read_coils(register_offset, 1).await
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取线圈IO失败: {:?}", e)))?
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取线圈Modbus异常: {:?}", e)))?;
+                    let value = coils_vec.get(0).copied().unwrap_or(false);
+                    Ok(serde_json::Value::Bool(value))
+                }
+                (ModbusRegisterType::DiscreteInput, "bool") => {
+                    let di_vec: Vec<bool> = ctx.read_discrete_inputs(register_offset, 1).await
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取离散输入IO失败: {:?}", e)))?
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取离散输入Modbus异常: {:?}", e)))?;
+                    let value = di_vec.get(0).copied().unwrap_or(false);
+                    Ok(serde_json::Value::Bool(value))
+                }
+                (ModbusRegisterType::HoldingRegister, "float") => {
+                    let value = {
+                        let regs_vec: Vec<u16> = ctx.read_holding_registers(register_offset, 2).await
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取保持寄存器IO失败: {:?}", e)))?
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取保持寄存器Modbus异常: {:?}", e)))?;
+                        if regs_vec.len() < 2 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "读取的寄存器数据不足",
+                            ));
+                        }
+                        Self::convert_registers_to_f32(&regs_vec, &connection.byte_order)
+                    };
+                    let number = serde_json::Number::from_f64(value as f64)
+                        .unwrap_or_else(|| serde_json::Number::from(0i64));
+                    Ok(serde_json::Value::Number(number))
+                }
+                (ModbusRegisterType::InputRegister, "float") => {
+                    let value = {
+                        let regs_vec: Vec<u16> = ctx.read_input_registers(register_offset, 2).await
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取输入寄存器IO失败: {:?}", e)))?
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取输入寄存器Modbus异常: {:?}", e)))?;
+                        if regs_vec.len() < 2 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "读取的寄存器数据不足",
+                            ));
+                        }
+                        Self::convert_registers_to_f32(&regs_vec, &connection.byte_order)
+                    };
+                    let number = serde_json::Number::from_f64(value as f64)
+                        .unwrap_or_else(|| serde_json::Number::from(0i64));
+                    Ok(serde_json::Value::Number(number))
+                }
+                (ModbusRegisterType::HoldingRegister, "int") => {
+                    let regs_vec: Vec<u16> = ctx.read_holding_registers(register_offset, 1).await
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取保持寄存器IO失败: {:?}", e)))?
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取保持寄存器Modbus异常: {:?}", e)))?;
+                    let raw_val = *regs_vec.get(0).ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "读取的寄存器数据为空",
+                        )
+                    })?;
+                    Ok(serde_json::Value::Number(serde_json::Number::from(raw_val as i64)))
+                }
+                (ModbusRegisterType::InputRegister, "int") => {
+                    let regs_vec: Vec<u16> = ctx.read_input_registers(register_offset, 1).await
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取输入寄存器IO失败: {:?}", e)))?
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("读取输入寄存器Modbus异常: {:?}", e)))?;
+                    let raw_val = *regs_vec.get(0).ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "读取的寄存器数据为空",
+                        )
+                    })?;
+                    Ok(serde_json::Value::Number(serde_json::Number::from(raw_val as i64)))
+                }
+                _ => {
+                    Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, 
+                        format!("不支持的寄存器类型和数据类型组合: {:?} + {}", register_type, data_type)))
+                }
+            }
+        }).await;
+
+        let elapsed_ms = start_time.elapsed().as_millis() as u64;
+
+        match read_result {
+            Ok(Ok(value)) => {
+                info!("地址读取成功: {} = {:?}", address, value);
+                Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: true,
+                    value: Some(value),
+                    error: None,
+                    read_time_ms: Some(elapsed_ms),
+                })
+            }
+            Ok(Err(e)) => {
+                warn!("地址读取失败: {} - {}", address, e);
+                Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: false,
+                    value: None,
+                    error: Some(format!("读取失败: {}", e)),
+                    read_time_ms: Some(elapsed_ms),
+                })
+            }
+            Err(_) => {
+                warn!("地址读取超时: {}", address);
+                Ok(crate::models::test_plc_config::AddressReadTestResponse {
+                    success: false,
+                    value: None,
+                    error: Some("读取超时".to_string()),
+                    read_time_ms: Some(elapsed_ms),
+                })
+            }
+        }
+    }
+
+    /// 解析Modbus地址
+    fn parse_modbus_address(address: &str, zero_based: bool) -> Result<(ModbusRegisterType, u16), String> {
+        if address.len() < 2 {
+            return Err("地址长度不足".to_string());
+        }
+
+        let prefix = &address[..1];
+        let number_part = &address[1..];
+        
+        let number: u16 = number_part.parse()
+            .map_err(|_| format!("无效的地址数字: {}", number_part))?;
+
+        // 根据是否为0基地址计算偏移量
+        // 1基地址(标准Modbus): 地址1对应寄存器0, 所以偏移量是地址-1
+        // 0基地址: 地址0对应寄存器0, 所以偏移量就是地址本身
+        let offset = if zero_based {
+            number
+        } else {
+            number.saturating_sub(1)
+        };
+
+        match prefix {
+            "0" => Ok((ModbusRegisterType::Coil, offset)),
+            "1" => Ok((ModbusRegisterType::DiscreteInput, offset)),
+            "3" => Ok((ModbusRegisterType::InputRegister, offset)),
+            "4" => Ok((ModbusRegisterType::HoldingRegister, offset)),
+            _ => Err(format!("不支持的地址前缀: {}", prefix)),
+        }
+    }
+
+    /// 将寄存器数据转换为float32
+    fn convert_registers_to_f32(registers: &[u16], byte_order: &str) -> f32 {
+        if registers.len() < 2 {
+            warn!("转换f32需要2个寄存器，但只收到: {}个", registers.len());
+            return 0.0;
+        }
+
+        let high_word = registers[0];
+        let low_word = registers[1];
+
+        let b1h = (high_word >> 8) as u8;
+        let b1l = (high_word & 0xFF) as u8;
+        let b2h = (low_word >> 8) as u8;
+        let b2l = (low_word & 0xFF) as u8;
+
+        match byte_order.to_uppercase().as_str() {
+            // 小端 (DCBA): 低字节在前，低字在前
+            "DCBA" => f32::from_le_bytes([b2l, b2h, b1l, b1h]),
+            
+            // 小端，字交换 (CDAB): 高字节在前，低字在前
+            "CDAB" => f32::from_be_bytes([b2h, b2l, b1h, b1l]),
+
+            // 大端，字节交换 (BADC): 低字节在前，高字在前
+            "BADC" => f32::from_be_bytes([b1l, b1h, b2l, b2h]),
+            
+            // 大端 (ABCD) 或默认: 高字节在前，高字在前
+            _ => f32::from_be_bytes([b1h, b1l, b2h, b2l]),
+        }
+    }
     /// 测试Modbus TCP连接
     async fn test_modbus_tcp_connection(&self, config: &crate::models::test_plc_config::PlcConnectionConfig) -> AppResult<TestPlcConnectionResponse> {
         use std::time::Instant;

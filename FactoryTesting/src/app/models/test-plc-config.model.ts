@@ -40,6 +40,10 @@ export interface PlcConnectionConfig {
   port: number;                          // 端口号
   timeout: number;                       // 超时时间(ms)
   retryCount: number;                    // 重试次数
+  /** 字节顺序 (ABCD / CDAB / BADC / DCBA) */
+  byteOrder?: ByteOrder;                  // 字节顺序
+  /** 地址是否从0开始(true表示用户输入为0基址) */
+  zeroBasedAddress?: boolean;             // 0基地址开关
   isTestPlc: boolean;                    // 是否为测试PLC
   description?: string;                  // 描述
   isEnabled: boolean;                    // 是否启用
@@ -127,6 +131,16 @@ export interface TestPlcConnectionResponse {
 }
 
 /**
+ * 地址读取测试响应
+ */
+export interface AddressReadTestResponse {
+  success: boolean;                      // 读取是否成功
+  value?: any;                          // 读取到的值
+  error?: string;                       // 错误信息
+  readTimeMs?: number;                  // 读取时间(毫秒)
+}
+
+/**
  * 通道类型标签映射
  */
 export const TestPlcChannelTypeLabels: Record<TestPlcChannelType, string> = {
@@ -198,4 +212,12 @@ export function getConnectionStatusColor(status: ConnectionStatus): string {
     default:
       return 'default';
   }
+}
+
+/** 字节顺序枚举 */
+export enum ByteOrder {
+  ABCD = 'ABCD',
+  CDAB = 'CDAB',
+  BADC = 'BADC',
+  DCBA = 'DCBA'
 } 

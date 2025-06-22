@@ -3,11 +3,13 @@
 /// 负责管理和并发执行测试任务，协调多个测试执行器完成完整的测试序列
 
 use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
-use crate::services::infrastructure::IPlcCommunicationService;
 use crate::services::domain::specific_test_executors::{
     ISpecificTestStepExecutor, AIHardPointPercentExecutor,
     DIHardPointTestExecutor, DOHardPointTestExecutor, AOHardPointTestExecutor
 };
+use crate::services::domain::test_plc_config_service::ITestPlcConfigService;
+use crate::services::infrastructure::plc::{ ModbusPlcService, ModbusConfig };
+use crate::services::infrastructure::plc::plc_communication_service::PlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -66,10 +68,8 @@ pub trait ITestExecutionEngine: Send + Sync {
 pub struct TestExecutionEngine {
     /// 并发控制信号量
     semaphore: Arc<Semaphore>,
-    /// 测试台PLC服务
-    plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
-    /// 目标PLC服务
-    plc_service_target: Arc<dyn IPlcCommunicationService>,
+    /// PLC配置服务，用于在测试执行前获取最新的配置
+    plc_config_service: Arc<dyn ITestPlcConfigService>,
     /// 活动任务管理
     active_tasks: Arc<RwLock<HashMap<String, TestTask>>>,
     /// 全局取消令牌
@@ -80,13 +80,11 @@ impl TestExecutionEngine {
     /// 创建新的测试执行引擎
     pub fn new(
         max_concurrent_tasks: usize,
-        plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
-        plc_service_target: Arc<dyn IPlcCommunicationService>,
+        plc_config_service: Arc<dyn ITestPlcConfigService>,
     ) -> Self {
         Self {
             semaphore: Arc::new(Semaphore::new(max_concurrent_tasks)),
-            plc_service_test_rig,
-            plc_service_target,
+            plc_config_service,
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
             global_cancellation_token: CancellationToken::new(),
         }
@@ -138,6 +136,38 @@ impl TestExecutionEngine {
         task_cancellation_token: CancellationToken,
     ) {
         info!("🚀 开始测试: {} [{}]", definition.tag, instance.instance_id);
+
+        // 在测试开始时，从数据库获取最新的测试PLC配置
+        let test_rig_config_result = self.plc_config_service.get_test_plc_config().await;
+        let target_config_result = self.plc_config_service.get_target_plc_config().await;
+
+        let (test_rig_config, target_config) = match (test_rig_config_result, target_config_result) {
+            (Ok(Some(rig_config)), Ok(Some(target_config))) => (rig_config, target_config),
+            (Err(e), _) | (_, Err(e)) => {
+                error!("获取PLC配置失败: {}", e);
+                // 这里可以发送一个失败的结果
+                return;
+            },
+            (Ok(None), _) | (_, Ok(None)) => {
+                error!("未能找到测试台或目标PLC的配置");
+                // 这里可以发送一个失败的结果
+                return;
+            }
+        };
+
+        // 使用最新的配置动态创建PLC服务实例
+        let mut plc_service_test_rig = ModbusPlcService::new(test_rig_config.into());
+        let mut plc_service_target = ModbusPlcService::new(target_config.into());
+        
+        // 连接到PLC
+        if let Err(e) = plc_service_test_rig.connect().await {
+            error!("连接测试台PLC失败: {}", e);
+            return;
+        }
+        if let Err(e) = plc_service_target.connect().await {
+            error!("连接目标PLC失败: {}", e);
+            return;
+        }
 
         // 更新任务状态为运行中
         {
@@ -199,8 +229,8 @@ impl TestExecutionEngine {
             match executor.execute(
                 &instance,
                 &definition,
-                self.plc_service_test_rig.clone(),
-                self.plc_service_target.clone(),
+                Arc::new(plc_service_test_rig),
+                Arc::new(plc_service_target),
             ).await {
                 Ok(outcome) => {
                     // 减少冗余日志 - 只在debug模式下显示步骤完成信息
@@ -287,14 +317,12 @@ impl ITestExecutionEngine for TestExecutionEngine {
         // 获取信号量许可并启动异步任务
         let semaphore = self.semaphore.clone();
         let active_tasks = self.active_tasks.clone();
-        let plc_test_rig = self.plc_service_test_rig.clone();
-        let plc_target = self.plc_service_target.clone();
+        let plc_config_service_clone = self.plc_config_service.clone();
         let global_token = self.global_cancellation_token.clone();
 
         let engine_clone = TestExecutionEngine {
             semaphore: semaphore.clone(),
-            plc_service_test_rig: plc_test_rig,
-            plc_service_target: plc_target,
+            plc_config_service: plc_config_service_clone,
             active_tasks: active_tasks.clone(),
             global_cancellation_token: global_token,
         };

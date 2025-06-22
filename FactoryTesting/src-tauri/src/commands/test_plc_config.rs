@@ -2,6 +2,7 @@
 // 详细注释：测试PLC配置相关的Tauri命令
 
 use tauri::State;
+use serde::{Deserialize, Serialize};
 use crate::tauri_commands::AppState;
 use crate::models::test_plc_config::*;
 use crate::utils::error::AppResult;
@@ -140,6 +141,52 @@ pub async fn test_plc_connection_cmd(
         Err(e) => {
             log::error!("测试PLC连接失败: {}", e);
             Err(format!("测试PLC连接失败: {}", e))
+        }
+    }
+}
+
+/// 测试临时PLC连接配置
+#[tauri::command]
+pub async fn test_temp_plc_connection_cmd(
+    connection: PlcConnectionConfig,
+    state: State<'_, AppState>
+) -> Result<TestPlcConnectionResponse, String> {
+    debug!("测试临时PLC连接配置: {} ({}:{})", connection.name, connection.ip_address, connection.port);
+    
+    match state.test_plc_config_service.test_temp_plc_connection(&connection).await {
+        Ok(response) => {
+            info!("临时PLC连接测试完成: {} - {}", connection.name, if response.success { "成功" } else { "失败" });
+            Ok(response)
+        }
+        Err(e) => {
+            log::error!("测试临时PLC连接失败: {}", e);
+            Err(format!("测试临时PLC连接失败: {}", e))
+        }
+    }
+}
+
+
+
+/// 测试地址读取
+#[tauri::command]
+pub async fn test_address_read_cmd(
+    connection: PlcConnectionConfig,
+    address: String,
+    data_type: String,
+    state: State<'_, AppState>
+) -> Result<AddressReadTestResponse, String> {
+    debug!("测试地址读取: {} ({}:{}) - 地址: {}, 类型: {}", 
+           connection.name, connection.ip_address, connection.port, address, data_type);
+    
+    match state.test_plc_config_service.test_address_read(&connection, &address, &data_type).await {
+        Ok(response) => {
+            info!("地址读取测试完成: {} [{}] - {}", 
+                  address, data_type, if response.success { "成功" } else { "失败" });
+            Ok(response)
+        }
+        Err(e) => {
+            log::error!("测试地址读取失败: {}", e);
+            Err(format!("测试地址读取失败: {}", e))
         }
     }
 }

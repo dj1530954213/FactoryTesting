@@ -562,10 +562,11 @@ async fn write_to_test_plc(
         ip_address: test_plc_config.ip_address.clone(),
         port: 502,
         slave_id: 1,
-        byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+        byte_order: crate::models::ByteOrder::default(),
         connection_timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        zero_based_address: false,
     };
 
     let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
@@ -622,10 +623,11 @@ async fn write_bool_to_target_plc(
         ip_address: test_plc_config.ip_address.clone(), // 暂时使用相同IP
         port: 502,
         slave_id: 1,
-        byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+        byte_order: crate::models::ByteOrder::default(),
         connection_timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        zero_based_address: false,
     };
 
     let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
@@ -757,10 +759,11 @@ async fn write_bool_to_test_plc(
         ip_address: test_plc_config.ip_address.clone(),
         port: 502,
         slave_id: 1,
-        byte_order: crate::services::infrastructure::plc::modbus_plc_service::ByteOrder::default(),
+        byte_order: crate::models::ByteOrder::default(),
         connection_timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        zero_based_address: false,
     };
 
     let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);

@@ -34,6 +34,12 @@ pub struct Model {
     /// 重试次数
     pub retry_count: i32,
     
+    /// 字节顺序 (ABCD / CDAB / BADC / DCBA)
+    pub byte_order: String,
+    
+    /// 地址是否从0开始
+    pub zero_based_address: bool,
+    
     /// 是否为测试PLC
     pub is_test_plc: bool,
     
@@ -71,6 +77,8 @@ impl ActiveModelBehavior for ActiveModel {
             id: Set(default_id()),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
+            byte_order: Set("CDAB".to_string()),
+            zero_based_address: Set(false),
             ..ActiveModelTrait::default()
         }
     }
@@ -105,6 +113,8 @@ impl From<&crate::models::test_plc_config::PlcConnectionConfig> for ActiveModel 
             port: Set(config.port),
             timeout: Set(config.timeout),
             retry_count: Set(config.retry_count),
+            byte_order: Set(config.byte_order.clone()),
+            zero_based_address: Set(config.zero_based_address),
             is_test_plc: Set(config.is_test_plc),
             description: Set(config.description.clone()),
             is_enabled: Set(config.is_enabled),
@@ -132,6 +142,8 @@ impl From<&Model> for crate::models::test_plc_config::PlcConnectionConfig {
             port: model.port,
             timeout: model.timeout,
             retry_count: model.retry_count,
+            byte_order: model.byte_order.clone(),
+            zero_based_address: model.zero_based_address,
             is_test_plc: model.is_test_plc,
             description: model.description.clone(),
             is_enabled: model.is_enabled,

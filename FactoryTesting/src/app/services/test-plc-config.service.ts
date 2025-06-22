@@ -16,6 +16,15 @@ import {
 } from '../models/test-plc-config.model';
 import { TauriApiService } from './tauri-api.service';
 
+/**
+ * 地址读取测试响应接口
+ */
+export interface AddressReadTestResponse {
+  success: boolean;
+  value?: any;
+  error?: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -116,6 +125,24 @@ export class TestPlcConfigService {
   testPlcConnection(connectionId: string): Observable<TestPlcConnectionResponse> {
     return from(
       invoke<TestPlcConnectionResponse>('test_plc_connection_cmd', { connectionId })
+    );
+  }
+
+  /**
+   * 测试临时PLC连接配置
+   */
+  testTempPlcConnection(connection: PlcConnectionConfig): Observable<TestPlcConnectionResponse> {
+    return from(
+      invoke<TestPlcConnectionResponse>('test_temp_plc_connection_cmd', { connection })
+    );
+  }
+
+  /**
+   * 测试地址读取
+   */
+  testAddressRead(connection: PlcConnectionConfig, address: string, dataType: 'bool' | 'float'): Observable<AddressReadTestResponse> {
+    return from(
+      invoke<AddressReadTestResponse>('test_address_read_cmd', { connection, address, dataType })
     );
   }
 

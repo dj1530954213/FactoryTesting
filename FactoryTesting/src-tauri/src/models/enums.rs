@@ -325,3 +325,50 @@ impl Default for LogLevel {
         Self::Info
     }
 }
+
+// ==================== 字节顺序 ====================
+/// PLC 字节顺序
+/// 与 Modbus/TCP 的寄存器组合方式对应
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ByteOrder {
+    /// 寄存器高字节在前，高字在前 (AB CD)
+    ABCD,
+    /// 寄存器低字在前，高字节在前 (CD AB)
+    CDAB,
+    /// 寄存器高字节在前，低字在前 (BA DC)
+    BADC,
+    /// 寄存器低字节在前，低字节在前 (DC BA)
+    DCBA,
+}
+
+impl Default for ByteOrder {
+    fn default() -> Self {
+        ByteOrder::CDAB
+    }
+}
+
+impl Display for ByteOrder {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ByteOrder::ABCD => "ABCD",
+            ByteOrder::CDAB => "CDAB",
+            ByteOrder::BADC => "BADC",
+            ByteOrder::DCBA => "DCBA",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for ByteOrder {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "ABCD" => Ok(ByteOrder::ABCD),
+            "CDAB" => Ok(ByteOrder::CDAB),
+            "BADC" => Ok(ByteOrder::BADC),
+            "DCBA" => Ok(ByteOrder::DCBA),
+            _ => Err(format!("Unsupported ByteOrder: {}", s)),
+        }
+    }
+}

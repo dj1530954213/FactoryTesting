@@ -42,9 +42,9 @@ use commands::manual_test_commands::{
 };
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
-    get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd,
-    get_channel_mappings_cmd, generate_channel_mappings_cmd, initialize_default_test_plc_channels_cmd,
-    restore_default_test_plc_channels_cmd
+    get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd, test_temp_plc_connection_cmd,
+    test_address_read_cmd, get_channel_mappings_cmd, generate_channel_mappings_cmd, 
+    initialize_default_test_plc_channels_cmd, restore_default_test_plc_channels_cmd
 };
 
 /// 应用程序主要运行函数
@@ -219,6 +219,8 @@ pub fn run() {
                 get_plc_connections_cmd,
                 save_plc_connection_cmd,
                 test_plc_connection_cmd,
+                test_temp_plc_connection_cmd,
+                test_address_read_cmd,
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
                 initialize_default_test_plc_channels_cmd,
