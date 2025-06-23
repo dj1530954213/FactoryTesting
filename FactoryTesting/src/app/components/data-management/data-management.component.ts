@@ -319,58 +319,124 @@ export class DataManagementComponent implements OnInit, OnDestroy {
       next: (result) => {
         console.log('🚀 后端一键导入和创建批次结果:', result);
 
+        // 兼容新版后端返回结构
+        const importResultRaw = result.import_result || result.importResult;
+        const allocationResultRaw = result.allocation_result || result.allocationResult;
+
+        // 如果两者都不存在，但包含 batch_info && instances，则视为 ImportAndPrepareBatchResponse
+        const isPrepareResponse = !importResultRaw && !allocationResultRaw && result.batch_info && result.instances;
+
+        if (isPrepareResponse) {
+          console.log('检测到 ImportAndPrepareBatchResponse 响应结构');
+
+          const batchInfoRawPrep = result.batch_info;
+          const instancesPrep = result.instances;
+
+          // 统计类型数量
+          const typeCountsPrep: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
+          instancesPrep.forEach((inst: any) => {
+            const mt = inst.module_type || inst.moduleType;
+            if (typeCountsPrep.hasOwnProperty(mt)) typeCountsPrep[mt]++;
+          });
+
+          const totalPrep = instancesPrep.length;
+
+          const importResult = {
+            success: true,
+            totalChannels: totalPrep,
+            successChannels: totalPrep,
+            failedChannels: 0,
+            message: '导入并创建批次完成',
+            timestamp: new Date().toISOString(),
+            batchInfo: {
+              batch_id: batchInfoRawPrep.batch_id,
+              product_model: batchInfoRawPrep.product_model || this.extractProductModel(),
+              serial_number: batchInfoRawPrep.serial_number || this.generateSerialNumber(),
+              creation_time: batchInfoRawPrep.creation_time || new Date().toISOString(),
+              total_points: totalPrep,
+              tested_points: 0,
+              passed_points: 0,
+              failed_points: 0,
+              status_summary: '已创建，等待测试',
+            },
+            isPersisted: true,
+            definitions: [],
+            allocationResult: {
+              batches: [batchInfoRawPrep],
+              allocated_instances: instancesPrep,
+              allocation_summary: {
+                ai_channels: typeCountsPrep.AI,
+                ao_channels: typeCountsPrep.AO,
+                di_channels: typeCountsPrep.DI,
+                do_channels: typeCountsPrep.DO,
+                total_channels: totalPrep,
+              }
+            }
+          } as any;
+
+          this.dataStateService.updateImportState({
+            isImporting: false,
+            currentStep: 2,
+            importResult: importResult
+          });
+
+          this.message.success(`一键导入完成：成功导入 ${totalPrep} 个通道，创建 1 个批次`);
+          return; // 处理完毕
+        }
+
+        if (!importResultRaw || !allocationResultRaw) {
+          console.error('后端返回结构不符合预期:', result);
+          this.message.error('后端返回结构不符合预期，无法解析导入结果');
+          return;
+        }
+
+        // 提取批次信息（取第一个批次）
+        const batchInfoRaw = (allocationResultRaw.batches && allocationResultRaw.batches.length > 0)
+          ? allocationResultRaw.batches[0]
+          : (allocationResultRaw.batch_info || {});
+
         // 计算各类型数量
         const typeCounts: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
-        result.instances.forEach((inst: any) => {
-          const t = inst.module_type || inst.moduleType;
-          if (t && typeCounts.hasOwnProperty(t)) {
-            typeCounts[t]++;
-          }
-        });
+
+        if (allocationResultRaw.allocation_summary && allocationResultRaw.allocation_summary.ai_channels !== undefined) {
+          // 新版 numeric 统计
+          typeCounts.AI = allocationResultRaw.allocation_summary.ai_channels || 0;
+          typeCounts.AO = allocationResultRaw.allocation_summary.ao_channels || 0;
+          typeCounts.DI = allocationResultRaw.allocation_summary.di_channels || 0;
+          typeCounts.DO = allocationResultRaw.allocation_summary.do_channels || 0;
+        } else if (importResultRaw.imported_definitions && importResultRaw.imported_definitions.length > 0) {
+          // 回退：统计导入定义
+          importResultRaw.imported_definitions.forEach((def: any) => {
+            const t = def.module_type || def.moduleType;
+            if (t && typeCounts.hasOwnProperty(t)) {
+              typeCounts[t]++;
+            }
+          });
+        }
+
+        const totalChannels = importResultRaw.successful_imports || importResultRaw.total_rows || 0;
 
         const importResult = {
           success: true,
-          totalChannels: result.instances.length,
-          successChannels: result.instances.length,
-          failedChannels: 0,
-          message: `成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`,
+          totalChannels: totalChannels,
+          successChannels: totalChannels,
+          failedChannels: importResultRaw.failed_imports || 0,
+          message: allocationResultRaw.message || '导入并创建批次完成',
           timestamp: new Date().toISOString(),
           batchInfo: {
-            batch_id: result.batch_info.batch_id,
-            product_model: result.batch_info.product_model || this.extractProductModel(),
-            serial_number: result.batch_info.serial_number || this.generateSerialNumber(),
-            creation_time: result.batch_info.creation_time || new Date().toISOString(),
-            total_points: result.instances.length,
+            batch_id: batchInfoRaw.batch_id,
+            product_model: batchInfoRaw.product_model || this.extractProductModel(),
+            serial_number: batchInfoRaw.serial_number || this.generateSerialNumber(),
+            creation_time: batchInfoRaw.creation_time || new Date().toISOString(),
+            total_points: totalChannels,
             tested_points: 0,
             passed_points: 0,
             failed_points: 0,
             status_summary: '已创建，等待测试',
-            // 添加Excel列映射说明
-            excel_column_mapping: {
-              '变量名称(HMI)': '点位名称',
-              '变量描述': '通道位号', 
-              '通道位号': '被测PLC通道号',
-              'channel_address': '测试PLC通道号'
-            }
           },
-          // 标记这是已持久化的结果
           isPersisted: true,
-          definitions: result.instances,
-          allocationResult: {
-            success: true,
-            allocated_count: result.instances.length,
-            conflict_count: 0,
-            total_count: result.instances.length,
-            total_batches: 1,
-            message: '一键导入和分配完成',
-            allocation_details: {
-              source: 'backend_service',
-              excel_file_name: this.selectedFile!.name,
-              allocation_algorithm: '后端一键导入Excel并创建批次服务',
-              backend_result: result,
-              module_distribution: typeCounts
-            }
-          }
+          definitions: importResultRaw.imported_definitions,
+          allocationResult: allocationResultRaw,
         };
 
         this.dataStateService.updateImportState({
@@ -379,7 +445,7 @@ export class DataManagementComponent implements OnInit, OnDestroy {
           importResult: importResult
         });
 
-        this.message.success(`一键导入完成：成功分配 ${result.instances.length} 个通道到批次 ${result.batch_info.batch_name || result.batch_info.batch_id}`);
+        this.message.success(`一键导入完成：成功导入 ${totalChannels} 个通道，创建 ${allocationResultRaw.batches?.length || 1} 个批次`);
       },
       error: (error) => {
         console.error('🚀 后端一键导入失败:', error);
@@ -692,23 +758,44 @@ export class DataManagementComponent implements OnInit, OnDestroy {
 
   // 获取各类型通道数量（AI/AO/DI/DO）
   get channelCounts(): any {
-    // 0) 后端汇总字段
-    const sum = this.importResult?.allocationResult?.allocation_summary?.by_module_type;
+    // 0) 首先尝试新版后端 numeric 字段 (ai_channels/ao_channels/di_channels/do_channels)
+    const numericSummary = this.importResult?.allocationResult?.allocation_summary;
+    if (numericSummary && numericSummary.ai_channels !== undefined) {
+      return {
+        AI: numericSummary.ai_channels || 0,
+        AO: numericSummary.ao_channels || 0,
+        DI: numericSummary.di_channels || 0,
+        DO: numericSummary.do_channels || 0,
+      };
+    }
+
+    // 1) 旧版后端 by_module_type 汇总 (snake / camel)
+    let sum = this.importResult?.allocationResult?.allocation_summary?.by_module_type;
+    if (!sum) {
+      // 兼容驼峰命名
+      sum = this.importResult?.allocationResult?.allocationSummary?.by_moduleType;
+    }
     if (sum) {
       const c: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
       Object.keys(sum).forEach(k => {
         const key = k as any;
-        c[key] = sum[key]?.definition_count || 0;
+        // 两种可能：直接是数字 或 嵌套 definition_count
+        const val = typeof sum[key] === 'number' ? sum[key] : (sum[key]?.definition_count || 0);
+        c[key] = val;
       });
       return c;
     }
 
-    // 1) allocation_details.module_distribution
+    // 2) allocation_details.module_distribution
     const dist = this.importResult?.allocationResult?.allocation_details?.module_distribution;
     if (dist) return dist;
 
-    // 2) 统计 definitions
-    const defs = this.importResult?.definitions;
+    // 3) 统计 definitions 数组
+    let defs = this.importResult?.definitions;
+    if (!defs) {
+      // 兼容其他字段
+      defs = this.importResult?.channel_definitions || this.importResult?.channelDefinitions;
+    }
     if (defs && Array.isArray(defs)) {
       const counts: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
       defs.forEach((d: any) => {
@@ -722,7 +809,15 @@ export class DataManagementComponent implements OnInit, OnDestroy {
 
   // 获取批次数量
   get batchCount(): number {
-    const n = this.importResult?.allocationResult?.total_batches;
+    // 0) 后端直接返回的批次数组长度
+    const batchesLen = this.importResult?.allocationResult?.batches?.length;
+    if (batchesLen && batchesLen > 0) return batchesLen;
+
+    // 1) 新旧字段 total_batches / totalBatches
+    let n = this.importResult?.allocationResult?.total_batches;
+    if (!n) {
+      n = this.importResult?.allocationResult?.totalBatches;
+    }
     if (n && n > 0) return n;
     return 1; // 默认单批次
   }

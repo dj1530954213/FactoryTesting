@@ -105,8 +105,8 @@ impl AIHardPointPercentExecutor {
             test_rig_plc.write_float32(&test_rig_address, test_rig_output_value).await
                 .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
 
-                // 等待信号稳定时间 - 统一设置为3秒
-                tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
+                // 等待信号稳定时间 - 调整为2秒
+                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
                 // 读取被测PLC的实际值
                 info!("📖 读取被测PLC [{}]", definition.plc_communication_address);

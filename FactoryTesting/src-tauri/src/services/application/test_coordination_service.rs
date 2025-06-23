@@ -309,7 +309,7 @@ impl TestCoordinationService {
             test_plc_config_service,
             active_batches: Arc::new(Mutex::new(HashMap::new())),
             progress_cache: Arc::new(Mutex::new(HashMap::new())),
-            concurrency_semaphore: Arc::new(Semaphore::new(5)),
+            concurrency_semaphore: Arc::new(Semaphore::new(88)),
             cancellation_token: Arc::new(Mutex::new(None)),
         }
     }

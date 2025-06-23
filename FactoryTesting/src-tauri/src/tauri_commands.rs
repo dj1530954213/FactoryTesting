@@ -34,6 +34,7 @@ use tauri::State;
 use tokio::sync::Mutex;
 use std::collections::HashSet;
 use chrono::{DateTime, Utc};
+use std::convert::TryFrom;
 
 // ============================================================================
 // 应用状态管理
@@ -142,26 +143,12 @@ impl AppState {
             test_plc_connection.ip_address, test_plc_connection.port,
             target_plc_connection.ip_address, target_plc_connection.port);
 
-        let test_rig_config = crate::services::infrastructure::plc::ModbusConfig {
-            ip_address: test_plc_connection.ip_address.clone(),
-            port: test_plc_connection.port as u16,
-            slave_id: 1,
-            byte_order: crate::models::ByteOrder::default(),
-            connection_timeout_ms: test_plc_connection.timeout as u64,
-            read_timeout_ms: 3000,
-            write_timeout_ms: 3000,
-            zero_based_address: false,
-        };
-        let target_config = crate::services::infrastructure::plc::ModbusConfig {
-            ip_address: target_plc_connection.ip_address.clone(),
-            port: target_plc_connection.port as u16,
-            slave_id: 1,
-            byte_order: crate::models::ByteOrder::default(),
-            connection_timeout_ms: target_plc_connection.timeout as u64,
-            read_timeout_ms: 3000,
-            write_timeout_ms: 3000,
-            zero_based_address: false,
-        };
+        // 使用 PLC 连接配置中的字节顺序与地址基准构造 ModbusConfig
+        let test_rig_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(test_plc_connection)
+            .map_err(|e| e.to_string())?;
+
+        let target_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(target_plc_connection)
+            .map_err(|e| e.to_string())?;
 
         let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
             crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(test_rig_config)
@@ -173,7 +160,7 @@ impl AppState {
         // 创建测试执行引擎
         let test_execution_engine: Arc<dyn ITestExecutionEngine> = Arc::new(
             TestExecutionEngine::new(
-                10, // 最大并发测试数
+                88, // 最大并发测试数，和PLC通道数量一致
                 plc_service_test_rig,
                 plc_service_target.clone(),
             )

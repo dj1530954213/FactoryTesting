@@ -7,12 +7,14 @@ use tokio::time::Duration;
 use tokio_modbus::client::Context as ModbusClientContext;
 use tokio_modbus::prelude::*; // for tcp::connect_slave and Slave
 use std::sync::OnceLock;
+use std::str::FromStr;
 
 use crate::utils::error::{AppError, AppResult};
 use crate::services::traits::BaseService;
 use super::plc_communication_service::{
     PlcCommunicationService, PlcConnectionStatus, PlcDataType, PlcTag, PlcCommunicationStats
 };
+use crate::models::test_plc_config::PlcConnectionConfig;
 
 // 全局PLC连接管理器注册表
 static GLOBAL_PLC_MANAGER: OnceLock<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> = OnceLock::new();
@@ -137,6 +139,28 @@ impl Default for ModbusConfig {
             read_timeout_ms: 1000,
             write_timeout_ms: 1000,
         }
+    }
+}
+
+impl TryFrom<&PlcConnectionConfig> for ModbusConfig {
+    type Error = crate::utils::error::AppError;
+
+    fn try_from(conn: &PlcConnectionConfig) -> Result<Self, Self::Error> {
+        // 尝试解析字节顺序字符串 → ByteOrder 枚举
+        let byte_order = crate::models::ByteOrder::from_str(&conn.byte_order)
+            .map_err(|e| crate::utils::error::AppError::configuration_error(e))?;
+
+        // 构造 ModbusConfig
+        Ok(ModbusConfig {
+            ip_address: conn.ip_address.clone(),
+            port: conn.port as u16,
+            slave_id: 1, // 目前默认使用 1，后续可扩展至数据库配置
+            byte_order,
+            zero_based_address: conn.zero_based_address,
+            connection_timeout_ms: conn.timeout.max(1000) as u64, // 确保超时时间合理
+            read_timeout_ms: conn.timeout.max(1000) as u64,
+            write_timeout_ms: conn.timeout.max(1000) as u64,
+        })
     }
 }
 
