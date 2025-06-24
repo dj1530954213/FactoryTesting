@@ -678,6 +678,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 更新批次选择服务
       this.batchSelectionService.setAvailableBatches(this.availableBatches);
 
+      // 如果当前没有选中批次，自动选择第一个批次，避免通道表格区域为空
+      this.batchSelectionService.autoSelectFirstBatch();
+
       if (this.availableBatches.length > 0) {
         console.log('✅ [TEST_AREA] 批次详情:');
         this.availableBatches.forEach((batch, index) => {

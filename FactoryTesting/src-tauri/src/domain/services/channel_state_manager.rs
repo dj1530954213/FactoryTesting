@@ -107,6 +107,15 @@ pub trait IChannelStateManager: BaseService {
         instance_id: &str,
         limit: Option<usize>,
     ) -> AppResult<Vec<StateChangeRecord>>;
+
+    /// 获取所有缓存的测试实例（如果有缓存实现）
+    async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance>;
+
+    /// 清空内部缓存（通道定义 + 测试实例）
+    async fn clear_caches(&self);
+
+    /// 从数据库恢复所有批次/实例/定义到内存缓存
+    async fn restore_all_batches(&self) -> AppResult<Vec<TestBatchInfo>>;
 }
 
 /// 通道状态信息

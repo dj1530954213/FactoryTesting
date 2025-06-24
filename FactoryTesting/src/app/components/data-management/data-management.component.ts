@@ -38,6 +38,7 @@ import { TauriApiService } from '../../services/tauri-api.service';
 import { TestPlcConfigService } from '../../services/test-plc-config.service';
 import { DataStateService, ImportState } from '../../services/data-state.service';
 import { TestPlcChannelConfig, TestPlcChannelType } from '../../models/test-plc-config.model';
+import { BatchSelectionService } from '../../services/batch-selection.service';
 
 @Component({
   selector: 'app-data-management',
@@ -101,7 +102,8 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     private message: NzMessageService, 
     private tauriApiService: TauriApiService, 
     private testPlcConfigService: TestPlcConfigService,
-    private dataStateService: DataStateService
+    private dataStateService: DataStateService,
+    private batchSelectionService: BatchSelectionService
   ) {}
 
   ngOnInit(): void {
@@ -333,11 +335,28 @@ export class DataManagementComponent implements OnInit, OnDestroy {
           const instancesPrep = result.instances;
 
           // 统计类型数量
-          const typeCountsPrep: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
-          instancesPrep.forEach((inst: any) => {
-            const mt = inst.module_type || inst.moduleType;
-            if (typeCountsPrep.hasOwnProperty(mt)) typeCountsPrep[mt]++;
-          });
+          // 优先使用后端提供的 allocation_summary（Rust 端已新增字段）
+          const allocSummaryPrep = result.allocation_summary || result.allocationSummary;
+          let typeCountsPrep: any = { AI: 0, AO: 0, DI: 0, DO: 0 };
+
+          if (allocSummaryPrep && allocSummaryPrep.ai_channels !== undefined) {
+            // 数字字段命名兼容 snake / camel
+            typeCountsPrep = {
+              AI: allocSummaryPrep.ai_channels ?? allocSummaryPrep.aiChannels ?? 0,
+              AO: allocSummaryPrep.ao_channels ?? allocSummaryPrep.aoChannels ?? 0,
+              DI: allocSummaryPrep.di_channels ?? allocSummaryPrep.diChannels ?? 0,
+              DO: allocSummaryPrep.do_channels ?? allocSummaryPrep.doChannels ?? 0,
+            };
+          } else {
+            // 回退：根据实例的 test_plc_channel_tag 前缀推断（如 "AI1_1" → AI）
+            instancesPrep.forEach((inst: any) => {
+              let mt = inst.module_type || inst.moduleType;
+              if (!mt && inst.test_plc_channel_tag) {
+                mt = inst.test_plc_channel_tag.substring(0, 2).toUpperCase();
+              }
+              if (typeCountsPrep.hasOwnProperty(mt)) typeCountsPrep[mt]++;
+            });
+          }
 
           const totalPrep = instancesPrep.length;
 
@@ -373,6 +392,9 @@ export class DataManagementComponent implements OnInit, OnDestroy {
               }
             }
           } as any;
+
+          // 重置批次选择服务，避免混淆旧批次
+          this.batchSelectionService.reset();
 
           this.dataStateService.updateImportState({
             isImporting: false,
@@ -438,6 +460,9 @@ export class DataManagementComponent implements OnInit, OnDestroy {
           definitions: importResultRaw.imported_definitions,
           allocationResult: allocationResultRaw,
         };
+
+        // 重置批次选择服务，避免混淆旧批次
+        this.batchSelectionService.reset();
 
         this.dataStateService.updateImportState({
           isImporting: false,

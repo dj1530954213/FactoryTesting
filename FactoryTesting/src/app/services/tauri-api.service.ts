@@ -738,4 +738,28 @@ export class TauriApiService {
       request: { batch_id: batchId }
     }));
   }
+
+  /**
+   * 恢复会话数据
+   *
+   * @param sessionKey 会话键（可选，19 位时间戳，形如 YYYY-MM-DDTHH:MM:SS）
+   * @param batchId    可选批次ID，如果同时提供 batchId 与 sessionKey，后端会优先使用 batchId
+   */
+  restoreSession(sessionKey?: string, batchId?: string): Observable<TestBatchInfo[]> {
+    console.log('🔄 [TAURI_API] 调用恢复会话 API', { sessionKey, batchId });
+    const payload: any = {
+      batch_id: batchId,
+      session_key: sessionKey,
+      batchId: batchId,
+      sessionKey: sessionKey
+    };
+    console.log('[TAURI_API] restoreSession payload', payload);
+    return from(invoke<TestBatchInfo[]>('restore_session_cmd', payload)).pipe(
+      tap(list => console.log(`🔄 [TAURI_API] 恢复完成，加载 ${list.length} 个批次`)),
+      catchError(err => {
+        console.error('❌ [TAURI_API] 恢复会话失败:', err);
+        throw err;
+      })
+    );
+  }
 }

@@ -25,7 +25,8 @@ use commands::data_management::{
     parse_excel_and_create_batch_cmd, prepare_test_instances_for_batch_cmd,
     import_excel_and_allocate_channels_cmd, clear_session_data,
     parse_excel_without_persistence_cmd, create_batch_and_persist_data_cmd,
-    import_excel_and_create_batch_cmd, create_test_batch_with_definitions_cmd, delete_batch_cmd
+    import_excel_and_create_batch_cmd, create_test_batch_with_definitions_cmd, delete_batch_cmd,
+    restore_session_cmd
 };
 use commands::manual_testing::{
     execute_manual_sub_test_cmd, read_channel_value_cmd, write_channel_value_cmd,
@@ -191,6 +192,7 @@ pub fn run() {
                 import_excel_and_create_batch_cmd,
                 create_test_batch_with_definitions_cmd,
                 delete_batch_cmd,
+                restore_session_cmd,
                 // 手动测试命令
                 execute_manual_sub_test_cmd,
                 read_channel_value_cmd,

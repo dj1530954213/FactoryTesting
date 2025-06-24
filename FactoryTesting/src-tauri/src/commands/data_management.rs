@@ -410,6 +410,8 @@ pub struct ImportExcelAndPrepareBatchCmdArgs {
 pub struct ImportAndPrepareBatchResponse {
     pub batch_info: TestBatchInfo,
     pub instances: Vec<crate::models::ChannelTestInstance>,
+    /// 分配摘要（包含各模块类型点位数量等统计信息）
+    pub allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary,
 }
 
 /// 开始批次测试的参数
@@ -450,6 +452,13 @@ pub async fn import_excel_and_prepare_batch_cmd(
     args: ImportExcelAndPrepareBatchCmdArgs,
     state: State<'_, AppState>
 ) -> Result<ImportAndPrepareBatchResponse, String> {
+    // ===== 先行清空旧的内存状态 & 会话批次 =====
+    state.channel_state_manager.clear_caches().await;
+    {
+        let mut ids = state.session_batch_ids.lock().await;
+        ids.clear();
+    }
+
     // 1. 解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
         Ok(defs) => defs,
@@ -491,6 +500,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
     let response = ImportAndPrepareBatchResponse {
         batch_info: primary_batch.clone(),
         instances: allocation_result.allocated_instances.clone(),
+        allocation_summary: allocation_result.allocation_summary.clone(),
     };
 
 
@@ -994,6 +1004,13 @@ pub async fn parse_excel_and_create_batch_cmd(
     args: ParseExcelAndCreateBatchCmdArgs,
     state: State<'_, AppState>
 ) -> Result<ParseExcelAndCreateBatchResponse, String> {
+    // ===== 先清空旧的内存缓存和会话批次集合 =====
+    state.channel_state_manager.clear_caches().await;
+    {
+        let mut ids = state.session_batch_ids.lock().await;
+        ids.clear();
+    }
+
     info!("收到解析Excel并创建批次请求: 文件={}, 路径={}", args.file_name, args.file_path);
 
     // 第一步：解析Excel文件
@@ -1747,6 +1764,13 @@ pub async fn import_excel_and_create_batch_cmd(
 ) -> Result<ImportExcelAndCreateBatchResponse, String> {
 
 
+    // === 清理旧会话缓存（导入新点表） ===
+    state.channel_state_manager.clear_caches().await;
+    {
+        let mut ids = state.session_batch_ids.lock().await;
+        ids.clear();
+    }
+
     // 第一步：导入Excel数据
     let db = state.persistence_service.get_database_connection();
     let import_service = DataImportService::new(Arc::new(db.clone()));
@@ -1799,6 +1823,16 @@ pub async fn import_excel_and_create_batch_cmd(
                 Err(e) => {
                     error!("存储分配结果到状态管理器失败: {:?}", e);
                     // 不返回错误，因为数据已经保存到数据库了
+                }
+            }
+
+            // ==============================
+            // 将新创建的批次加入会话批次集合
+            // ==============================
+            {
+                let mut ids = state.session_batch_ids.lock().await;
+                for batch in &allocation_result.batches {
+                    ids.insert(batch.batch_id.clone());
                 }
             }
 
@@ -1953,4 +1987,105 @@ async fn store_allocation_to_state_manager(
         session_batch_ids.insert(batch.batch_id.clone());
     }
     Ok(())
+}
+
+// ============================================================================
+// 会话恢复命令
+// ============================================================================
+
+/// 恢复会话：可传 `batch_id` 或 `session_key`，两者择一。
+/// 1. 传 `batch_id` → 自动推导其所属会话（同秒级 creation_time）
+/// 2. 传 `session_key` → 直接使用
+/// 3. 均为空 → 恢复最新会话
+#[tauri::command]
+pub async fn restore_session_cmd(
+    batch_id: Option<String>,
+    session_key: Option<String>,
+    state: State<'_, AppState>
+) -> Result<Vec<TestBatchInfo>, String> {
+    // 1. 清空 ChannelStateManager 缓存
+    state.channel_state_manager.clear_caches().await;
+
+    // 2. 恢复所有批次（先全部加载到缓存，便于后续使用）
+    let all_batches = match state.channel_state_manager.restore_all_batches().await {
+        Ok(list) => list,
+        Err(e) => {
+            error!("恢复会话失败: {}", e);
+            return Err(format!("恢复会话失败: {}", e));
+        }
+    };
+
+    // === 3. 根据 session_key 选择需要恢复的批次 ===
+    // 组织到秒级 creation_time 作为会话分组
+    let mut session_map: std::collections::HashMap<String, Vec<TestBatchInfo>> = std::collections::HashMap::new();
+    for b in &all_batches {
+        let ts_iso = b.creation_time.format("%Y-%m-%dT%H:%M:%S").to_string();
+        let ts_space = ts_iso.replace('T', " ");
+        let key_iso = ts_iso.chars().take(19).collect::<String>();
+        let key_space = ts_space.chars().take(19).collect::<String>();
+        session_map.entry(key_iso).or_default().push(b.clone());
+        session_map.entry(key_space).or_default().push(b.clone());
+    }
+
+    // ==== 选择目标会话键 ====
+    // === 对 session_key 进行规范化，统一成 "YYYY-MM-DDTHH:MM:SS" 格式（无空格、19 位） ===
+    let canonical_session_key = session_key.as_ref().map(|k| {
+        // 替换空格为 T，截取前 19 位
+        let mut s = k.replace(' ', "T");
+        if s.len() > 19 { s = s.chars().take(19).collect(); }
+        s
+    });
+
+    log::info!("[RESTORE] 入参 batch_id={:?}, session_key={:?}, canonical={:?}", batch_id, session_key, canonical_session_key);
+
+    let mut target_key = if let Some(id) = batch_id {
+        // 根据 batch_id 找对应 creation_time 秒级键
+        if let Some(batch) = all_batches.iter().find(|b| b.batch_id == id) {
+            batch.creation_time.format("%Y-%m-%dT%H:%M:%S").to_string()
+        } else {
+            warn!("未找到 batch_id={}, 回退到 session_key/最新会话", id);
+            // 如果 batch_id 无效，则继续使用 session_key 或最新
+            canonical_session_key.clone().unwrap_or_else(|| session_map.keys().max().cloned().unwrap_or_default())
+        }
+    } else if let Some(k) = canonical_session_key.clone() {
+        // 若直接命中则使用
+        if session_map.contains_key(&k) {
+            k
+        } else {
+            // 尝试分钟级前缀匹配（前16位：YYYY-MM-DDTHH:MM）
+            let minute_prefix: String = k.chars().take(16).collect();
+            let mut candidate: Option<String> = None;
+            for key in session_map.keys() {
+                if key.starts_with(&minute_prefix) {
+                    candidate = Some(key.clone());
+                    break;
+                }
+            }
+            if let Some(c) = candidate {
+                log::warn!("[RESTORE] session_key 未精确命中，使用分钟级前缀匹配到 {}", c);
+                c
+            } else {
+                k // 使用原始值，后面可能匹配不到而返回空数组
+            }
+        }
+    } else {
+        // 均为空 → 最新会话
+        session_map.keys().max().cloned().unwrap_or_default()
+    };
+
+    log::info!("[RESTORE] 最终 target_key = {}", target_key);
+
+    let target_batches = session_map.remove(&target_key).unwrap_or_default();
+
+    // 4. 更新 session_batch_ids（先清空再插入目标批次）
+    {
+        let mut ids = state.session_batch_ids.lock().await;
+        ids.clear();
+        for b in &target_batches {
+            ids.insert(b.batch_id.clone());
+        }
+    }
+
+    info!("恢复完成，会话键={}，加载 {} 个批次", target_key, target_batches.len());
+    Ok(target_batches)
 }

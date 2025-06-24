@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { Subscription, interval } from 'rxjs';
+import { Subscription, interval, firstValueFrom } from 'rxjs';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { SystemStatus, TestBatchInfo, OverallTestStatus, DashboardBatchInfo, DeleteBatchResponse, OVERALL_TEST_STATUS_LABELS } from '../../models';
 
@@ -310,10 +310,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       this.recentBatches = displayBatches;
 
-      // === 新增：按导入会话分组 ===
+      // === 修正：按导入会话分组（使用全部批次，保证历史批次也能显示） ===
       const sessionMap = new Map<string, DashboardBatchDisplay[]>();
       const getSessionKey = (b: DashboardBatchDisplay) => (b.creation_time || b.created_at || b.createdAt).substring(0,19); // 到秒
-      for (const b of this.recentBatches) {
+      for (const b of displayBatches) {
         const key = getSessionKey(b);
         if (!sessionMap.has(key)) sessionMap.set(key, []);
         sessionMap.get(key)!.push(b);
@@ -331,8 +331,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         } as ImportSessionGroup;
       }).sort((a,b)=> b.sessionKey.localeCompare(a.sessionKey));
 
-      // 兼容：显示最新session的第一批次
-      this.recentBatches = this.importSessions.map(g=>g.batches[0]);
+      // 最近批次卡片：取最近 N 个导入会话（如 8 条）供其他部件使用
+      const MAX_RECENT = 8;
+      this.recentBatches = this.importSessions.slice(0, MAX_RECENT).flatMap(g => g.batches);
 
       // 检查是否有导入的数据
       this.hasImportedData = this.totalBatches > 0;
@@ -1270,7 +1271,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /**
    * TODO: 恢复操作占位
    */
-  onRestoreSession(_session: ImportSessionGroup) {
-    this.message.info('恢复功能暂未实现');
+  async onRestoreSession(session: ImportSessionGroup) {
+    this.modal.confirm({
+      nzTitle: '确认恢复上次会话数据?',
+      nzContent: '此操作将覆盖当前内存中的批次数据，是否继续?',
+      nzOkDanger: true,
+      nzOnOk: async () => {
+        try {
+          this.loading = true;
+          this.loadingMessage = '正在恢复会话数据...';
+          // 调试日志：打印即将传递的参数
+          const firstBatchId = session.batches.length > 0 ? session.batches[0].batch_id : undefined;
+          console.log('[DASHBOARD] 调用 restoreSession, sessionKey=', session.sessionKey, ' batchId=', firstBatchId);
+          await firstValueFrom(this.tauriApi.restoreSession(session.sessionKey, firstBatchId));
+          this.message.success('恢复完成，可继续测试');
+          await this.loadDashboardData();
+        } catch (err) {
+          this.message.error(`恢复失败: ${err}`);
+        } finally {
+          this.loading = false;
+        }
+      }
+    });
   }
 }

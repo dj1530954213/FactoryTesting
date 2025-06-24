@@ -87,6 +87,12 @@ pub trait IChannelStateManager: Send + Sync {
 
     /// 🔧 获取所有缓存的测试实例
     async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance>;
+
+    /// 清空内存缓存（通道定义 + 测试实例）
+    async fn clear_caches(&self);
+
+    /// 从数据库恢复所有批次、实例和定义到内存缓存
+    async fn restore_all_batches(&self) -> AppResult<Vec<crate::models::TestBatchInfo>>;
 }
 
 /// 通道状态管理器实现
@@ -821,5 +827,57 @@ impl IChannelStateManager for ChannelStateManager {
     async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance> {
         let cache = self.test_instances_cache.read().unwrap();
         cache.values().cloned().collect()
+    }
+
+    /// 清空内存缓存（通道定义 + 测试实例）
+    async fn clear_caches(&self) {
+        self.clear_caches_sync();
+    }
+
+    /// 从数据库恢复所有批次、实例和定义到内存缓存
+    async fn restore_all_batches(&self) -> AppResult<Vec<crate::models::TestBatchInfo>> {
+        self.do_restore_all_batches().await
+    }
+}
+
+// ===== 新增公共辅助方法 =====
+impl ChannelStateManager {
+    /// 清空两个缓存
+    pub fn clear_caches_sync(&self) {
+        if let Ok(mut defs) = self.channel_definitions_cache.write() {
+            defs.clear();
+        }
+        if let Ok(mut inst) = self.test_instances_cache.write() {
+            inst.clear();
+        }
+    }
+
+    /// 恢复所有批次数据到缓存（同步私有实现）
+    async fn do_restore_all_batches(&self) -> AppResult<Vec<crate::models::TestBatchInfo>> {
+        // 1. 清空旧缓存
+        self.clear_caches_sync();
+
+        // 2. 加载所有批次
+        let batches = self.persistence_service.load_all_batch_info().await?;
+
+        // 3. 载入通道定义表一次性
+        let all_definitions = self.persistence_service.load_all_channel_definitions().await?;
+        {
+            let mut map = self.channel_definitions_cache.write().unwrap();
+            for def in all_definitions {
+                map.insert(def.id.clone(), def);
+            }
+        }
+
+        // 4. 载入每个批次的实例
+        for batch in &batches {
+            let instances = self.persistence_service.load_test_instances_by_batch(&batch.batch_id).await?;
+            let mut inst_map = self.test_instances_cache.write().unwrap();
+            for inst in instances {
+                inst_map.insert(inst.instance_id.clone(), inst);
+            }
+        }
+
+        Ok(batches)
     }
 }

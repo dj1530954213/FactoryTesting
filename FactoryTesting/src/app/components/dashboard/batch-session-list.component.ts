@@ -85,9 +85,7 @@ interface ImportSessionGroup {
                 {{ (batch.totalPoints ? ((batch.successCount || 0) / batch.totalPoints * 100) : 0) | number:'1.0-0' }}%
               </nz-tag>
 
-              <button nz-button nzType="link" nzSize="small" (click)="viewBatch.emit(batch)" nzShape="round">
-                <span nz-icon nzType="eye"></span> 查看
-              </button>
+              <!-- "查看"按钮已移除，根据业务要求不再显示批次详情按钮 -->
             </nz-space>
           </nz-list-item>
         </nz-list>

@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\15309\\Desktop\\GItHub文件\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj": {}
+    "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj": {}
   },
   "projects": {
-    "C:\\Users\\15309\\Desktop\\GItHub文件\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj": {
+    "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\15309\\Desktop\\GItHub文件\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
+        "projectUniqueName": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
         "projectName": "FatFullVersion",
-        "projectPath": "C:\\Users\\15309\\Desktop\\GItHub文件\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
-        "packagesPath": "C:\\Users\\15309\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\15309\\Desktop\\GItHub文件\\FactoryTesting\\FatFullVersion\\obj\\",
+        "projectPath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\FatFullVersion.csproj",
+        "packagesPath": "C:\\Users\\DELL\\.nuget\\packages\\",
+        "outputPath": "C:\\Program Files\\Git\\code\\FactoryTesting\\FatFullVersion\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\15309\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\DELL\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -44,7 +44,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "9.0.200"
       },
       "frameworks": {
         "net8.0-windows7.0": {
@@ -116,7 +116,7 @@
               "privateAssets": "none"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.203/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

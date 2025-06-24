@@ -2,10 +2,11 @@
 // 详细注释：使用SeaORM和SQLite实现数据持久化服务
 
 use async_trait::async_trait;
-use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set};
+use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set, ConnectOptions};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex}; // 使用 Mutex
 use chrono::Utc;
+use std::time::Duration;
 // 确保导入 rusqlite (如果直接使用其类型)
 // use rusqlite; // 如果下面只用 rusqlite::*, 则这个可能不需要
 // use sea_orm::sqlx::SqliteConnection; // 通过 sea_orm::sqlx 引用
@@ -97,7 +98,15 @@ impl SqliteOrmPersistenceService {
             }
         }
 
-        let conn = Database::connect(&db_url)
+        // 使用 ConnectOptions 以自定义连接池参数，避免并发超时
+        let mut connect_opts = ConnectOptions::new(db_url.clone());
+        connect_opts
+            .max_connections(20)
+            .min_connections(2)
+            .connect_timeout(Duration::from_secs(30))
+            .sqlx_logging(false); // 关闭底层 sqlx 日志，减少噪声
+
+        let conn = Database::connect(connect_opts)
             .await
             .map_err(|db_err| AppError::persistence_error(db_err.to_string()))?;
 

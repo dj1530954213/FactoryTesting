@@ -166,4 +166,16 @@ impl IChannelStateManager for MockChannelStateManager {
         self.simulate_delay().await;
         Ok(vec![])
     }
+
+    async fn get_all_cached_test_instances(&self) -> Vec<ChannelTestInstance> {
+        vec![]
+    }
+
+    async fn clear_caches(&self) {
+        // mock: do nothing
+    }
+
+    async fn restore_all_batches(&self) -> AppResult<Vec<crate::models::TestBatchInfo>> {
+        Ok(vec![])
+    }
 }

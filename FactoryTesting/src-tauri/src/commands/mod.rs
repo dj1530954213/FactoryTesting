@@ -22,7 +22,8 @@ pub use data_management::{
     clear_session_data,
     parse_excel_without_persistence_cmd,
     create_batch_and_persist_data_cmd,
-    delete_batch_cmd
+    delete_batch_cmd,
+    restore_session_cmd
 };
 
 pub use test_plc_config::{
