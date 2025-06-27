@@ -226,7 +226,9 @@ pub fn run() {
                 get_channel_mappings_cmd,
                 generate_channel_mappings_cmd,
                 initialize_default_test_plc_channels_cmd,
-                restore_default_test_plc_channels_cmd
+                restore_default_test_plc_channels_cmd,
+                // 导出通道分配
+                tauri_commands::export_channel_allocation_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

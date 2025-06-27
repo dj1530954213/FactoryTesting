@@ -400,10 +400,10 @@ impl ChannelAllocationService {
         // AI无源 -> AO有源
         // AO无源 -> AI有源
         // AO有源 -> AI无源
-        // DI有源 -> DO无源
-        // DI无源 -> DO有源
-        // DO有源 -> DI无源
-        // DO无源 -> DI有源
+        // DI有源 → DO无源
+        // DI无源 → DO有源
+        // DO有源 → DI无源
+        // DO无源 → DI有源
 
         // 1. AI有源(被测) → AO无源(测试PLC)
         let ai_powered_true_channels: Vec<_> = remaining_channels.iter()
@@ -543,20 +543,33 @@ impl ChannelAllocationService {
             }
         }
 
-        // 5. DI有源 → DO无源
+        // ------------------------------------------------------------------
+        // 5. DI 普通通道(非安全型)  → DO 无源 (测试PLC)
+        //    6. DI 安全型               → DO 有源 (测试PLC)
+        //    判断安全型只看 module_name 是否包含 "S/FS/F-DI" 等关键字
+        // ------------------------------------------------------------------
+
+        // 辅助闭包: 判断是否安全型 DI
+        let is_safety_di = |d: &ChannelPointDefinition| -> bool {
+            if !matches!(d.module_type, ModuleType::DI) { return false; }
+            let mdl = d.module_name.to_uppercase().replace(' ', "");
+            mdl.contains('S') || mdl.contains("FS") || mdl.contains("F-DI")
+        };
+
+        // (5) 普通 DI → DO 无源
         if batch_instances.len() < max_channels_per_batch {
-            let di_powered_true_channels: Vec<_> = remaining_channels.iter()
-                .filter(|def| matches!(def.module_type, ModuleType::DI) && self.is_powered_channel(def))
+            let normal_di_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DI) && !is_safety_di(def))
                 .filter(|def| !used_channel_ids.contains(&def.id))
                 .collect();
 
             let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
             let allocated_count = std::cmp::min(
-                std::cmp::min(di_powered_true_channels.len(), test_channel_pools.do_powered_false.len()),
+                std::cmp::min(normal_di_channels.len(), test_channel_pools.do_powered_false.len()),
                 available_slots
             );
             for i in 0..allocated_count {
-                let def = di_powered_true_channels[i];
+                let def = normal_di_channels[i];
                 let test_channel = &test_channel_pools.do_powered_false[i];
 
                 let instance = self.create_test_instance(
@@ -568,7 +581,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-
+                log::info!("  DI普通型[{}]: {} → {} (DO无源)", i + 1, def.tag, test_channel.channel_address);
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -578,20 +591,20 @@ impl ChannelAllocationService {
             }
         }
 
-        // 6. DI无源 → DO有源
+        // (6) 安全 DI → DO 有源
         if batch_instances.len() < max_channels_per_batch {
-            let di_powered_false_channels: Vec<_> = remaining_channels.iter()
-                .filter(|def| matches!(def.module_type, ModuleType::DI) && !self.is_powered_channel(def))
+            let safety_di_channels: Vec<_> = remaining_channels.iter()
+                .filter(|def| matches!(def.module_type, ModuleType::DI) && is_safety_di(def))
                 .filter(|def| !used_channel_ids.contains(&def.id))
                 .collect();
 
             let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
             let allocated_count = std::cmp::min(
-                std::cmp::min(di_powered_false_channels.len(), test_channel_pools.do_powered_true.len()),
+                std::cmp::min(safety_di_channels.len(), test_channel_pools.do_powered_true.len()),
                 available_slots
             );
             for i in 0..allocated_count {
-                let def = di_powered_false_channels[i];
+                let def = safety_di_channels[i];
                 let test_channel = &test_channel_pools.do_powered_true[i];
 
                 let instance = self.create_test_instance(
@@ -603,7 +616,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DI无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                log::info!("  DI安全型[{}]: {} → {} (DO有源)", i + 1, def.tag, test_channel.channel_address);
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 

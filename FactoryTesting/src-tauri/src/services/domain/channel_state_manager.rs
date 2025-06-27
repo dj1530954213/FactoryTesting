@@ -212,6 +212,9 @@ impl ChannelStateManager {
                 .map(|(item, _)| format!("{:?}", item))
                 .collect();
             instance.error_message = Some(format!("测试失败: {}", failed_tests.join(", ")));
+        } else {
+            // ✅ 修复：如果所有子测试都通过，清空旧的错误信息，避免前端同时显示失败与通过
+            instance.error_message = None;
         }
     }
 

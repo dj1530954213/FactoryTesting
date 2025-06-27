@@ -69,27 +69,6 @@
     </div>
   </div>
 
-  <!-- 图表展示区域 -->
-  <div nz-row [nzGutter]="[16, 16]" class="charts-row">
-    <div nz-col nzXs="24" nzSm="24" nzMd="8">
-      <nz-card nzTitle="测试进度">
-        <div echarts [options]="testProgressChartOption" class="chart-container"></div>
-      </nz-card>
-    </div>
-
-    <div nz-col nzXs="24" nzSm="24" nzMd="8">
-      <nz-card nzTitle="系统状态监控">
-        <div echarts [options]="systemStatusChartOption" class="chart-container"></div>
-      </nz-card>
-    </div>
-
-    <div nz-col nzXs="24" nzSm="24" nzMd="8">
-      <nz-card nzTitle="批次状态分布">
-        <div echarts [options]="batchStatusChartOption" class="chart-container"></div>
-      </nz-card>
-    </div>
-  </div>
-
   <!-- 快速导航 -->
   <nz-card nzTitle="快速导航" class="quick-navigation-card">
     <div nz-row [nzGutter]="[16, 16]">
@@ -135,14 +114,16 @@
     </div>
   </nz-card>
 
-  <!-- 最近批次（按导入会话） -->
-  <nz-card nzTitle="最近批次" *ngIf="importSessions.length > 0" class="recent-batches-card">
-    <app-batch-session-list
-      [sessions]="importSessions"
-      (viewBatch)="viewBatchDetails($event)"
-      (deleteSession)="deleteImportSession($event)"
-      (restoreSession)="onRestoreSession($event)">
-    </app-batch-session-list>
+  <!-- 最近批次（美化后的样式） -->
+  <nz-card nzTitle="📋 最近批次" *ngIf="importSessions.length > 0" class="recent-batches-card-enhanced">
+    <div class="batch-sessions-container">
+      <app-batch-session-list
+        [sessions]="importSessions"
+        (viewBatch)="viewBatchDetails($event)"
+        (deleteSession)="deleteImportSession($event)"
+        (restoreSession)="onRestoreSession($event)">
+      </app-batch-session-list>
+    </div>
   </nz-card>
 
   <!-- 空状态提示 -->

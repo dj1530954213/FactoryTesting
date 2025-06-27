@@ -35,6 +35,16 @@
           刷新状态
         </button>
 
+        <button
+          *nzSpaceItem
+          nz-button
+          nzType="default"
+          [disabled]="!selectedBatch"
+          (click)="exportChannelAllocation()">
+          <span nz-icon nzType="download" nzTheme="outline"></span>
+          导出批次分配
+        </button>
+
         <!-- 测试状态显示 -->
         <ng-container *nzSpaceItem>
           <div class="test-status-container" *ngIf="isAutoTesting">

@@ -327,34 +327,31 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Read Methods ---
     async fn read_bool_impl(&self, address: &str) -> AppResult<bool> {
-        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
+        // 优先使用全局连接管理器，并等待其就绪，避免重复建立独立连接
         if let Some(manager) = self.get_plc_connection_manager().await {
-            // 检查是否有匹配的连接
-            if let Ok(result) = self.read_bool_from_manager(&manager, address).await {
-                return Ok(result);
-            }
-            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
-            // log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
-        }
-
-        // 🔧 修复：确保在独立连接模式下能够自动连接
-        {
-            let status = self.connection_status.lock().await;
-            if !matches!(*status, PlcConnectionStatus::Connected) {
-                drop(status);
-                // log::debug!("🔗 [ModbusPlcService] 独立连接模式，尝试自动连接: IP={}", self.config.ip_address);
-                // 需要可变引用来连接，但这里是不可变引用，所以我们需要另一种方法
-                // 我们将在下面的代码中处理这个问题
+            let start_time = std::time::Instant::now();
+            loop {
+                match self.read_bool_from_manager(&manager, address).await {
+                    Ok(v) => return Ok(v),
+                    Err(e) => {
+                        // 只要管理器仍未建立连接，就继续等待，直到超时
+                        if start_time.elapsed().as_millis() as u64 >= self.config.connection_timeout_ms {
+                            return Err(e); // 超时后将错误向上抛出
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                }
             }
         }
 
+        // 如果运行到此，说明当前没有注册全局连接管理器，保持原有独立连接行为
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
 
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            // log::debug!("🔗 [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            log::debug!("�� [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -365,7 +362,7 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    // log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
+                    log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
@@ -470,17 +467,23 @@ impl PlcCommunicationService for ModbusPlcService {
     }
     
     async fn read_float32_impl(&self, address: &str) -> AppResult<f32> {
-        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
+        // 优先使用全局连接管理器
         if let Some(manager) = self.get_plc_connection_manager().await {
-            // 检查是否有匹配的连接
-            if let Ok(result) = self.read_float32_from_manager(&manager, address).await {
-                return Ok(result);
+            let start_time = std::time::Instant::now();
+            loop {
+                match self.read_float32_from_manager(&manager, address).await {
+                    Ok(v) => return Ok(v),
+                    Err(e) => {
+                        if start_time.elapsed().as_millis() as u64 >= self.config.connection_timeout_ms {
+                            return Err(e);
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                }
             }
-            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
-            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
         }
 
-        // 🔧 修复：确保在独立连接模式下能够自动连接
+        // 如果没有全局连接管理器，则保持原有独立连接逻辑
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
 
@@ -558,24 +561,30 @@ impl PlcCommunicationService for ModbusPlcService {
 
     // --- Basic Data Type Write Methods ---
     async fn write_bool_impl(&self, address: &str, value: bool) -> AppResult<()> {
-        // 🔧 修复：首先检查是否有活跃的PLC连接管理器连接，如果有且能找到匹配的连接则使用
+        // 优先使用全局连接管理器
         if let Some(manager) = self.get_plc_connection_manager().await {
-            // 检查是否有匹配的连接
-            if let Ok(result) = self.write_bool_to_manager(&manager, address, value).await {
-                return Ok(result);
+            let start_time = std::time::Instant::now();
+            loop {
+                match self.write_bool_to_manager(&manager, address, value).await {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        if start_time.elapsed().as_millis() as u64 >= self.config.connection_timeout_ms {
+                            return Err(e);
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                }
             }
-            // 如果连接管理器中没有匹配的连接，回退到独立连接模式
-            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
         }
 
-        // 🔧 修复：确保在独立连接模式下能够自动连接
+        // 如果没有全局连接管理器，则继续保留独立连接逻辑
         let (addr_type, reg_offset) = self.parse_modbus_address(address)?;
         let mut client_ctx_guard = self.client_context.lock().await;
 
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("🔗 [ModbusPlcService] 写入操作检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            log::debug!("�� [ModbusPlcService] 写入操作检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -751,19 +760,19 @@ impl PlcCommunicationService for ModbusPlcService {
         let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
         let registers_to_write = [reg1, reg2];
 
-        // 🔍 详细调试信息：打印写入的寄存器内容
-        log::info!("🔍 [ModbusPlcService] Float32写入调试信息:");
-        log::info!("   原始值: {}", value);
-        log::info!("   字节序: {:?}", self.config.byte_order);
-        log::info!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
-        log::info!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
-        log::info!("   目标地址: {}, 偏移: {}", address, reg_offset);
+        // 🔍 详细调试信息：打印写入的寄存器内容 (降级为debug)
+        log::debug!("🔍 [ModbusPlcService] Float32写入调试信息:");
+        log::debug!("   原始值: {}", value);
+        log::debug!("   字节序: {:?}", self.config.byte_order);
+        log::debug!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
+        log::debug!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
+        log::debug!("   目标地址: {}, 偏移: {}", address, reg_offset);
 
         // 🔍 将float32转换为字节数组来查看内存布局
         let bytes = value.to_le_bytes();
-        log::info!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
+        log::debug!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
         let bytes_be = value.to_be_bytes();
-        log::info!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
+        log::debug!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
 
         let start_time = chrono::Utc::now();
         let modbus_io_result = ctx.write_multiple_registers(reg_offset, &registers_to_write).await;
@@ -1159,19 +1168,19 @@ impl ModbusPlcService {
                             let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
                             let registers_to_write = [reg1, reg2];
 
-                            // 🔍 详细调试信息：打印写入的寄存器内容 (管理器方法)
-                            log::info!("🔍 [ModbusPlcService] Float32写入调试信息(管理器):");
-                            log::info!("   原始值: {}", value);
-                            log::info!("   字节序: {:?}", self.config.byte_order);
-                            log::info!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
-                            log::info!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
-                            log::info!("   目标地址: {}, 偏移: {}", address, reg_offset);
+                            // 🔍 详细调试信息：打印写入的寄存器内容 (降级为debug)
+                            log::debug!("🔍 [ModbusPlcService] Float32写入调试信息:");
+                            log::debug!("   原始值: {}", value);
+                            log::debug!("   字节序: {:?}", self.config.byte_order);
+                            log::debug!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
+                            log::debug!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
+                            log::debug!("   目标地址: {}, 偏移: {}", address, reg_offset);
 
                             // 🔍 将float32转换为字节数组来查看内存布局
                             let bytes = value.to_le_bytes();
-                            log::info!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
+                            log::debug!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
                             let bytes_be = value.to_be_bytes();
-                            log::info!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
+                            log::debug!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
 
                             match context.write_multiple_registers(reg_offset, &registers_to_write).await {
                                 Ok(_) => {

@@ -762,4 +762,21 @@ export class TauriApiService {
       })
     );
   }
+
+  /**
+   * 导出当前批次的通道分配表
+   */
+  exportChannelAllocation(targetPath: string | null | undefined): Observable<string> {
+    const cleanedPath = (!targetPath || targetPath.trim().length === 0) ? null : targetPath.trim();
+    console.log('📤 [TAURI_API] 准备导出通道分配表, cleanedPath=', cleanedPath);
+    // 注意: Tauri 会将 snake_case 参数名转换为 camelCase，JS 侧需使用 camelCase
+    const payload = cleanedPath ? { targetPath: cleanedPath } : {};
+    return from(invoke<string>('export_channel_allocation_cmd', payload)).pipe(
+      tap(path => console.log('✅ [TAURI_API] 导出成功, 文件路径:', path)),
+      catchError(err => {
+        console.error('❌ [TAURI_API] 导出失败:', err);
+        throw err;
+      })
+    );
+  }
 }

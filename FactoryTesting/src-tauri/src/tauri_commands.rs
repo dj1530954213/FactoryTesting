@@ -35,6 +35,7 @@ use tokio::sync::Mutex;
 use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
+use std::path::PathBuf;
 
 // ============================================================================
 // 应用状态管理
@@ -838,4 +839,53 @@ pub async fn save_app_settings_cmd(
             log::error!("保存应用配置失败: {}", e);
             format!("保存应用配置失败: {}", e)
         })
+}
+
+/// 导出通道分配表
+#[derive(Deserialize)]
+pub struct ExportChannelAllocationArgs {
+    pub target_path: Option<String>,
+    pub batch_ids: Option<Vec<String>>, // 可选: 指定导出哪些批次
+}
+
+#[tauri::command]
+pub async fn export_channel_allocation_cmd(
+    state: State<'_, AppState>,
+    target_path: Option<String>, // 向后兼容旧调用
+    args: Option<ExportChannelAllocationArgs>,
+) -> Result<String, String> {
+    // 兼容逻辑: 如果前端新版本使用 args 结构体，则覆盖 target_path
+    let (real_path_opt, batch_ids_opt) = if let Some(a) = args {
+        (a.target_path.or(target_path.clone()), a.batch_ids)
+    } else {
+        (target_path.clone(), None)
+    };
+
+    log::info!("📤 [CMD] 收到导出通道分配表请求, target_path={:?}, batch_ids={:?}", real_path_opt, batch_ids_opt);
+
+    // 计算需要导出的批次ID集合
+    let allowed_batch_ids: Option<Vec<String>> = if let Some(list) = batch_ids_opt {
+        Some(list)
+    } else {
+        // 使用当前会话的批次
+        let set = state.session_batch_ids.lock().await.clone();
+        if set.is_empty() { None } else { Some(set.into_iter().collect()) }
+    };
+
+    let service = crate::services::infrastructure::excel_export_service::ExcelExportService::new(
+        state.persistence_service.clone(),
+        state.channel_state_manager.clone(),
+    );
+
+    let path_buf = real_path_opt.map(PathBuf::from);
+    match service.export_channel_allocation_with_filter(path_buf, allowed_batch_ids).await {
+        Ok(result_path) => {
+            log::info!("✅ [CMD] 通道分配表导出成功: {}", result_path);
+            Ok(result_path)
+        },
+        Err(e) => {
+            log::error!("❌ [CMD] 通道分配表导出失败: {}", e);
+            Err(e.to_string())
+        }
+    }
 }

@@ -1241,13 +1241,99 @@ export class DashboardComponent implements OnInit, OnDestroy {
       nzContent: `这将一次性删除 ${group.batches.length} 个批次及其所有测试数据，不可恢复！`,
       nzOkDanger: true,
       nzOnOk: async () => {
-        for (const b of group.batches) {
-          await this.deleteBatch(b);
+        // 显示加载消息
+        const loadingMessage = this.message.loading(
+          `🗑️ 正在删除站场 "${group.station}" 的 ${group.batches.length} 个批次...`,
+          { nzDuration: 0 }
+        );
+
+        try {
+          let totalDeletedDefinitions = 0;
+          let totalDeletedInstances = 0;
+          let successCount = 0;
+          let failedCount = 0;
+
+          // 静默删除所有批次
+          for (const batch of group.batches) {
+            const result = await this.performBatchDeletionSilent(batch);
+            
+            if (result.success) {
+              successCount++;
+              totalDeletedDefinitions += result.deletedDefinitions;
+              totalDeletedInstances += result.deletedInstances;
+            } else {
+              failedCount++;
+            }
+          }
+
+          // 关闭加载消息
+          this.message.remove(loadingMessage.messageId);
+
+          // 显示总结通知
+          if (failedCount === 0) {
+            this.message.success(
+              `🎉 已删除站场 "${group.station}" 的所有批次！共删除 ${successCount} 个批次，清理了 ${totalDeletedDefinitions} 个通道定义和 ${totalDeletedInstances} 个测试实例`,
+              { nzDuration: 5000 }
+            );
+          } else {
+            this.message.warning(
+              `⚠️ 站场删除部分完成：成功删除 ${successCount} 个批次，${failedCount} 个批次删除失败`,
+              { nzDuration: 6000 }
+            );
+          }
+
+          // 刷新数据
+          await this.loadDashboardData();
+
+        } catch (error) {
+          // 关闭加载消息
+          this.message.remove(loadingMessage.messageId);
+          
+          this.message.error(
+            `💥 删除站场时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+            { nzDuration: 8000 }
+          );
         }
-        this.message.success('已删除指定站场的所有批次');
-        this.loadDashboardData();
       }
     });
+  }
+
+  /**
+   * 静默删除批次 - 不显示单个批次的删除通知，用于批量删除
+   * @param batch 要删除的批次信息
+   * @returns 删除结果
+   */
+  private async performBatchDeletionSilent(batch: DashboardBatchDisplay): Promise<{ success: boolean; deletedDefinitions: number; deletedInstances: number; error?: string }> {
+    try {
+      // 调用后端API删除批次
+      const result = await this.tauriApi.deleteBatch(batch.id).toPromise();
+
+      if (result && result.success) {
+        // 删除成功 - 从列表中移除该项（不显示通知）
+        this.recentBatches = this.recentBatches.filter(b => b.id !== batch.id);
+        this.totalBatches = Math.max(0, this.totalBatches - 1);
+
+        return {
+          success: true,
+          deletedDefinitions: result.deleted_definitions_count || 0,
+          deletedInstances: result.deleted_instances_count || 0
+        };
+      } else {
+        return {
+          success: false,
+          deletedDefinitions: 0,
+          deletedInstances: 0,
+          error: result?.message || '删除操作返回空结果'
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        deletedDefinitions: 0,
+        deletedInstances: 0,
+        error: error instanceof Error ? error.message : '未知错误'
+      };
+    }
   }
 
   /**
@@ -1259,11 +1345,69 @@ export class DashboardComponent implements OnInit, OnDestroy {
       nzContent: `这将删除该会话下的 ${session.total_batches} 个批次及其所有测试数据，不可恢复！`,
       nzOkDanger: true,
       nzOnOk: async () => {
-        for (const b of session.batches) {
-          await this.performBatchDeletion(b);
+        // 显示加载消息
+        const loadingMessage = this.message.loading(
+          `🗑️ 正在删除会话中的 ${session.total_batches} 个批次...`,
+          { nzDuration: 0 }
+        );
+
+        try {
+          let totalDeletedDefinitions = 0;
+          let totalDeletedInstances = 0;
+          let successCount = 0;
+          let failedCount = 0;
+          const failedBatches: string[] = [];
+
+          // 静默删除所有批次
+          for (const batch of session.batches) {
+            const result = await this.performBatchDeletionSilent(batch);
+            
+            if (result.success) {
+              successCount++;
+              totalDeletedDefinitions += result.deletedDefinitions;
+              totalDeletedInstances += result.deletedInstances;
+            } else {
+              failedCount++;
+              failedBatches.push(`${batch.name}: ${result.error}`);
+            }
+          }
+
+          // 关闭加载消息
+          this.message.remove(loadingMessage.messageId);
+
+          // 显示总结通知
+          if (failedCount === 0) {
+            // 全部成功
+            this.message.success(
+              `🎉 已删除指定导入会话的所有批次！共删除 ${successCount} 个批次，清理了 ${totalDeletedDefinitions} 个通道定义和 ${totalDeletedInstances} 个测试实例`,
+              { nzDuration: 5000 }
+            );
+          } else if (successCount > 0) {
+            // 部分成功
+            this.message.warning(
+              `⚠️ 会话删除部分完成：成功删除 ${successCount} 个批次，${failedCount} 个批次删除失败`,
+              { nzDuration: 6000 }
+            );
+          } else {
+            // 全部失败
+            this.message.error(
+              `❌ 会话删除失败：所有 ${session.total_batches} 个批次都删除失败`,
+              { nzDuration: 8000 }
+            );
+          }
+
+          // 刷新数据
+          await this.loadDashboardData();
+
+        } catch (error) {
+          // 关闭加载消息
+          this.message.remove(loadingMessage.messageId);
+          
+          this.message.error(
+            `💥 删除会话时发生错误: ${error instanceof Error ? error.message : '未知错误'}`,
+            { nzDuration: 8000 }
+          );
         }
-        this.message.success('已删除指定导入会话的所有批次');
-        this.loadDashboardData();
       }
     });
   }

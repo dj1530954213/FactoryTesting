@@ -21,12 +21,14 @@ import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { NzCollapseModule } from 'ng-zorro-antd/collapse';
 import { NzProgressModule } from 'ng-zorro-antd/progress';
 import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
+import { listen } from '@tauri-apps/api/event';
+// Tauri 对话框 API：按需导入 save 方法
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 import { TauriApiService } from '../../services/tauri-api.service';
 import { DataStateService } from '../../services/data-state.service';
 import { BatchSelectionService } from '../../services/batch-selection.service';
 import { Subscription, firstValueFrom } from 'rxjs';
-import { listen } from '@tauri-apps/api/event';
 import {
   TestBatchInfo,
   ChannelTestInstance,
@@ -1618,5 +1620,44 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.selectedManualTestDefinition = null;
   }
 
+  // ======================= 导出通道分配 =========================
+  async exportChannelAllocation(): Promise<void> {
+    if (!this.selectedBatch) {
+      this.message.warning('请先选择批次');
+      return;
+    }
+    console.log('📤 [TEST_AREA] 用户点击导出通道分配表按钮');
+    // 弹出文件保存对话框
+    const selectedPath = await this.openSaveDialog();
+    console.log('📤 [TEST_AREA] 用户选择的导出路径:', selectedPath);
+
+    // 用户取消或未输入文件名都直接返回
+    if (!selectedPath || selectedPath.trim().length === 0) {
+      return;
+    }
+
+    const msgRef = this.message.loading('正在导出通道分配表...', { nzDuration: 0 });
+    try {
+      const filePath = await firstValueFrom(this.tauriApiService.exportChannelAllocation(selectedPath));
+      msgRef.messageId && this.message.remove(msgRef.messageId);
+      this.message.success('导出成功: ' + filePath, { nzDuration: 3000 });
+    } catch (error) {
+      msgRef.messageId && this.message.remove(msgRef.messageId);
+      console.error('导出失败', error);
+      this.message.error('导出失败，请查看日志');
+    }
+  }
+
+  async openSaveDialog(): Promise<string | null> {
+    console.log('📤 [TEST_AREA] 打开保存对话框');
+    const defaultName = `${this.selectedBatch?.station_name || 'station'}_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'')}_通道分配表.xlsx`;
+    return await saveDialog({
+      title: '请选择导出位置',
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Excel', extensions: ['xlsx'] }
+      ]
+    });
+  }
 
 }

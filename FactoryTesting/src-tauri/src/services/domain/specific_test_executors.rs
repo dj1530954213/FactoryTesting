@@ -101,7 +101,7 @@ impl AIHardPointPercentExecutor {
 
             // 设置测试台架输出值(直接输出0-100因为在测试PLC中直接设定了工程量为0-100)
             let test_rig_output_value = percentage * 100.0;
-            info!("📝 写入测试PLC [{}]: {:.2}", test_rig_address, test_rig_output_value);
+            info!("变量:{}, 写[{}]={:.2}", definition.tag, test_rig_address, test_rig_output_value);
             test_rig_plc.write_float32(&test_rig_address, test_rig_output_value).await
                 .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
 
@@ -109,9 +109,9 @@ impl AIHardPointPercentExecutor {
                 tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
                 // 读取被测PLC的实际值
-                info!("📖 读取被测PLC [{}]", definition.plc_communication_address);
                 let actual_raw = target_plc.read_float32(&definition.plc_communication_address).await
                     .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC值失败: {}", e)))?;
+                info!("变量:{}, 读[{}]={:.2}", definition.tag, definition.plc_communication_address, actual_raw);
 
                 // 计算误差
                 let error_percentage = if eng_value != 0.0 {
@@ -141,7 +141,7 @@ impl AIHardPointPercentExecutor {
 
                 // 🔧 精简日志：只显示结果，不显示详细过程
                 let status_icon = if test_status == SubTestStatus::Passed { "✅" } else { "❌" };
-                info!("{} {}%: {:.2}", status_icon, percentage * 100.0, actual_raw);
+                debug!("{} {}%: {:.2}", status_icon, percentage * 100.0, actual_raw);
 
                 // 如果任意点测试失败，继续完成所有测试点，但标记为失败
                 // 不要立即返回，而是继续测试以收集完整的过程数据
@@ -164,13 +164,13 @@ impl AIHardPointPercentExecutor {
         };
 
         // 🔧 精简日志：只保留最终结果
-        info!("✅ 结果: {} - {}",
+        debug!("✅ 结果: {} - {}",
             definition.tag,
             if overall_success { "通过" } else { "失败" });
 
         // 🔄 测试完成后复位测试PLC输出为0%
         let test_rig_address = self.get_test_rig_address_for_channel(instance)?;
-        info!("🔄 测试完成，复位测试PLC [{}]: 0.00", test_rig_address);
+        debug!("🔄 测试完成，复位测试PLC [{}]: 0.00", test_rig_address);
         if let Err(e) = test_rig_plc.write_float32(&test_rig_address, 0.0).await {
             // 复位失败不影响测试结果，只记录警告
             log::warn!("⚠️ 测试PLC复位失败: {}", e);
@@ -468,20 +468,18 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
-        debug!("[{}] 开始执行DI硬点测试 - 实例: {}",
-               self.executor_name(), instance.instance_id);
+        debug!("🔧 DI硬点测试开始 - 测试PLC DO: {}, 被测PLC DI: {}",
+               self.get_test_rig_do_address(instance)?, &definition.plc_communication_address);
 
         let start_time = Utc::now();
         let test_rig_do_address = self.get_test_rig_do_address(instance)?;
         let target_di_address = &definition.plc_communication_address;
 
-        info!("🔧 DI硬点测试开始 - 测试PLC DO: {}, 被测PLC DI: {}",
-              test_rig_do_address, target_di_address);
-
         // 创建数字量测试步骤记录
         let mut digital_steps = Vec::new();
 
         // 步骤1: 测试PLC DO输出低电平
+        info!("变量:{}, 写[{}]=false", definition.tag, test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO低电平失败: {}", e)))?;
 
@@ -491,6 +489,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         // 步骤2: 检查被测PLC DI是否显示"断开"
         let di_state_1 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+        info!("变量:{}, 读[{}]={}", definition.tag, target_di_address, di_state_1);
 
         // 记录步骤1结果
         let step1_status = if di_state_1 {
@@ -519,9 +518,10 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 低电平: {}", di_state_1);
+        debug!("✅ 低电平: {}", di_state_1);
 
         // 步骤3: 测试PLC DO输出高电平
+        info!("变量:{}, 写[{}]=true", definition.tag, test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, true).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO高电平失败: {}", e)))?;
 
@@ -559,10 +559,10 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 高电平: {}", di_state_2);
+        debug!("✅ 高电平: {}", di_state_2);
 
         // 步骤5: 测试PLC DO输出低电平(复位)
-        info!("📝 写入测试PLC DO [{}]: false (复位)", test_rig_do_address);
+        info!("变量:{}, 写[{}]=false", definition.tag, test_rig_do_address);
         plc_service_test_rig.write_bool(&test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("复位测试PLC DO低电平失败: {}", e)))?;
 
@@ -570,9 +570,10 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤6: 最终检查被测PLC DI是否显示"断开"
-        info!("📖 读取被测PLC DI [{}] (期望:false)", target_di_address);
-        let di_state_3 = plc_service_target.read_bool(target_di_address).await
+        let di_state_3;
+        di_state_3 = plc_service_target.read_bool(target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
+        info!("变量:{}, 读[{}]={}", definition.tag, target_di_address, di_state_3);
 
         // 记录步骤3结果
         let step3_status = if di_state_3 {
@@ -601,10 +602,11 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 复位: {}", di_state_3);
+        debug!("✅ 复位: {}", di_state_3);
 
         let end_time = Utc::now();
-        info!("✅ 结果: {} - 通过", definition.tag);
+        debug!("🎯 DI硬点测试完成: 低({}) → 高({}) → 低({}) - 通过",
+                                 di_state_1, di_state_2, di_state_3);
 
         // 构造成功的测试结果
         let success_msg = format!("DI硬点测试成功: 低→高→低电平切换，DI状态正确响应");
@@ -722,10 +724,10 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 低电平测试通过: DO=false, DI={}", di_state_1);
+        debug!("✅ 低电平测试通过: DO=false, DI={}", di_state_1);
 
         // 步骤3: 被测PLC DO输出高电平
-        info!("📝 写入被测PLC DO [{}]: true (高电平)", target_do_address);
+        info!("变量:{}, 写[{}]=true", definition.tag, target_do_address);
         plc_service_target.write_bool(target_do_address, true).await
             .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO高电平失败: {}", e)))?;
 
@@ -733,9 +735,12 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤4: 检查测试PLC DI是否显示"接通"
-        info!("📖 读取测试PLC DI [{}] (期望:true)", test_rig_di_address);
-        let di_state_2 = plc_service_test_rig.read_bool(&test_rig_di_address).await
+        let di_state_2;
+        // 读取后再记录
+        // 读取测试PLC DI
+        di_state_2 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+        info!("变量:{}, 读[{}]={}", definition.tag, test_rig_di_address, di_state_2);
 
         // 记录步骤2结果
         let step2_status = if !di_state_2 {
@@ -764,10 +769,10 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 高电平测试通过: DO=true, DI={}", di_state_2);
+        debug!("✅ 高电平测试通过: DO=true, DI={}", di_state_2);
 
         // 步骤5: 被测PLC DO输出低电平(复位)
-        info!("📝 写入被测PLC DO [{}]: false (复位)", target_do_address);
+        info!("变量:{}, 写[{}]=false", definition.tag, target_do_address);
         plc_service_target.write_bool(target_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("复位被测PLC DO低电平失败: {}", e)))?;
 
@@ -775,9 +780,10 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤6: 最终检查测试PLC DI是否显示"断开"
-        info!("📖 读取测试PLC DI [{}] (期望:false)", test_rig_di_address);
-        let di_state_3 = plc_service_test_rig.read_bool(&test_rig_di_address).await
+        let di_state_3;
+        di_state_3 = plc_service_test_rig.read_bool(&test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
+        info!("变量:{}, 读[{}]={}", definition.tag, test_rig_di_address, di_state_3);
 
         // 记录步骤3结果
         let step3_status = if di_state_3 {
@@ -806,10 +812,10 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
             outcome.digital_steps = Some(digital_steps);
             return Ok(outcome);
         }
-        info!("✅ 复位测试通过: DO=false, DI={}", di_state_3);
+        debug!("✅ 复位测试通过: DO=false, DI={}", di_state_3);
 
         let end_time = Utc::now();
-        info!("🎯 DO硬点测试完成: 低({}) → 高({}) → 低({}) - 通过",
+        debug!("🎯 DO硬点测试完成: 低({}) → 高({}) → 低({}) - 通过",
                                  di_state_1, di_state_2, di_state_3);
 
         // 构造成功的测试结果

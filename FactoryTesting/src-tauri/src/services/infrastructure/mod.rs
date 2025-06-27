@@ -19,6 +19,9 @@ pub mod plc_monitoring_service;
 /// Mock PLC监控服务模块
 pub mod mock_plc_monitoring_service;
 
+/// Excel导出服务模块
+pub mod excel_export_service;
+
 // 为后续步骤准备的模块（暂时注释）
 // pub mod excel;
 
