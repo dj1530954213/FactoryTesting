@@ -4,7 +4,7 @@
 
 use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem,
-    AnalogReadingPoint, DigitalTestStep, ModuleType, SubTestStatus
+    AnalogReadingPoint, DigitalTestStep, ModuleType, SubTestStatus, PointDataType
 };
 use crate::services::infrastructure::IPlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
@@ -1010,6 +1010,68 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
 
     fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
         matches!(definition.module_type, ModuleType::AO | ModuleType::AONone)
+    }
+}
+
+/// DI状态读取执行器
+/// 仅读取一次 DI 状态并与期望值比较（如有提供）。
+pub struct DIStateReadExecutor {
+    expected_state: Option<bool>,
+    read_interval_ms: u64,
+}
+
+impl DIStateReadExecutor {
+    pub fn new(expected_state: Option<bool>, read_interval_ms: u64) -> Self {
+        Self { expected_state, read_interval_ms }
+    }
+}
+
+#[async_trait]
+impl ISpecificTestStepExecutor for DIStateReadExecutor {
+    async fn execute(
+        &self,
+        instance: &ChannelTestInstance,
+        definition: &ChannelPointDefinition,
+        _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
+        plc_service_target: Arc<dyn IPlcCommunicationService>,
+    ) -> AppResult<RawTestOutcome> {
+        // 可配置读取间隔，简单 sleep
+        sleep(Duration::from_millis(self.read_interval_ms)).await;
+
+        let actual_state = plc_service_target.read_bool(&definition.plc_communication_address).await?;
+
+        let success = match self.expected_state {
+            Some(expect) => actual_state == expect,
+            None => true,
+        };
+
+        let message = if let Some(expect) = self.expected_state {
+            if success {
+                format!("DI状态读取成功: 期望={}, 实际={}, 一致", expect, actual_state)
+            } else {
+                format!("DI状态读取失败: 期望={}, 实际={}", expect, actual_state)
+            }
+        } else {
+            format!("DI状态读取完成: 实际={} (无期望值)", actual_state)
+        };
+
+        let mut outcome = if success {
+            RawTestOutcome::success(instance.instance_id.clone(), SubTestItem::StateDisplay)
+        } else {
+            RawTestOutcome::failure(instance.instance_id.clone(), SubTestItem::StateDisplay, message.clone())
+        };
+
+        outcome.message = Some(message);
+        outcome.raw_value_read = Some(actual_state.to_string());
+        Ok(outcome)
+    }
+
+    fn item_type(&self) -> SubTestItem { SubTestItem::StateDisplay }
+
+    fn executor_name(&self) -> &'static str { "DIStateReadExecutor" }
+
+    fn supports_definition(&self, definition: &ChannelPointDefinition) -> bool {
+        matches!(definition.module_type, ModuleType::DI | ModuleType::DINone)
     }
 }
 

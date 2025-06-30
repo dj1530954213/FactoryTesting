@@ -506,6 +506,15 @@
   background-color: #ffebe8 !important;
 }
 
+::ng-deep .ant-table-tbody .row-hardpoint-passed {
+  background-color: #e6f7ff !important; /* 淡蓝色 */
+  border-left: 3px solid #1890ff;
+}
+
+::ng-deep .ant-table-tbody .row-hardpoint-passed:hover {
+  background-color: #d4efff !important; /* hover 更深一点 */
+}
+
 ::ng-deep .ant-table-tbody .row-passed {
   background-color: #f6ffed !important;
   border-left: 3px solid #52c41a;
@@ -514,8 +523,6 @@
 ::ng-deep .ant-table-tbody .row-passed:hover {
   background-color: #f0f9e8 !important;
 }
-
-
 
 /* 筛选工具栏 */
 .filter-toolbar {

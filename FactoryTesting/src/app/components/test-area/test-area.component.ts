@@ -1054,6 +1054,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       case OverallTestStatus.NotTested: return 'default';
       case OverallTestStatus.WiringConfirmed: return 'blue';
       case OverallTestStatus.HardPointTesting: return 'processing';
+      case OverallTestStatus.HardPointTestCompleted: return 'blue';
+      case OverallTestStatus.ManualTestInProgress:
+      case OverallTestStatus.ManualTesting: return 'processing';
       case OverallTestStatus.AlarmTesting: return 'warning';
       case OverallTestStatus.TestCompletedPassed: return 'success';
       case OverallTestStatus.TestCompletedFailed: return 'error';
@@ -1066,6 +1069,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       case OverallTestStatus.NotTested: return '未测试';
       case OverallTestStatus.WiringConfirmed: return '接线确认';
       case OverallTestStatus.HardPointTesting: return '硬点测试中';
+      case OverallTestStatus.HardPointTestCompleted: return '硬点测试完成';
+      case OverallTestStatus.ManualTestInProgress:
+      case OverallTestStatus.ManualTesting: return '手动测试中';
       case OverallTestStatus.AlarmTesting: return '报警测试中';
       case OverallTestStatus.TestCompletedPassed: return '测试通过';
       case OverallTestStatus.TestCompletedFailed: return '测试失败';
@@ -1277,6 +1283,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     switch (status) {
       case OverallTestStatus.NotTested: return 'default';
       case OverallTestStatus.HardPointTesting: return 'orange';
+      case OverallTestStatus.HardPointTestCompleted: return 'blue';
+      case OverallTestStatus.ManualTestInProgress:
+      case OverallTestStatus.ManualTesting: return 'processing';
       case OverallTestStatus.AlarmTesting: return 'warning';
       case OverallTestStatus.TestCompletedPassed: return 'green';
       case OverallTestStatus.TestCompletedFailed: return 'red';
@@ -1510,7 +1519,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   isChannelTestDisabled(instance: ChannelTestInstance): boolean {
     // 当状态为"通过"或"测试中"时禁用按钮
     return instance.overall_status === OverallTestStatus.TestCompletedPassed ||
-           instance.overall_status === OverallTestStatus.HardPointTesting;
+           instance.overall_status === OverallTestStatus.HardPointTesting ||
+           instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
+           instance.overall_status === OverallTestStatus.ManualTesting ||
+           instance.overall_status === OverallTestStatus.ManualTestInProgress;
   }
 
   /**
@@ -1548,16 +1560,29 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 获取表格行的CSS类名（用于整行颜色变更）
    */
   getRowClassName = (data: ChannelTestInstance, index: number): string => {
-    // 硬点测试失败 → 红色
+    // 1) 硬点测试失败 / 最终失败 → 红色
     if (data.overall_status === OverallTestStatus.TestCompletedFailed) {
       return 'row-failed';
     }
 
-    // 测试完成且通过 → 绿色
-    if (data.overall_status === OverallTestStatus.TestCompletedPassed) {
+    // 2) 手动判断硬点测试已通过但手动测试尚未全部通过的情况 → 淡蓝色
+    const subResults = Object.values(data.sub_test_results || {});
+    const allSubTestsOk = subResults.length > 0 && subResults.every(r => r.status === SubTestStatus.Passed || r.status === SubTestStatus.Skipped);
+
+    // 如果 overall_status 是 HardPointTestCompleted，或 overall_status 是 TestCompletedPassed 但并非所有子测试都通过，则视为"仅硬点通过"
+    if (
+      data.overall_status === OverallTestStatus.HardPointTestCompleted ||
+      (data.overall_status === OverallTestStatus.TestCompletedPassed && !allSubTestsOk)
+    ) {
+      return 'row-hardpoint-passed';
+    }
+
+    // 3) 硬点 + 手动测试均通过 → 淡绿色
+    if (data.overall_status === OverallTestStatus.TestCompletedPassed && allSubTestsOk) {
       return 'row-passed';
     }
 
+    // 4) 未测试或其他状态 → 默认白色
     return '';
   }
 

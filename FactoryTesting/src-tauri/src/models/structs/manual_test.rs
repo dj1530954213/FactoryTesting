@@ -330,6 +330,11 @@ impl ManualTestStatus {
 
         // 将 instance.sub_test_results 映射过来
         for (sub_item, exec_result) in &instance.sub_test_results {
+            // 跳过硬点测试结果，避免其 PASS 状态导致显示值核对被误标记已完成
+            if *sub_item == SubTestItem::HardPoint {
+                continue;
+            }
+
             let manual_item: ManualTestSubItem = sub_item.clone().into();
             if let Some(result_slot) = sub_item_results.get_mut(&manual_item) {
                 result_slot.status = match exec_result.status {
@@ -337,7 +342,8 @@ impl ManualTestStatus {
                     SubTestStatus::Testing => ManualTestSubItemStatus::Testing,
                     SubTestStatus::Passed => ManualTestSubItemStatus::Passed,
                     SubTestStatus::Failed => ManualTestSubItemStatus::Failed,
-                    SubTestStatus::Skipped | SubTestStatus::NotApplicable => ManualTestSubItemStatus::Skipped,
+                    SubTestStatus::Skipped => ManualTestSubItemStatus::Skipped,
+                    SubTestStatus::NotApplicable => ManualTestSubItemStatus::NotTested,
                 };
                 result_slot.test_time = Some(exec_result.timestamp);
                 result_slot.operator_notes = exec_result.details.clone();
@@ -374,7 +380,7 @@ impl From<ManualTestSubItem> for SubTestItem {
             ManualTestSubItem::HighHighAlarmTest => SubTestItem::HighHighAlarm,
             ManualTestSubItem::TrendCheck => SubTestItem::Trend,
             ManualTestSubItem::ReportCheck => SubTestItem::Report,
-            ManualTestSubItem::MaintenanceFunction => SubTestItem::MaintenanceFunction,
+            ManualTestSubItem::MaintenanceFunction => SubTestItem::Maintenance,
         }
     }
 }

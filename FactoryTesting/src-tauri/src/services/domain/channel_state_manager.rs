@@ -172,21 +172,17 @@ impl ChannelStateManager {
         // trace!("   - has_manual_tests: {}", has_manual_tests);
         // trace!("   - manual_tests_completed: {}", manual_tests_completed);
 
-        // 根据状态机规则更新整体状态
+        // 更新整体状态选择逻辑，确保在存在手动测试且未完成时优先返回 HardPointTestCompleted
         let new_status = if any_failed {
-            // trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedFailed (因为有失败测试)");
             OverallTestStatus::TestCompletedFailed
-        } else if all_required_passed {
-            // trace!("🔍 [EVALUATE_STATUS] 选择状态: TestCompletedPassed (所有必需测试通过)");
-            OverallTestStatus::TestCompletedPassed
         } else if hard_point_completed && has_manual_tests && !manual_tests_completed {
-            // trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成，等待手动测试)");
+            // 硬点完成，但仍有手动测试未完成 → 蓝色状态
             OverallTestStatus::HardPointTestCompleted
-        } else if hard_point_completed {
-            // trace!("🔍 [EVALUATE_STATUS] 选择状态: HardPointTestCompleted (硬点完成)");
-            OverallTestStatus::HardPointTestCompleted
+        } else if hard_point_completed && (!has_manual_tests || manual_tests_completed) {
+            // 硬点完成，且(无手动测试或手动测试全部完成) → 通过
+            OverallTestStatus::TestCompletedPassed
         } else {
-            // trace!("🔍 [EVALUATE_STATUS] 选择状态: NotTested (默认状态)");
+            // 其他情况保持未测试
             OverallTestStatus::NotTested
         };
 
@@ -227,6 +223,7 @@ impl ChannelStateManager {
     fn is_manual_test(&self, sub_test_item: &SubTestItem) -> bool {
         matches!(sub_test_item, 
             SubTestItem::Maintenance | 
+            SubTestItem::MaintenanceFunction |
             SubTestItem::Trend | 
             SubTestItem::Report
         )

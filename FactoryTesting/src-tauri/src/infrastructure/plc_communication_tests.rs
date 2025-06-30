@@ -4,8 +4,17 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::plc_communication::*;
-    use crate::domain::services::{IPlcCommunicationService, BaseService, PlcConnectionConfig, PlcProtocol};
+    use super::super::plc_communication::{
+        ModbusTcpPlcService,
+        IPlcCommunicationService,
+        parse_modbus_address,
+        ModbusRegisterType,
+        f32_to_registers,
+        registers_to_f32,
+        i32_to_registers,
+        registers_to_i32,
+    };
+    use crate::domain::services::{BaseService, PlcConnectionConfig, PlcProtocol};
     use std::collections::HashMap;
     use tokio;
 

@@ -67,6 +67,9 @@ pub struct PlcConfig {
     /// Modbus 地址是否使用 0 基
     #[serde(default)]
     pub zero_based_address: bool,
+    /// 是否启用 Mock 模式（仅用于测试环境）
+    #[serde(default)]
+    pub mock_mode: bool,
 }
 
 /// 测试配置
@@ -161,6 +164,7 @@ impl Default for PlcConfig {
             retry_interval_ms: 1000,
             byte_order: "CDAB".to_string(),
             zero_based_address: false,
+            mock_mode: false,
         }
     }
 }
@@ -272,6 +276,10 @@ impl ConfigManager {
             self.config.plc_config.plc_type = plc_type;
         }
 
+        // Mock 模式开关
+        if let Ok(mock_mode) = std::env::var("PLC_MOCK_MODE") {
+            self.config.plc_config.mock_mode = mock_mode.to_lowercase() == "true";
+        }
 
         // 应用程序设置
         if let Ok(env) = std::env::var("APP_ENVIRONMENT") {
