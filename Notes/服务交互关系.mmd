@@ -1,0 +1,75 @@
+graph LR
+    subgraph "前端 Angular"
+        UI[用户界面组件]
+        SERVICES[Angular服务层]
+    end
+    
+    subgraph "Tauri Bridge"
+        TAURI[Tauri Commands]
+    end
+    
+    subgraph "后端 Rust - 应用层"
+        TCS[测试协调服务]
+        DIS[数据导入服务]
+        BAS[批次分配服务]
+        RGS[报告生成服务]
+    end
+    
+    subgraph "后端 Rust - 领域层"
+        CSM[通道状态管理器]
+        TEE[测试执行引擎]
+        STE[测试执行器]
+        PCM[PLC连接管理器]
+    end
+    
+    subgraph "后端 Rust - 基础设施层"
+        PLC[PLC通信服务]
+        PERS[持久化服务]
+        EXCEL[Excel服务]
+        EVENT[事件发布]
+    end
+    
+    subgraph "外部系统"
+        TESTPLC[测试PLC]
+        TARGETPLC[被测PLC]
+        DB[(SQLite数据库)]
+        FILES[Excel文件]
+    end
+    
+    %% 前端到后端的调用链
+    UI --> SERVICES
+    SERVICES --> TAURI
+    TAURI --> TCS
+    TAURI --> DIS
+    TAURI --> BAS
+    TAURI --> RGS
+    
+    %% 应用层到领域层
+    TCS --> CSM
+    TCS --> TEE
+    DIS --> CSM
+    BAS --> CSM
+    
+    %% 领域层到基础设施层
+    CSM --> PERS
+    CSM --> EVENT
+    TEE --> STE
+    STE --> PLC
+    PCM --> PLC
+    
+    %% 基础设施层到外部系统
+    PLC --> TESTPLC
+    PLC --> TARGETPLC
+    PERS --> DB
+    EXCEL --> FILES
+    
+    %% 事件反向流
+    EVENT -.-> TAURI
+    TAURI -.-> SERVICES
+    SERVICES -.-> UI
+    
+    style UI fill:#e3f2fd
+    style TCS fill:#f3e5f5
+    style CSM fill:#e8f5e8
+    style PLC fill:#fff3e0
+    style DB fill:#fce4ec

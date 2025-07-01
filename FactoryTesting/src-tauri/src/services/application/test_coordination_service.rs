@@ -918,21 +918,37 @@ impl ITestCoordinationService for TestCoordinationService {
     async fn start_manual_test(&self, request: crate::models::structs::StartManualTestRequest) -> AppResult<crate::models::structs::StartManualTestResponse> {
         info!("🔧 [TEST_COORDINATION] 开始手动测试: {:?}", request);
 
-        // 读取或创建手动测试状态
-        let instance = self.channel_state_manager.get_instance_state(&request.instance_id).await?;
-        let mut test_status = crate::models::structs::ManualTestStatus::from_instance(&instance);
+        let mut instance = self.channel_state_manager.get_instance_state(&request.instance_id).await?;
 
-        // 如果之前未进入手动测试，则更新整体状态
-        if !matches!(instance.overall_status, crate::models::enums::OverallTestStatus::ManualTestInProgress | crate::models::enums::OverallTestStatus::ManualTesting) {
-            if let Err(e) = self.channel_state_manager.update_overall_status(
-                &request.instance_id,
-                crate::models::enums::OverallTestStatus::ManualTestInProgress,
-            ).await {
-                warn!("⚠️ [TEST_COORDINATION] 更新实例状态失败: {}", e);
+        // 若为预留点位，确保跳过逻辑已应用（适配旧批次）
+        if let Some(definition) = self.channel_state_manager.get_channel_definition(&instance.definition_id).await {
+            if definition.tag.to_uppercase().contains("YLDW") {
+                let mut need_update = false;
+                for (item, result) in instance.sub_test_results.iter_mut() {
+                    if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
+                        // do nothing
+                    } else if result.status == crate::models::enums::SubTestStatus::NotTested {
+                        result.status = crate::models::enums::SubTestStatus::Skipped;
+                        result.details.get_or_insert("预留点位测试".to_string());
+                        need_update = true;
+                    }
+                }
+                if need_update {
+                    // 更新实例整体状态（跳过逻辑应用后）
+                    if let Err(e) = self.channel_state_manager.update_overall_status(&instance.instance_id, instance.overall_status.clone()).await {
+                        warn!("⚠️ 更新实例状态失败: {}", e);
+                    }
+
+                    // 重新评估整体状态（确保通过）
+                    // 注意：evaluate_overall_status 是私有，这里简单调用 persistence_service 保存实例
+                    if let Err(e) = self.persistence_service.save_test_instance(&instance).await {
+                        warn!("⚠️ 保存预留点位实例失败: {}", e);
+                    }
+                }
             }
-            // 更新本地状态对象
-            test_status.overall_status = crate::models::enums::OverallTestStatus::ManualTestInProgress;
         }
+
+        let mut test_status = crate::models::structs::ManualTestStatus::from_instance(&instance);
 
         Ok(crate::models::structs::StartManualTestResponse {
             success: true,
@@ -963,7 +979,39 @@ impl ITestCoordinationService for TestCoordinationService {
 
         // 获取最新测试实例状态并转换为 ManualTestStatus 返回前端
         match self.channel_state_manager.get_instance_state(&request.instance_id).await {
-            Ok(instance) => {
+            Ok(mut instance) => {
+                // 追加：若预留点位且仍存在未跳过项，再次修正
+                if let Some(definition) = self.channel_state_manager.get_channel_definition(&instance.definition_id).await {
+                    if definition.tag.to_uppercase().contains("YLDW") {
+                        let mut changed = false;
+                        for (item, result) in instance.sub_test_results.iter_mut() {
+                            if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
+                                // 保留
+                            } else if result.status == crate::models::enums::SubTestStatus::NotTested {
+                                result.status = crate::models::enums::SubTestStatus::Skipped;
+                                result.details.get_or_insert("预留点位测试".to_string());
+                                changed = true;
+                            }
+                        }
+                        if changed {
+                            // 若所有手动测试子项均为Passed或Skipped且硬点已完成，则直接标记整体通过
+                            let all_ok = instance.sub_test_results.values().all(|r| matches!(r.status, crate::models::enums::SubTestStatus::Passed | crate::models::enums::SubTestStatus::Skipped));
+                            let hardpoint_ok = if let Some(hp) = instance.sub_test_results.get(&crate::models::enums::SubTestItem::HardPoint) {
+                                hp.status == crate::models::enums::SubTestStatus::Passed
+                            } else { false };
+                            if all_ok && hardpoint_ok {
+                                instance.overall_status = crate::models::enums::OverallTestStatus::TestCompletedPassed;
+                                log::info!("🎉 [TEST_COORD] 预留点位 {} 所有子项已完成，整体状态设为 TestCompletedPassed", instance.instance_id);
+                            }
+
+                            // 持久化更改
+                            let _ = self.persistence_service.save_test_instance(&instance).await;
+                            // 更新状态管理器整体状态
+                            let _ = self.channel_state_manager.update_overall_status(&instance.instance_id, instance.overall_status.clone()).await;
+                        }
+                    }
+                }
+
                 let status = crate::models::structs::ManualTestStatus::from_instance(&instance);
                 // 先计算完成标记，避免后续移动导致 borrow 错误
                 let is_completed = status.is_all_completed();

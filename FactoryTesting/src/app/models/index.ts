@@ -70,6 +70,10 @@ export interface ChannelPointDefinition {
   sl_set_point_communication_address?: string;
   sh_set_point_communication_address?: string;
   shh_set_point_communication_address?: string;
+  sll_set_point_plc_address?: string;
+  sl_set_point_plc_address?: string;
+  sh_set_point_plc_address?: string;
+  shh_set_point_plc_address?: string;
   created_at: string;
   updated_at: string;
 }

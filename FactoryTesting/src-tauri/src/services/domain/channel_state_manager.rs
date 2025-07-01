@@ -186,8 +186,14 @@ impl ChannelStateManager {
             OverallTestStatus::NotTested
         };
 
-        instance.overall_status = new_status;
-        // trace!("🔍 [EVALUATE_STATUS] 最终状态: {:?}", instance.overall_status);
+        // 若状态有变化，记录日志
+        if instance.overall_status != new_status {
+            let old = instance.overall_status.clone();
+            instance.overall_status = new_status;
+            log::info!("🔄 [EVALUATE_STATUS] 实例{} 状态变化: {:?} -> {:?}", instance.instance_id, old, instance.overall_status);
+        } else {
+            instance.overall_status = new_status;
+        }
 
         // 如果测试完成，更新时间戳
         if matches!(instance.overall_status, 
@@ -224,8 +230,11 @@ impl ChannelStateManager {
         matches!(sub_test_item, 
             SubTestItem::Maintenance | 
             SubTestItem::MaintenanceFunction |
-            SubTestItem::Trend | 
-            SubTestItem::Report
+            SubTestItem::StateDisplay |
+            SubTestItem::LowLowAlarm |
+            SubTestItem::LowAlarm |
+            SubTestItem::HighAlarm |
+            SubTestItem::HighHighAlarm
         )
     }
 
@@ -242,27 +251,23 @@ impl ChannelStateManager {
                 results.insert(SubTestItem::HighAlarm, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
                 results.insert(SubTestItem::HighHighAlarm, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
                 results.insert(SubTestItem::Maintenance, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Trend, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Report, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
+                results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             ModuleType::AO => {
                 // AO点的测试项
                 results.insert(SubTestItem::HardPoint, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
                 results.insert(SubTestItem::Maintenance, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Trend, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Report, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
+                results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             ModuleType::DI => {
-                // DI点的测试项
+                // DI点的测试项：硬点 + 状态显示核对
                 results.insert(SubTestItem::HardPoint, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Maintenance, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Report, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
+                results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             ModuleType::DO => {
-                // DO点的测试项
+                // DO点的测试项：硬点 + 状态显示核对
                 results.insert(SubTestItem::HardPoint, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Maintenance, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Report, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
+                results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             _ => {
                 // 其他模块类型，默认只有硬点测试
@@ -289,6 +294,22 @@ impl IChannelStateManager for ChannelStateManager {
 
         // 根据模块类型初始化子测试结果
         instance.sub_test_results = self.initialize_sub_test_results(&definition.module_type);
+
+        // 若为预留点位（名称包含 YLDW），除硬点测试与显示值核对外的测试项全部跳过
+        if definition.tag.to_uppercase().contains("YLDW") {
+            for (item, result) in instance.sub_test_results.iter_mut() {
+                match item {
+                    SubTestItem::HardPoint | SubTestItem::StateDisplay => {
+                        // 保持 NotTested 由后续流程执行
+                    }
+                    _ => {
+                        result.status = SubTestStatus::Skipped;
+                        result.details = Some("预留点位测试".to_string());
+                    }
+                }
+            }
+        }
+
         instance.overall_status = OverallTestStatus::NotTested;
 
         info!("初始化通道测试实例: {} ({})", instance.instance_id, definition.tag);
@@ -661,8 +682,72 @@ impl IChannelStateManager for ChannelStateManager {
         instance_id: &str,
         status: OverallTestStatus,
     ) -> AppResult<()> {
-        info!("更新整体状态: {} -> {:?}", instance_id, status);
-        // TODO: 实现具体的状态更新逻辑
+        // 记录状态变更日志
+        info!(
+            "🔄 [STATE_MANAGER] 请求更新整体状态: {} -> {:?}",
+            instance_id, status
+        );
+
+        // ---------------------------
+        // 1. 尝试从缓存读取实例（读锁，无 await）
+        // ---------------------------
+        let mut instance_opt = {
+            let cache = self.test_instances_cache.read().unwrap();
+            cache.get(instance_id).cloned()
+        };
+
+        // ---------------------------
+        // 2. 若缓存不存在，则异步从数据库加载（此时无锁）
+        // ---------------------------
+        if instance_opt.is_none() {
+            instance_opt = self
+                .persistence_service
+                .load_test_instance(instance_id)
+                .await?;
+        }
+
+        // 若依然不存在则返回错误
+        let mut instance = match instance_opt {
+            Some(inst) => inst,
+            None => {
+                warn!(
+                    "⚠️ [STATE_MANAGER] update_overall_status 找不到实例: {}",
+                    instance_id
+                );
+                return Err(AppError::not_found_error("测试实例", instance_id));
+            }
+        };
+
+        // ---------------------------
+        // 3. 更新状态（如有变化）
+        // ---------------------------
+        if instance.overall_status != status {
+            let old_status = instance.overall_status.clone();
+            instance.overall_status = status.clone();
+
+            if matches!(status, OverallTestStatus::TestCompletedPassed | OverallTestStatus::TestCompletedFailed) {
+                instance.final_test_time = Some(Utc::now());
+            }
+
+            info!(
+                "📝 [STATE_MANAGER] 实例 {} 状态: {:?} -> {:?}",
+                instance_id, old_status, status
+            );
+        }
+
+        // ---------------------------
+        // 4. 将最新实例写回缓存（写锁，无 await）
+        // ---------------------------
+        {
+            let mut cache = self.test_instances_cache.write().unwrap();
+            cache.insert(instance_id.to_string(), instance.clone());
+        }
+
+        // ---------------------------
+        // 5. 持久化到数据库（无锁，允许 await）
+        // ---------------------------
+        self.persistence_service.save_test_instance(&instance).await?;
+
         Ok(())
     }
 

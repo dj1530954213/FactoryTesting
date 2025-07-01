@@ -1,0 +1,76 @@
+graph TB
+    subgraph "表示层 (Presentation Layer)"
+        TC[Tauri Commands<br/>tauri_commands.rs]
+        CMD[Command Handlers<br/>commands/]
+        API[API接口层]
+    end
+    
+    subgraph "应用层 (Application Layer)"
+        APS[应用服务<br/>services/application/]
+        TCS[测试协调服务<br/>TestCoordinationService]
+        DIS[数据导入服务<br/>DataImportService]
+        BAS[批次分配服务<br/>BatchAllocationService]
+        RGS[报告生成服务<br/>ReportGenerationService]
+    end
+    
+    subgraph "领域层 (Domain Layer)"
+        DS[领域服务<br/>services/domain/]
+        CSM[通道状态管理器<br/>ChannelStateManager]
+        TEE[测试执行引擎<br/>TestExecutionEngine]
+        STE[特定测试执行器<br/>SpecificTestExecutors]
+        PCM[PLC连接管理器<br/>PlcConnectionManager]
+        TPCS[测试PLC配置服务<br/>TestPlcConfigService]
+    end
+    
+    subgraph "基础设施层 (Infrastructure Layer)"
+        IS[基础设施服务<br/>services/infrastructure/]
+        PLC[PLC通信服务<br/>plc/]
+        PERS[持久化服务<br/>persistence/]
+        EXCEL[Excel处理服务<br/>excel/]
+        EVENT[事件发布服务<br/>event_publisher/]
+        MONITOR[监控服务<br/>monitoring/]
+    end
+    
+    subgraph "数据层 (Data Layer)"
+        MODELS[数据模型<br/>models/]
+        ENTITIES[实体定义<br/>entities/]
+        ENUMS[枚举类型<br/>enums/]
+        STRUCTS[结构体<br/>structs/]
+    end
+    
+    subgraph "工具层 (Utility Layer)"
+        UTILS[工具类<br/>utils/]
+        ERROR[错误处理<br/>error.rs]
+        LOG[日志系统<br/>logging/]
+        CONFIG[配置管理<br/>config.rs]
+    end
+    
+    subgraph "依赖注入容器"
+        DI[DI Container<br/>infrastructure/di_container.rs]
+    end
+    
+    %% 依赖关系
+    TC --> APS
+    CMD --> APS
+    APS --> DS
+    DS --> IS
+    IS --> MODELS
+    APS --> MODELS
+    DS --> MODELS
+    
+    %% DI容器管理所有服务
+    DI -.-> APS
+    DI -.-> DS
+    DI -.-> IS
+    
+    %% 工具层被各层使用
+    APS --> UTILS
+    DS --> UTILS
+    IS --> UTILS
+    
+    style TC fill:#e1f5fe
+    style APS fill:#f3e5f5
+    style DS fill:#e8f5e8
+    style IS fill:#fff3e0
+    style MODELS fill:#fce4ec
+    style DI fill:#f1f8e9

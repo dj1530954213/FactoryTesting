@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -111,6 +110,7 @@ impl PlcMonitoringService {
         let instance_id = request.instance_id.clone();
         let addresses = request.monitoring_addresses.clone();
         let module_type = request.module_type.clone();
+        let address_key_map = request.address_key_map.clone();
         
         // 启动监控任务
         let task_handle = tokio::spawn(async move {
@@ -134,6 +134,7 @@ impl PlcMonitoringService {
                             &instance_id,
                             &addresses,
                             &module_type,
+                            address_key_map.as_ref(),
                         ).await {
                             error_count += 1;
 
@@ -191,6 +192,7 @@ impl PlcMonitoringService {
         instance_id: &str,
         addresses: &[String],
         module_type: &crate::models::enums::ModuleType,
+        address_key_map: Option<&std::collections::HashMap<String, String>>,
     ) -> AppResult<()> {
         let mut values = HashMap::new();
         
@@ -198,7 +200,15 @@ impl PlcMonitoringService {
         // log::debug!("📊 [PLC_MONITORING] 开始读取地址列表: {:?}", addresses);
 
         for address in addresses {
-            let value_key = Self::get_value_key(address, module_type);
+            let value_key = if let Some(map) = address_key_map {
+                if let Some(k) = map.get(address) {
+                    k.clone()
+                } else {
+                    Self::get_value_key(address, module_type)
+                }
+            } else {
+                Self::get_value_key(address, module_type)
+            };
             // log::debug!("🔧 [PLC_MONITORING] 读取地址: {} -> 键名: {}", address, value_key);
 
             match module_type {
@@ -273,57 +283,45 @@ impl PlcMonitoringService {
     
     /// 根据地址和模块类型获取值的键名
     fn get_value_key(address: &str, module_type: &crate::models::enums::ModuleType) -> String {
-        // 对于Modbus地址，根据模块类型和具体地址映射到对应的键名
-        // log::debug!("🔧 [PLC_MONITORING] 映射地址键名: {} -> 模块类型: {:?}", address, module_type);
+        // 特殊处理：若地址以"%MD"开头，则解析数值部分
+        let (addr_num_opt, is_md) = if address.starts_with("%MD") {
+            (address[3..].parse::<u32>().ok(), true)
+        } else {
+            (address.parse::<u32>().ok(), false)
+        };
 
         match module_type {
             crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AINone => {
-                // AI点位需要根据地址范围区分不同的值类型
-                // 根据实际数据库配置：
-                // - 当前值地址：40000-41000范围
-                // - 报警设定值地址：43000-44000范围
-                if let Ok(addr_num) = address.parse::<u32>() {
+                if let Some(addr_num) = addr_num_opt {
+                    if is_md {
+                        // %MD 地址：按照16字节(4寄存器)一组，每+0,+4,+8,+12 分别对应 SLL/SL/SH/SHH
+                        let offset = addr_num % 16;
+                        return match offset {
+                            0 => "sllSetPoint".to_string(),
+                            4 => "slSetPoint".to_string(),
+                            8 => "shSetPoint".to_string(),
+                            12 => "shhSetPoint".to_string(),
+                            _ => "currentValue".to_string(),
+                        };
+                    }
                     match addr_num {
-                        // 当前值地址范围 (40000-41999)
                         40000..=41999 => {
-                            // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为当前值", address);
                             "currentValue".to_string()
                         },
-                        // 报警设定值地址范围 (43000-44999)
+                        // 43000 通道报警设定值区：每4个寄存器对应一个通道的 SLL/SL/SH/SHH
                         43000..=44999 => {
-                            // 根据地址的最后一位数字区分不同的报警设定值
-                            let last_digit = addr_num % 10;
-                            match last_digit {
-                                1 => {
-                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SLL设定值", address);
-                                    "sllSetPoint".to_string()
-                                },
-                                3 => {
-                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SL设定值", address);
-                                    "slSetPoint".to_string()
-                                },
-                                5 => {
-                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SH设定值", address);
-                                    "shSetPoint".to_string()
-                                },
-                                7 => {
-                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 映射为SHH设定值", address);
-                                    "shhSetPoint".to_string()
-                                },
-                                _ => {
-                                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 未知报警设定值类型，默认为当前值", address);
-                                    "currentValue".to_string()
-                                }
+                            let offset = addr_num % 4;
+                            match offset {
+                                0 => "sllSetPoint".to_string(),
+                                1 => "slSetPoint".to_string(),
+                                2 => "shSetPoint".to_string(),
+                                3 => "shhSetPoint".to_string(),
+                                _ => "currentValue".to_string(), // 理论不会走到这里
                             }
                         },
-                        // 其他地址范围默认为当前值
-                        _ => {
-                            // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 不在已知范围内，默认映射为当前值", address);
-                            "currentValue".to_string()
-                        }
+                        _ => "currentValue".to_string(),
                     }
                 } else {
-                    // log::debug!("🔧 [PLC_MONITORING] AI地址 {} 解析失败，默认映射为当前值", address);
                     "currentValue".to_string()
                 }
             }

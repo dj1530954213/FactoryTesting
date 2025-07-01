@@ -24,6 +24,7 @@ import {
   MANUAL_TEST_SUB_ITEM_STATUS_COLORS,
   getManualTestConfig
 } from '../../models/manual-test.types';
+import { ModuleType } from '../../models';
 
 /**
  * AI点位手动测试组件
@@ -386,70 +387,6 @@ import {
             </div>
           </nz-card>
 
-          <!-- 趋势检查 -->
-          <nz-card nzSize="small" class="test-item-card">
-            <div class="test-item-header">
-              <span class="test-item-title">趋势检查</span>
-              <nz-tag [nzColor]="getSubItemStatusColor(ManualTestSubItem.TrendCheck)">
-                {{ getSubItemStatusText(ManualTestSubItem.TrendCheck) }}
-              </nz-tag>
-            </div>
-            <div class="test-item-content">
-              <p>请确认HMI界面的趋势图显示正常</p>
-              <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
-                  nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.TrendCheck)"
-                  (click)="completeSubItem(ManualTestSubItem.TrendCheck)">
-                  <i nz-icon nzType="check"></i>
-                  确认通过
-                </button>
-                <button 
-                  nz-button 
-                  nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.TrendCheck)"
-                  (click)="skipSubItem(ManualTestSubItem.TrendCheck)">
-                  <i nz-icon nzType="forward"></i>
-                  跳过
-                </button>
-              </div>
-            </div>
-          </nz-card>
-
-          <!-- 报表检查 -->
-          <nz-card nzSize="small" class="test-item-card">
-            <div class="test-item-header">
-              <span class="test-item-title">报表检查</span>
-              <nz-tag [nzColor]="getSubItemStatusColor(ManualTestSubItem.ReportCheck)">
-                {{ getSubItemStatusText(ManualTestSubItem.ReportCheck) }}
-              </nz-tag>
-            </div>
-            <div class="test-item-content">
-              <p>请确认相关报表生成和显示正常</p>
-              <div class="test-item-actions">
-                <button 
-                  nz-button 
-                  nzType="primary" 
-                  nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ReportCheck)"
-                  (click)="completeSubItem(ManualTestSubItem.ReportCheck)">
-                  <i nz-icon nzType="check"></i>
-                  确认通过
-                </button>
-                <button 
-                  nz-button 
-                  nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ReportCheck)"
-                  (click)="skipSubItem(ManualTestSubItem.ReportCheck)">
-                  <i nz-icon nzType="forward"></i>
-                  跳过
-                </button>
-              </div>
-            </div>
-          </nz-card>
-
           <!-- 维护功能测试 -->
           <nz-card nzSize="small" class="test-item-card">
             <div class="test-item-header">
@@ -572,35 +509,35 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 获取当前值
    */
   getCurrentValue(): string {
-    return this.plcMonitoringService.getFormattedMonitoringValue('currentValue', 'AI' as any) || '读取中...';
+    return this.plcMonitoringService.getFormattedMonitoringValue('currentValue', ModuleType.AI) || '读取中...';
   }
 
   /**
    * 获取SLL设定值
    */
   getSllSetPoint(): string {
-    return this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', 'AI' as any) || '读取中...';
+    return this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI) || '读取中...';
   }
 
   /**
    * 获取SL设定值
    */
   getSlSetPoint(): string {
-    return this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', 'AI' as any) || '读取中...';
+    return this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI) || '读取中...';
   }
 
   /**
    * 获取SH设定值
    */
   getShSetPoint(): string {
-    return this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', 'AI' as any) || '读取中...';
+    return this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI) || '读取中...';
   }
 
   /**
    * 获取SHH设定值
    */
   getShhSetPoint(): string {
-    return this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', 'AI' as any) || '读取中...';
+    return this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI) || '读取中...';
   }
 
   /**

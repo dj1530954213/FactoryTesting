@@ -43,6 +43,7 @@ use std::path::PathBuf;
 
 /// 应用状态，包含所有服务实例
 pub struct AppState {
+    //测试流程协调服务
     pub test_coordination_service: Arc<dyn ITestCoordinationService>,
     pub channel_state_manager: Arc<dyn IChannelStateManager>,
     pub test_execution_engine: Arc<dyn ITestExecutionEngine>,

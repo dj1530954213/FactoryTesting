@@ -26,8 +26,6 @@ export enum ManualTestSubItem {
   HighHighAlarmTest = 'HighHighAlarmTest',  // 高高报警测试
   
   // AI/AO点位通用测试项
-  TrendCheck = 'TrendCheck',                // 趋势检查
-  ReportCheck = 'ReportCheck',              // 报表检查
   MaintenanceFunction = 'MaintenanceFunction' // 维护功能测试
 }
 
@@ -142,6 +140,7 @@ export interface StartPlcMonitoringRequest {
   instanceId: string;
   moduleType: ModuleType;
   monitoringAddresses: string[];
+  addressKeyMap?: Record<string, string>;
 }
 
 /**
@@ -185,8 +184,6 @@ export function getManualTestConfig(moduleType: ModuleType): ManualTestConfig {
           ManualTestSubItem.LowAlarmTest,
           ManualTestSubItem.HighAlarmTest,
           ManualTestSubItem.HighHighAlarmTest,
-          ManualTestSubItem.TrendCheck,
-          ManualTestSubItem.ReportCheck,
           ManualTestSubItem.MaintenanceFunction
         ],
         plcMonitoringRequired: true,
@@ -198,8 +195,6 @@ export function getManualTestConfig(moduleType: ModuleType): ManualTestConfig {
         moduleType: ModuleType.AO,
         applicableSubItems: [
           ManualTestSubItem.ShowValueCheck,
-          ManualTestSubItem.TrendCheck,
-          ManualTestSubItem.ReportCheck,
           ManualTestSubItem.MaintenanceFunction
         ],
         plcMonitoringRequired: true,
@@ -231,8 +226,6 @@ export const MANUAL_TEST_SUB_ITEM_LABELS: Record<ManualTestSubItem, string> = {
   [ManualTestSubItem.LowAlarmTest]: '低报警测试',
   [ManualTestSubItem.HighAlarmTest]: '高报警测试',
   [ManualTestSubItem.HighHighAlarmTest]: '高高报警测试',
-  [ManualTestSubItem.TrendCheck]: '趋势检查',
-  [ManualTestSubItem.ReportCheck]: '报表检查',
   [ManualTestSubItem.MaintenanceFunction]: '维护功能测试'
 };
 

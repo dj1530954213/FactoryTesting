@@ -401,8 +401,6 @@ export class ErrorDetailModalComponent implements OnInit, OnChanges {
       'LowAlarm': 'gold',
       'LowLowAlarm': 'lime',
       'ShowValue': 'green',
-      'TrendCheck': 'cyan',
-      'ReportCheck': 'blue',
       'MaintenanceFunction': 'geekblue'
     };
     return colors[testItem] || 'default';
@@ -416,8 +414,6 @@ export class ErrorDetailModalComponent implements OnInit, OnChanges {
       'LowAlarm': '低报警',
       'LowLowAlarm': '低低报警',
       'ShowValue': '显示值',
-      'TrendCheck': '趋势检查',
-      'ReportCheck': '报表检查',
       'MaintenanceFunction': '维护功能'
     };
     return itemMap[testItem] || testItem;

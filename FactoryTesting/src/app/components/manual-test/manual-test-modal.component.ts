@@ -237,10 +237,49 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
       const monitoringAddresses = this.getMonitoringAddresses();
       if (monitoringAddresses.length === 0) return;
 
+      // 构建地址→键名映射
+      const addressKeyMap: Record<string, string> = {};
+      const moduleType = this.definition.module_type as ModuleType;
+      const baseAddress = this.definition.plc_communication_address;
+      if (!baseAddress) {
+        console.warn('⚠️ [MANUAL_TEST_MODAL] 通道定义缺少PLC通信地址:', this.definition.tag);
+        return;
+      }
+
+      const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address;
+      if (sllAddr) {
+        addressKeyMap[sllAddr] = 'sllSetPoint';
+        console.log('📊 [MANUAL_TEST_MODAL] 添加SLL设定值地址:', this.definition.sll_set_point_communication_address);
+      }
+      const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address;
+      if (slAddr) {
+        addressKeyMap[slAddr] = 'slSetPoint';
+        console.log('📊 [MANUAL_TEST_MODAL] 添加SL设定值地址:', this.definition.sl_set_point_communication_address);
+      }
+      const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address;
+      if (shAddr) {
+        addressKeyMap[shAddr] = 'shSetPoint';
+        console.log('📊 [MANUAL_TEST_MODAL] 添加SH设定值地址:', this.definition.sh_set_point_communication_address);
+      }
+      const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address;
+      if (shhAddr) {
+        addressKeyMap[shhAddr] = 'shhSetPoint';
+        console.log('📊 [MANUAL_TEST_MODAL] 添加SHH设定值地址:', this.definition.shh_set_point_communication_address);
+      }
+
+      if (moduleType === ModuleType.AI) {
+        addressKeyMap[baseAddress] = 'currentValue';
+      } else if (moduleType === ModuleType.AO) {
+        addressKeyMap[baseAddress] = 'currentOutput';
+      } else if (moduleType === ModuleType.DI || moduleType === ModuleType.DO) {
+        addressKeyMap[baseAddress] = 'currentState';
+      }
+
       const request: StartPlcMonitoringRequest = {
         instanceId: this.instance.instance_id,
         moduleType: this.definition.module_type as ModuleType,
-        monitoringAddresses
+        monitoringAddresses,
+        addressKeyMap
       };
 
       const response = await this.plcMonitoringService.startMonitoring(request);
@@ -278,20 +317,24 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
         addresses.push(baseAddress);
 
         // 添加AI点位的报警设定值地址
-        if (this.definition.sll_set_point_communication_address) {
-          addresses.push(this.definition.sll_set_point_communication_address);
+        const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address;
+        if (sllAddr) {
+          addresses.push(sllAddr);
           console.log('📊 [MANUAL_TEST_MODAL] 添加SLL设定值地址:', this.definition.sll_set_point_communication_address);
         }
-        if (this.definition.sl_set_point_communication_address) {
-          addresses.push(this.definition.sl_set_point_communication_address);
+        const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address;
+        if (slAddr) {
+          addresses.push(slAddr);
           console.log('📊 [MANUAL_TEST_MODAL] 添加SL设定值地址:', this.definition.sl_set_point_communication_address);
         }
-        if (this.definition.sh_set_point_communication_address) {
-          addresses.push(this.definition.sh_set_point_communication_address);
+        const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address;
+        if (shAddr) {
+          addresses.push(shAddr);
           console.log('📊 [MANUAL_TEST_MODAL] 添加SH设定值地址:', this.definition.sh_set_point_communication_address);
         }
-        if (this.definition.shh_set_point_communication_address) {
-          addresses.push(this.definition.shh_set_point_communication_address);
+        const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address;
+        if (shhAddr) {
+          addresses.push(shhAddr);
           console.log('📊 [MANUAL_TEST_MODAL] 添加SHH设定值地址:', this.definition.shh_set_point_communication_address);
         }
 

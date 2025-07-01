@@ -76,6 +76,8 @@ export class ManualTestService {
       if (response.success && response.testStatus) {
         this.currentTestStatus.next(response.testStatus);
         
+        console.log('[MANUAL_TEST_SERVICE] 最新 overallStatus:', response.testStatus.overallStatus);
+        
         // 如果测试完成，发布完成事件
         if (response.isCompleted) {
           this.testCompleted.next(response.testStatus);

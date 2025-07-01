@@ -28,8 +28,6 @@ pub enum ManualTestSubItem {
     HighHighAlarmTest,    // 高高报警测试
     
     // AI/AO点位通用测试项
-    TrendCheck,           // 趋势检查
-    ReportCheck,          // 报表检查
     MaintenanceFunction,  // 维护功能测试
 }
 
@@ -120,6 +118,9 @@ pub struct StartPlcMonitoringRequest {
     pub module_type: ModuleType,
     #[serde(rename = "monitoringAddresses")]
     pub monitoring_addresses: Vec<String>,
+    /// 地址到值键名的映射，可选
+    #[serde(rename = "addressKeyMap", skip_serializing_if = "Option::is_none")]
+    pub address_key_map: Option<std::collections::HashMap<String, String>>,
 }
 
 /// PLC监控响应
@@ -163,8 +164,6 @@ impl ManualTestConfig {
                     ManualTestSubItem::LowAlarmTest,
                     ManualTestSubItem::HighAlarmTest,
                     ManualTestSubItem::HighHighAlarmTest,
-                    ManualTestSubItem::TrendCheck,
-                    ManualTestSubItem::ReportCheck,
                     ManualTestSubItem::MaintenanceFunction,
                 ],
                 plc_monitoring_required: true,
@@ -174,8 +173,6 @@ impl ManualTestConfig {
                 module_type: ModuleType::AO,
                 applicable_sub_items: vec![
                     ManualTestSubItem::ShowValueCheck,
-                    ManualTestSubItem::TrendCheck,
-                    ManualTestSubItem::ReportCheck,
                     ManualTestSubItem::MaintenanceFunction,
                 ],
                 plc_monitoring_required: true,
@@ -194,8 +191,6 @@ impl ManualTestConfig {
                 module_type: ModuleType::AINone,
                 applicable_sub_items: vec![
                     ManualTestSubItem::ShowValueCheck,
-                    ManualTestSubItem::TrendCheck,
-                    ManualTestSubItem::ReportCheck,
                 ],
                 plc_monitoring_required: true,
                 monitoring_interval: 500,
@@ -204,7 +199,6 @@ impl ManualTestConfig {
                 module_type: ModuleType::AONone,
                 applicable_sub_items: vec![
                     ManualTestSubItem::ShowValueCheck,
-                    ManualTestSubItem::TrendCheck,
                 ],
                 plc_monitoring_required: true,
                 monitoring_interval: 500,
@@ -378,8 +372,6 @@ impl From<ManualTestSubItem> for SubTestItem {
             ManualTestSubItem::LowAlarmTest => SubTestItem::LowAlarm,
             ManualTestSubItem::HighAlarmTest => SubTestItem::HighAlarm,
             ManualTestSubItem::HighHighAlarmTest => SubTestItem::HighHighAlarm,
-            ManualTestSubItem::TrendCheck => SubTestItem::Trend,
-            ManualTestSubItem::ReportCheck => SubTestItem::Report,
             ManualTestSubItem::MaintenanceFunction => SubTestItem::Maintenance,
         }
     }
@@ -393,8 +385,6 @@ impl From<SubTestItem> for ManualTestSubItem {
             SubTestItem::LowAlarm => ManualTestSubItem::LowAlarmTest,
             SubTestItem::HighAlarm => ManualTestSubItem::HighAlarmTest,
             SubTestItem::HighHighAlarm => ManualTestSubItem::HighHighAlarmTest,
-            SubTestItem::Trend | SubTestItem::TrendCheck => ManualTestSubItem::TrendCheck,
-            SubTestItem::Report | SubTestItem::ReportCheck => ManualTestSubItem::ReportCheck,
             SubTestItem::Maintenance | SubTestItem::MaintenanceFunction => ManualTestSubItem::MaintenanceFunction,
             _ => ManualTestSubItem::ShowValueCheck, // 兜底
         }

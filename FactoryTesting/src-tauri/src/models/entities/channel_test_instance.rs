@@ -79,10 +79,10 @@ pub struct Model {
     // 功能测试状态
     #[sea_orm(nullable)]
     pub maintenance_function: Option<i32>,   // 维护功能状态
-    #[sea_orm(nullable)]
-    pub trend_check: Option<i32>,           // 趋势检查状态
-    #[sea_orm(nullable)]
-    pub report_check: Option<i32>,          // 报表检查状态
+    // #[sea_orm(nullable)]
+    // pub trend_check: Option<i32>,           // (已废弃) 趋势检查状态
+    // #[sea_orm(nullable)]
+    // pub report_check: Option<i32>,          // (已废弃) 报表检查状态
     #[sea_orm(nullable)]
     pub show_value_status: Option<i32>,     // 显示值状态
 
@@ -280,8 +280,6 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
 
             // 功能测试状态
             maintenance_function: Set(None),
-            trend_check: Set(None),
-            report_check: Set(None),
             show_value_status: Set(None),
 
             test_plc_channel_tag: Set(original.test_plc_channel_tag.clone()),
@@ -418,8 +416,6 @@ impl Model {
             high_alarm_status: None,
             high_high_alarm_status: None,
             maintenance_function: None,
-            trend_check: None,
-            report_check: None,
             show_value_status: None,
             test_plc_channel_tag: None,
             test_plc_communication_address: None,

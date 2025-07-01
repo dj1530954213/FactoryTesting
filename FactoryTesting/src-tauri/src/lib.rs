@@ -1,15 +1,15 @@
 /// FAT_TEST 工厂测试系统 - Rust后端核心库
-pub mod models;
-pub mod utils;
-pub mod services;
-pub mod tauri_commands;
-pub mod commands;
-pub mod error;
-pub mod database_migration;
-pub mod domain;
-pub mod infrastructure;
-pub mod monitoring;
-pub mod logging;
+pub mod models;//数据模型层
+pub mod utils;//工具类层
+pub mod services;//服务层
+pub mod tauri_commands;//Tauri命令器
+pub mod commands;//命令处理器
+pub mod error;//错误处理器
+pub mod database_migration;//数据迁移器
+pub mod domain;//领域层
+pub mod infrastructure;//基础设施层
+pub mod monitoring;//监控器
+pub mod logging;//日志层
 
 // 重新导出常用类型，方便使用
 pub use models::*;

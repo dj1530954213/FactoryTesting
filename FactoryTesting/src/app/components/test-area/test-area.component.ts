@@ -1565,20 +1565,13 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       return 'row-failed';
     }
 
-    // 2) 手动判断硬点测试已通过但手动测试尚未全部通过的情况 → 淡蓝色
-    const subResults = Object.values(data.sub_test_results || {});
-    const allSubTestsOk = subResults.length > 0 && subResults.every(r => r.status === SubTestStatus.Passed || r.status === SubTestStatus.Skipped);
-
-    // 如果 overall_status 是 HardPointTestCompleted，或 overall_status 是 TestCompletedPassed 但并非所有子测试都通过，则视为"仅硬点通过"
-    if (
-      data.overall_status === OverallTestStatus.HardPointTestCompleted ||
-      (data.overall_status === OverallTestStatus.TestCompletedPassed && !allSubTestsOk)
-    ) {
+    // 2) 仅硬点通过（淡蓝色）
+    if (data.overall_status === OverallTestStatus.HardPointTestCompleted) {
       return 'row-hardpoint-passed';
     }
 
-    // 3) 硬点 + 手动测试均通过 → 淡绿色
-    if (data.overall_status === OverallTestStatus.TestCompletedPassed && allSubTestsOk) {
+    // 3) 测试全部通过 → 淡绿色（不再校验子项，后端已确保条件）
+    if (data.overall_status === OverallTestStatus.TestCompletedPassed) {
       return 'row-passed';
     }
 

@@ -332,8 +332,6 @@ impl DatabaseMigration {
                 high_alarm_status INTEGER,
                 high_high_alarm_status INTEGER,
                 maintenance_function INTEGER,
-                trend_check INTEGER,
-                report_check INTEGER,
                 show_value_status INTEGER,
                 test_plc_channel_tag TEXT,
                 test_plc_communication_address TEXT,
@@ -390,8 +388,6 @@ impl DatabaseMigration {
             ("high_alarm_status", "INTEGER"),
             ("high_high_alarm_status", "INTEGER"),
             ("maintenance_function", "INTEGER"),
-            ("trend_check", "INTEGER"),
-            ("report_check", "INTEGER"),
             ("show_value_status", "INTEGER"),
             ("test_plc_channel_tag", "TEXT"),
             ("test_plc_communication_address", "TEXT"),
@@ -430,6 +426,22 @@ impl DatabaseMigration {
                         sea_orm::DatabaseBackend::Sqlite,
                         update_sql
                     )).await.map_err(|e| AppError::persistence_error(format!("更新{}默认值失败: {}", column_name, e)))?;
+                }
+            }
+        }
+
+        // 🚜 移除已废弃的列（trend_check, report_check）
+        let obsolete_columns = vec!["trend_check", "report_check"];
+        for column in &obsolete_columns {
+            if existing_columns.contains(&column.to_string()) {
+                log::info!("移除已废弃列{}从channel_test_instances表", column);
+                let sql = format!("ALTER TABLE channel_test_instances DROP COLUMN {}", column);
+                // 由于SQLite 3.35+才支持DROP COLUMN，如果失败则记录警告并继续
+                if let Err(e) = db.execute(Statement::from_string(
+                    sea_orm::DatabaseBackend::Sqlite,
+                    sql,
+                )).await {
+                    log::warn!("删除列{}失败: {} (可能SQLite版本过旧，或列已被其他对象依赖)", column, e);
                 }
             }
         }
