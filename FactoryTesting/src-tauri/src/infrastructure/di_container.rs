@@ -8,7 +8,7 @@ use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::infrastructure::plc_communication::ModbusTcpPlcService;
 use crate::domain::impls::stub_test_orchestration_service::StubTestOrchestrationService;
 use crate::infrastructure::extra::infrastructure::event_publisher::SimpleEventPublisher;
-use crate::domain::impls::stub_batch_allocation_service::StubBatchAllocationService;
+use crate::domain::impls::real_batch_allocation_service::RealBatchAllocationService;
 use sea_orm::DatabaseConnection;
 use crate::infrastructure::extra::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService, PersistenceConfig,
@@ -222,7 +222,8 @@ impl ServiceContainer for AppServiceContainer {
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
         {
-            Arc::new(StubBatchAllocationService::default())
+            let db = Arc::new(self.persistence_service.get_database_connection());
+            Arc::new(RealBatchAllocationService::new(db))
         }
     }
 

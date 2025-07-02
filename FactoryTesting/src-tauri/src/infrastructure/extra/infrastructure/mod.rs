@@ -16,8 +16,7 @@ pub mod event_publisher;
 /// PLC监控服务模块
 pub mod plc_monitoring_service;
 
-/// Mock PLC监控服务模块
-pub mod mock_plc_monitoring_service;
+
 
 /// Excel导出服务模块
 pub mod excel_export_service;
@@ -32,13 +31,13 @@ pub use plc::{
     PlcDataType,
     PlcConnectionStatus,
     PlcCommunicationStats,
-    MockPlcService,
+
     ModbusPlcService,
     ModbusConfig,
 };
 
 // 重新导出PLC监控服务
-pub use mock_plc_monitoring_service::{MockPlcMonitoringService};
+
 pub use plc_monitoring_service::{IPlcMonitoringService, PlcMonitoringService};
 
 // 重新导出持久化相关接口和实现
