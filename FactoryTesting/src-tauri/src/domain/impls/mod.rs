@@ -5,7 +5,8 @@ pub mod channel_state_manager;
 pub mod test_execution_engine;
 pub mod specific_test_executors;
 pub mod plc_connection_manager;
-pub mod stub_test_orchestration_service;
+// pub mod stub_test_orchestration_service; // retired after real implementation
+pub mod real_test_orchestration_service;
 pub mod stub_batch_allocation_service;
 pub mod real_batch_allocation_service;
 #[cfg(FALSE)]
@@ -28,5 +29,6 @@ pub use test_execution_engine::{
 };
 pub use test_plc_config_service::TestPlcConfigService;
 pub use stub_batch_allocation_service::StubBatchAllocationService;
+pub use real_test_orchestration_service::RealTestOrchestrationService;
 pub use real_batch_allocation_service::RealBatchAllocationService;
 pub use plc_connection_manager::{PlcConnectionManager, PlcConnectionState}; 

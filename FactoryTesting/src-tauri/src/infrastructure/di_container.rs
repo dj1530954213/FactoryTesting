@@ -6,7 +6,10 @@ use std::sync::Arc;
 use crate::domain::services::*;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::infrastructure::plc_communication::ModbusTcpPlcService;
-use crate::domain::impls::stub_test_orchestration_service::StubTestOrchestrationService;
+use crate::domain::impls::real_test_orchestration_service::RealTestOrchestrationService;
+use crate::application::services::test_coordination_service::TestCoordinationService;
+use crate::application::services::channel_allocation_service::ChannelAllocationService;
+use crate::domain::impls::test_plc_config_service::TestPlcConfigService;
 use crate::infrastructure::extra::infrastructure::event_publisher::SimpleEventPublisher;
 use crate::domain::impls::real_batch_allocation_service::RealBatchAllocationService;
 use sea_orm::DatabaseConnection;
@@ -200,7 +203,25 @@ impl ServiceContainer for AppServiceContainer {
     fn get_test_orchestration_service(&self) -> Arc<dyn ITestOrchestrationService> {
         // 在实际实现中，这里应该创建真实的服务实例
         // 目前返回Mock实现作为占位符
-        Arc::new(StubTestOrchestrationService::default())
+        {
+            // build dependencies
+            let channel_state_manager = self.get_channel_state_manager();
+            let test_execution_engine = self.get_test_execution_engine();
+            let persistence_service = self.get_persistence_service();
+            let event_publisher = self.get_event_publisher();
+            let channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService> = Arc::new(ChannelAllocationService::new());
+            let plc_config_service = Arc::new(TestPlcConfigService::new(persistence_service.clone()));
+
+            let tc_service = TestCoordinationService::new(
+                channel_state_manager,
+                test_execution_engine,
+                persistence_service.clone(),
+                event_publisher,
+                channel_allocation_service,
+                plc_config_service,
+            );
+            Arc::new(RealTestOrchestrationService::new(tc_service))
+        }
     }
 
     fn get_channel_state_manager(&self) -> Arc<dyn IChannelStateManager> {

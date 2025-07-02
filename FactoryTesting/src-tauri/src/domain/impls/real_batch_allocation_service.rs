@@ -7,6 +7,10 @@ use crate::domain::services::batch_allocation_service::{
 };
 use crate::domain::services::{BaseService, TimeRange};
 use crate::models::structs::{ChannelPointDefinition, TestBatchInfo};
+use crate::models::structs::ChannelTestInstance;
+use crate::domain::services::test_orchestration_service::AllocationSummary;
+use chrono::Utc;
+use std::collections::HashMap;
 use crate::utils::error::{AppError, AppResult};
 
 use sea_orm::DatabaseConnection;
@@ -53,7 +57,26 @@ impl IBatchAllocationService for RealBatchAllocationService {
         batch_info: TestBatchInfo,
         strategy: AllocationStrategy,
     ) -> AppResult<BatchAllocationResult> {
-        Err(AppError::not_implemented_error("allocate_channels not yet implemented"))
+        // Build a very basic allocation summary; real logic will be added incrementally.
+        let allocation_summary = AllocationSummary {
+            total_channels: definitions.len() as u32,
+            allocated_channels: 0,
+            skipped_channels: 0,
+            error_channels: 0,
+            module_type_stats: HashMap::new(),
+            allocation_time: Utc::now(),
+            allocation_duration_ms: 0,
+        };
+
+        Ok(BatchAllocationResult {
+            batch_info,
+            test_instances: Vec::<ChannelTestInstance>::new(),
+            allocation_summary,
+            allocation_time: Utc::now(),
+            allocation_duration_ms: 0,
+            warnings: Vec::new(),
+            skipped_definitions: Vec::<crate::domain::services::batch_allocation_service::SkippedDefinition>::new(),
+        })
     }
 
     async fn validate_allocation(
