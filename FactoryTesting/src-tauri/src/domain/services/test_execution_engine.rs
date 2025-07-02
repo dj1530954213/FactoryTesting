@@ -1,11 +1,17 @@
-use super::*;
-use tokio_util::sync::CancellationToken;
+// Thin wrapper: re-export canonical trait
+pub use crate::domain::impls::test_execution_engine::ITestExecutionEngine;
 
+#[cfg(FALSE)]
+mod legacy {
+
+
+#[cfg(FALSE)]
 /// 测试执行引擎接口
 /// 
 /// 负责管理和并发执行测试任务，支持88个通道的并发测试
 /// 符合 FAT-TTM-001 规则：测试任务管理
 #[async_trait]
+#[cfg(FALSE)]
 pub trait ITestExecutionEngine: BaseService {
     /// 提交批次测试任务
     /// 
@@ -258,4 +264,5 @@ pub struct ExecutionEngineStats {
     
     /// 队列中等待的任务数
     pub queued_tasks: u32,
+}
 }

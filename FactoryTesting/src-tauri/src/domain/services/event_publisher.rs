@@ -6,79 +6,30 @@ use super::*;
 /// 符合 FAT-EVT-001 规则：事件发布规则
 #[async_trait]
 pub trait IEventPublisher: BaseService {
-    /// 发布测试状态变化事件
-    ///
-    /// # 参数
-    /// * `event` - 测试状态变化事件
-    async fn publish_test_status_changed(&self, event: TestStatusChangedEvent) -> AppResult<()>;
+    // === 兼容旧调用方式 ===
+    async fn publish_test_status_changed(&self, instance_id: &str, old_status: OverallTestStatus, new_status: OverallTestStatus) -> AppResult<()>;
+    async fn publish_test_completed(&self, outcome: &RawTestOutcome) -> AppResult<()>;
+    async fn publish_batch_status_changed(&self, batch_id: &str, statistics: &BatchStatistics) -> AppResult<()>;
+    async fn publish_plc_connection_changed(&self, connected: bool) -> AppResult<()>;
 
-    /// 发布测试完成事件
-    ///
-    /// # 参数
-    /// * `event` - 测试完成事件
-    async fn publish_test_completed(&self, event: TestCompletedEvent) -> AppResult<()>;
-
-    /// 发布批次状态变化事件
-    ///
-    /// # 参数
-    /// * `event` - 批次状态变化事件
-    async fn publish_batch_status_changed(&self, event: BatchStatusChangedEvent) -> AppResult<()>;
-
-    /// 发布PLC连接状态变化事件
-    ///
-    /// # 参数
-    /// * `event` - PLC连接状态变化事件
-    async fn publish_plc_connection_changed(&self, event: PlcConnectionChangedEvent) -> AppResult<()>;
-
-    /// 发布进度更新事件
-    ///
-    /// # 参数
-    /// * `event` - 进度更新事件
-    async fn publish_progress_update(&self, event: ProgressUpdateEvent) -> AppResult<()>;
-
-    /// 发布错误事件
-    ///
-    /// # 参数
-    /// * `event` - 错误事件
-    async fn publish_error(&self, event: ErrorEvent) -> AppResult<()>;
-
-    /// 发布警告事件
-    ///
-    /// # 参数
-    /// * `event` - 警告事件
-    async fn publish_warning(&self, event: WarningEvent) -> AppResult<()>;
-
-    /// 发布信息事件
-    ///
-    /// # 参数
-    /// * `event` - 信息事件
-    async fn publish_info(&self, event: InfoEvent) -> AppResult<()>;
-
-    /// 发布自定义事件
-    ///
-    /// # 参数
-    /// * `event_type` - 事件类型
-    /// * `payload` - 事件载荷
-    async fn publish_custom(&self, event_type: &str, payload: serde_json::Value) -> AppResult<()>;
-
-    /// 订阅事件
-    ///
-    /// # 参数
-    /// * `event_types` - 要订阅的事件类型列表
-    /// * `subscriber` - 订阅者
-    async fn subscribe(&self, event_types: Vec<String>, subscriber: Box<dyn EventSubscriber>) -> AppResult<SubscriptionHandle>;
-
-    /// 取消订阅
-    ///
-    /// # 参数
-    /// * `handle` - 订阅句柄
-    async fn unsubscribe(&self, handle: SubscriptionHandle) -> AppResult<()>;
-
-    /// 获取事件统计
-    ///
-    /// # 返回
-    /// * `EventStatistics` - 事件统计信息
-    async fn get_event_statistics(&self) -> AppResult<EventStatistics>;
+    // === 扩展接口（可选实现，提供默认空实现） ===
+    async fn publish_progress_update(&self, _event: ProgressUpdateEvent) -> AppResult<()> { Ok(()) }
+    async fn publish_error(&self, _event: ErrorEvent) -> AppResult<()> { Ok(()) }
+    async fn publish_warning(&self, _event: WarningEvent) -> AppResult<()> { Ok(()) }
+    async fn publish_info(&self, _event: InfoEvent) -> AppResult<()> { Ok(()) }
+    async fn publish_custom(&self, _event_type: &str, _payload: serde_json::Value) -> AppResult<()> { Ok(()) }
+    async fn subscribe(&self, _event_types: Vec<String>, _subscriber: Box<dyn EventSubscriber>) -> AppResult<SubscriptionHandle> {
+        Ok(SubscriptionHandle {
+            subscription_id: "compat".to_string(),
+            subscriber_id: "compat".to_string(),
+            event_types: vec![],
+            created_at: chrono::Utc::now(),
+        })
+    }
+    async fn unsubscribe(&self, _handle: SubscriptionHandle) -> AppResult<()> { Ok(()) }
+    async fn get_event_statistics(&self) -> AppResult<EventStatistics> {
+        Ok(EventStatistics::default())
+    }
 }
 
 /// 事件订阅者接口
@@ -363,4 +314,25 @@ pub struct EventStatistics {
 
     /// 统计时间范围
     pub time_range: TimeRange,
+}
+
+impl Default for TimeRange {
+    fn default() -> Self {
+        let now = chrono::Utc::now();
+        Self { start: now, end: now }
+    }
+}
+
+impl Default for EventStatistics {
+    fn default() -> Self {
+        Self {
+            total_events: 0,
+            events_by_type: std::collections::HashMap::new(),
+            errors_by_severity: std::collections::HashMap::new(),
+            active_subscribers: 0,
+            last_event_time: None,
+            event_rate: 0.0,
+            time_range: TimeRange::default(),
+        }
+    }
 }

@@ -24,7 +24,7 @@ use crate::services::infrastructure::{
     persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig},
     SimpleEventPublisher
 };
-use crate::services::infrastructure::IPlcCommunicationService;
+use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::services::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
@@ -153,10 +153,10 @@ impl AppState {
             .map_err(|e| e.to_string())?;
 
         let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(test_rig_config)
+            crate::infrastructure::ModbusTcpPlcService::default()
         );
         let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(target_config)
+            crate::infrastructure::ModbusTcpPlcService::default()
         );
 
         // 创建测试执行引擎

@@ -1,11 +1,19 @@
-use super::*;
+
+
+
+pub use crate::domain::impls::channel_state_manager::IChannelStateManager;
+
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+use crate::domain::services::TestResult;
 
 /// 通道状态管理器接口
 /// 
 /// 这是系统中唯一允许修改 ChannelTestInstance 状态的组件
 /// 符合 FAT-CSM-001 规则：状态管理唯一入口
-#[async_trait]
+// removed duplicate trait definition
+#[cfg(FALSE)]
 pub trait IChannelStateManager: BaseService {
     /// 应用原始测试结果到实例状态
     /// 
@@ -35,20 +43,6 @@ pub trait IChannelStateManager: BaseService {
         updates: HashMap<String, RawTestOutcome>,
     ) -> AppResult<Vec<StateChangeResult>>;
     
-    /// 获取通道当前状态
-    /// 
-    /// # 参数
-    /// * `instance_id` - 实例ID
-    /// 
-    /// # 返回
-    /// * `ChannelState` - 当前状态信息
-    async fn get_channel_state(&self, instance_id: &str) -> AppResult<ChannelState>;
-    
-    /// 获取批次状态摘要
-    /// 
-    /// # 参数
-    /// * `batch_id` - 批次ID
-    /// 
     /// # 返回
     /// * `BatchStatistics` - 批次统计信息
     async fn get_batch_statistics(&self, batch_id: &str) -> AppResult<BatchStatistics>;

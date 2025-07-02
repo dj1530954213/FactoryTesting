@@ -10,7 +10,7 @@ pub mod plc_communication_service;
 pub mod batch_allocation_service;
 pub mod event_publisher;
 pub mod persistence_service;
-pub mod mocks;
+
 
 // 重新导出所有服务接口
 pub use test_orchestration_service::*;
@@ -20,6 +20,8 @@ pub use plc_communication_service::*;
 pub use batch_allocation_service::*;
 pub use event_publisher::*;
 pub use persistence_service::*;
+// Re-export enums for easy access within domain services
+pub use crate::models::enums::*;
 
 // 重新导出基础类型
 use crate::utils::error::AppResult;

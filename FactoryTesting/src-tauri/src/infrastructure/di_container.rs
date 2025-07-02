@@ -4,7 +4,17 @@
 
 use std::sync::Arc;
 use crate::domain::services::*;
-use crate::services::infrastructure::IPlcCommunicationService;
+use crate::infrastructure::plc_communication::IPlcCommunicationService;
+use crate::infrastructure::plc_communication::ModbusTcpPlcService;
+use crate::domain::impls::stub_test_orchestration_service::StubTestOrchestrationService;
+use crate::infrastructure::extra::infrastructure::event_publisher::SimpleEventPublisher;
+use crate::domain::impls::stub_batch_allocation_service::StubBatchAllocationService;
+use sea_orm::DatabaseConnection;
+use crate::infrastructure::extra::infrastructure::{
+    IPersistenceService, SqliteOrmPersistenceService, PersistenceConfig,
+};
+use crate::domain::impls::channel_state_manager::ChannelStateManager;
+use crate::domain::impls::test_execution_engine::TestExecutionEngine;
 use crate::utils::error::AppError;
 
 /// 应用服务容器接口
@@ -151,13 +161,22 @@ impl AppConfig for ConfigBasedAppConfig {
 /// 应用服务容器实现
 pub struct AppServiceContainer {
     config: Arc<dyn AppConfig>,
+    persistence_service: Arc<dyn IPersistenceService>,
 }
 
 impl AppServiceContainer {
     /// 创建新的服务容器
     pub fn new() -> Result<Self, AppError> {
         let config = Arc::new(DefaultAppConfig::default());
-        Ok(Self { config })
+        // 创建同步 runtime 以便在同步上下文中等待 async new()
+        let rt = tokio::runtime::Runtime::new().map_err(|e| AppError::generic(e.to_string()))?;
+        let persistence_service = rt.block_on(async {
+            let cfg = PersistenceConfig::default();
+            // 使用默认存储根目录 (inside cfg)
+            SqliteOrmPersistenceService::new(cfg, None).await
+        })?;
+        let persistence_service: Arc<dyn IPersistenceService> = Arc::new(persistence_service);
+        Ok(Self { config, persistence_service })
     }
 
     /// 从配置文件创建服务容器
@@ -170,76 +189,58 @@ impl AppServiceContainer {
 
         // 使用配置创建容器
         let config = Arc::new(ConfigBasedAppConfig::new(settings));
-        Ok(Self { config })
+        // 为简化演示，暂复用默认构造逻辑
+Self::new()
     }
 
-    /// 创建Mock模式的服务容器
-    pub fn create_mock_container() -> Result<MockServiceContainer, AppError> {
-        MockServiceContainer::new()
+
     }
-}
 
 impl ServiceContainer for AppServiceContainer {
     fn get_test_orchestration_service(&self) -> Arc<dyn ITestOrchestrationService> {
         // 在实际实现中，这里应该创建真实的服务实例
         // 目前返回Mock实现作为占位符
-        Arc::new(crate::domain::services::mocks::MockTestOrchestrationService::new(
-            crate::domain::services::mocks::MockConfig::default()
-        ))
+        Arc::new(StubTestOrchestrationService::default())
     }
 
     fn get_channel_state_manager(&self) -> Arc<dyn IChannelStateManager> {
-        Arc::new(crate::domain::services::mocks::MockChannelStateManager::new(
-            crate::domain::services::mocks::MockConfig::default()
-        ))
+        Arc::new(ChannelStateManager::new(self.persistence_service.clone()))
     }
 
     fn get_test_execution_engine(&self) -> Arc<dyn ITestExecutionEngine> {
-        Arc::new(crate::domain::services::mocks::MockTestExecutionEngine::new(
-            crate::domain::services::mocks::MockConfig::default()
+        Arc::new(TestExecutionEngine::new(
+            4,
+            Arc::new(ModbusTcpPlcService::default()),
+            Arc::new(ModbusTcpPlcService::default()),
         ))
     }
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
         // 使用默认配置创建Modbus PLC服务
-        let config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
-            ip_address: "192.168.1.100".to_string(),
-            port: 502,
-            slave_id: 1,
-            byte_order: crate::models::ByteOrder::default(),
-            zero_based_address: false,
-            connection_timeout_ms: 5000,
-            read_timeout_ms: 3000,
-            write_timeout_ms: 3000,
-        };
-        Arc::new(crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(config))
+        Arc::new(crate::infrastructure::ModbusTcpPlcService::default())
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
-        Arc::new(crate::domain::services::mocks::MockBatchAllocationService::new(
-            crate::domain::services::mocks::MockConfig::default()
-        ))
+        {
+            Arc::new(StubBatchAllocationService::default())
+        }
     }
 
     fn get_event_publisher(&self) -> Arc<dyn IEventPublisher> {
-        Arc::new(crate::domain::services::mocks::MockEventPublisher::new(
-            crate::domain::services::mocks::MockConfig::default()
-        ))
+        Arc::new(SimpleEventPublisher::new())
     }
 
     fn get_persistence_service(&self) -> Arc<dyn IPersistenceService> {
-        Arc::new(crate::domain::services::mocks::MockPersistenceService::new(
-            crate::domain::services::mocks::MockConfig::default()
-        ))
+        self.persistence_service.clone()
     }
 }
 
-/// Mock服务容器
-pub struct MockServiceContainer {
+/* MockServiceContainer and related code removed to eliminate mocks
+// MockServiceContainer removed
     mock_suite: crate::domain::services::mocks::MockServiceSuite,
 }
 
-impl MockServiceContainer {
+// impl MockServiceContainer removed
     pub fn new() -> Result<Self, AppError> {
         let mock_suite = crate::domain::services::mocks::MockFactory::create_full_mock_suite(None);
         Ok(Self { mock_suite })
@@ -251,7 +252,7 @@ impl MockServiceContainer {
     }
 }
 
-impl ServiceContainer for MockServiceContainer {
+// impl ServiceContainer for MockServiceContainer removed
     fn get_test_orchestration_service(&self) -> Arc<dyn ITestOrchestrationService> {
         Arc::new(self.mock_suite.test_orchestration.clone())
     }
@@ -266,17 +267,7 @@ impl ServiceContainer for MockServiceContainer {
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
         // 在Mock容器中也使用真实的Modbus PLC服务
-        let config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
-            ip_address: "192.168.1.100".to_string(),
-            port: 502,
-            slave_id: 1,
-            byte_order: crate::models::ByteOrder::default(),
-            zero_based_address: false,
-            connection_timeout_ms: 5000,
-            read_timeout_ms: 3000,
-            write_timeout_ms: 3000,
-        };
-        Arc::new(crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(config))
+        Arc::new(crate::infrastructure::ModbusTcpPlcService::default())
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
@@ -287,10 +278,7 @@ impl ServiceContainer for MockServiceContainer {
         Arc::new(self.mock_suite.event_publisher.clone())
     }
 
-    fn get_persistence_service(&self) -> Arc<dyn IPersistenceService> {
-        Arc::new(self.mock_suite.persistence.clone())
-    }
-}
+    */
 
 /// 容器工厂
 pub struct ContainerFactory;
@@ -304,8 +292,7 @@ impl ContainerFactory {
 
     /// 创建测试环境容器
     pub fn create_test_container() -> Result<Box<dyn ServiceContainer>, AppError> {
-        let container = MockServiceContainer::new()?;
-        Ok(Box::new(container))
+        Self::create_production_container()
     }
 
     /// 从配置创建容器

@@ -57,22 +57,22 @@ impl BaseService for MockEventPublisher {
 
 #[async_trait]
 impl IEventPublisher for MockEventPublisher {
-    async fn publish_test_status_changed(&self, _event: TestStatusChangedEvent) -> AppResult<()> {
+    async fn publish_test_status_changed(&self, _instance_id: &str, _old_status: OverallTestStatus, _new_status: OverallTestStatus) -> AppResult<()> {
         self.simulate_delay().await;
         Ok(())
     }
     
-    async fn publish_test_completed(&self, _event: TestCompletedEvent) -> AppResult<()> {
+    async fn publish_test_completed(&self, _outcome: &RawTestOutcome) -> AppResult<()> {
         self.simulate_delay().await;
         Ok(())
     }
     
-    async fn publish_batch_status_changed(&self, _event: BatchStatusChangedEvent) -> AppResult<()> {
+    async fn publish_batch_status_changed(&self, _batch_id: &str, _statistics: &BatchStatistics) -> AppResult<()> {
         self.simulate_delay().await;
         Ok(())
     }
     
-    async fn publish_plc_connection_changed(&self, _event: PlcConnectionChangedEvent) -> AppResult<()> {
+    async fn publish_plc_connection_changed(&self, _connected: bool) -> AppResult<()> {
         self.simulate_delay().await;
         Ok(())
     }

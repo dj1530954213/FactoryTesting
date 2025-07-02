@@ -1,4 +1,6 @@
 use super::*;
+use crate::models::test_plc_config::{TestPlcChannelConfig, PlcConnectionConfig, ChannelMappingConfig};
+use crate::utils::error::AppError;
 
 /// 持久化服务接口
 /// 
@@ -202,6 +204,69 @@ pub trait IPersistenceService: BaseService {
     /// # 返回
     /// * `CleanupResult` - 清理结果
     async fn cleanup_expired_data(&self, retention_policy: &RetentionPolicy) -> AppResult<CleanupResult>;
+
+    // ======== PLC 测试配置相关 ========
+    /// 保存测试 PLC 通道配置
+    async fn save_test_plc_channel(&self, _channel: &TestPlcChannelConfig) -> AppResult<()> {
+        Err(AppError::not_implemented_error("save_test_plc_channel"))
+    }
+
+    /// 加载单个测试 PLC 通道配置
+    async fn load_test_plc_channel(&self, _id: &str) -> AppResult<Option<TestPlcChannelConfig>> {
+        Err(AppError::not_implemented_error("load_test_plc_channel"))
+    }
+
+    /// 加载所有测试 PLC 通道配置
+    async fn load_all_test_plc_channels(&self) -> AppResult<Vec<TestPlcChannelConfig>> {
+        Err(AppError::not_implemented_error("load_all_test_plc_channels"))
+    }
+
+    /// 删除测试 PLC 通道配置
+    async fn delete_test_plc_channel(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::not_implemented_error("delete_test_plc_channel"))
+    }
+
+    // ======== PLC 连接配置相关 ========
+    /// 保存 PLC 连接配置
+    async fn save_plc_connection(&self, _connection: &PlcConnectionConfig) -> AppResult<()> {
+        Err(AppError::not_implemented_error("save_plc_connection"))
+    }
+
+    /// 加载 PLC 连接配置
+    async fn load_plc_connection(&self, _id: &str) -> AppResult<Option<PlcConnectionConfig>> {
+        Err(AppError::not_implemented_error("load_plc_connection"))
+    }
+
+    /// 加载所有 PLC 连接配置
+    async fn load_all_plc_connections(&self) -> AppResult<Vec<PlcConnectionConfig>> {
+        Err(AppError::not_implemented_error("load_all_plc_connections"))
+    }
+
+    /// 删除 PLC 连接配置
+    async fn delete_plc_connection(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::not_implemented_error("delete_plc_connection"))
+    }
+
+    // ======== 通道映射相关 ========
+    /// 保存通道映射配置
+    async fn save_channel_mapping(&self, _mapping: &ChannelMappingConfig) -> AppResult<()> {
+        Err(AppError::not_implemented_error("save_channel_mapping"))
+    }
+
+    /// 加载通道映射配置
+    async fn load_channel_mapping(&self, _id: &str) -> AppResult<Option<ChannelMappingConfig>> {
+        Err(AppError::not_implemented_error("load_channel_mapping"))
+    }
+
+    /// 加载所有通道映射配置
+    async fn load_all_channel_mappings(&self) -> AppResult<Vec<ChannelMappingConfig>> {
+        Err(AppError::not_implemented_error("load_all_channel_mappings"))
+    }
+
+    /// 删除通道映射配置
+    async fn delete_channel_mapping(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::not_implemented_error("delete_channel_mapping"))
+    }
 }
 
 /// 查询条件

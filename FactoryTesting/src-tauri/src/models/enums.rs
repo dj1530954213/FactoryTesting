@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+// Re-export PlcProtocol for compatibility with older import paths
+pub use crate::domain::services::plc_communication_service::PlcProtocol;
+
 /// 整体测试状态枚举
 /// 表示一个通道测试实例的总体状态
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

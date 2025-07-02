@@ -10,6 +10,8 @@ pub mod domain;//领域层
 pub mod infrastructure;//基础设施层
 pub mod monitoring;//监控器
 pub mod logging;//日志层
+pub mod application;//应用层
+pub mod interfaces;//接口适配层
 
 // 重新导出常用类型，方便使用
 pub use models::*;
