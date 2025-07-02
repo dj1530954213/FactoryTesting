@@ -1,0 +1,10 @@
+{
+  "id": "default_settings",
+  "theme": "light",
+  "plc_ip_address": "127.0.0.1",
+  "plc_port": 502,
+  "default_operator_name": null,
+  "auto_save_interval_minutes": 5,
+  "recent_projects": [],
+  "last_backup_time": null
+}

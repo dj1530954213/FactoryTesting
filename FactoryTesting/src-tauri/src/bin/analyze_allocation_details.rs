@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 详细分析分配结果
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::services::channel_allocation_service::{ChannelAllocationService, TestPlcConfig, ComparisonTable, IChannelAllocationService};
@@ -10,12 +11,12 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
 
     println!("=== 详细分析分配结果 ===");
 
-    // 初始化服务
+    // 初始化服�?
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
     let persistence_config = PersistenceConfig {
         storage_root_dir: PathBuf::from("data"),
@@ -40,15 +41,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let test_plc_channels = test_plc_config_service.get_test_plc_channels(request).await?;
-    println!("从数据库获取到 {} 个测试PLC通道配置", test_plc_channels.len());
+    println!("从数据库获取�?{} 个测试PLC通道配置", test_plc_channels.len());
 
     // 创建测试PLC配置
     let test_plc_config = create_test_plc_config_from_channels(&test_plc_channels);
 
-    // 创建真实的通道点位定义（只创建前14个，模拟正确分配表的情况）
+    // 创建真实的通道点位定义（只创建�?4个，模拟正确分配表的情况�?
     let real_channel_definitions = create_limited_real_channel_definitions();
 
-    println!("创建了 {} 个通道点位定义", real_channel_definitions.len());
+    println!("创建�?{} 个通道点位定义", real_channel_definitions.len());
 
     // 按类型统计通道定义
     let mut ai_count = 0;
@@ -68,13 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("通道定义类型统计:");
-    println!("  AI: {} 个", ai_count);
-    println!("  AO: {} 个", ao_count);
-    println!("  DI: {} 个", di_count);
-    println!("  DO: {} 个", do_count);
+    println!("  AI: {} �?, ai_count);
+    println!("  AO: {} �?, ao_count);
+    println!("  DI: {} �?, di_count);
+    println!("  DO: {} �?, do_count);
 
     // 执行分配
-    println!("\n=== 开始执行批次分配测试 ===");
+    println!("\n=== 开始执行批次分配测�?===");
     let allocation_result = allocation_service.allocate_channels(
         real_channel_definitions.clone(),
         test_plc_config,
@@ -83,22 +84,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).await?;
 
     println!("分配结果:");
-    println!("  生成批次数: {} 个", allocation_result.batches.len());
-    println!("  分配实例数: {} 个", allocation_result.allocated_instances.len());
+    println!("  生成批次�? {} �?, allocation_result.batches.len());
+    println!("  分配实例�? {} �?, allocation_result.allocated_instances.len());
 
     // 详细分析每个批次
     println!("\n=== 详细批次分析 ===");
     for (i, batch) in allocation_result.batches.iter().enumerate() {
         println!("批次 {}: {} ({})", i + 1, batch.batch_name, batch.batch_id);
 
-        // 统计该批次中的实例
+        // 统计该批次中的实�?
         let batch_instances: Vec<_> = allocation_result.allocated_instances.iter()
             .filter(|instance| instance.test_batch_id == batch.batch_id)
             .collect();
 
         println!("  实例数量: {}", batch_instances.len());
 
-        // 按类型统计
+        // 按类型统�?
         let mut batch_ai = 0;
         let mut batch_ao = 0;
         let mut batch_di = 0;
@@ -128,11 +129,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                          j + 1,
                          def.tag,
                          format!("{:?}", def.module_type),
-                         instance.test_plc_channel_tag.as_ref().unwrap_or(&"未分配".to_string()));
+                         instance.test_plc_channel_tag.as_ref().unwrap_or(&"未分�?.to_string()));
             }
         }
         if batch_instances.len() > 5 {
-            println!("    ... 还有 {} 个实例", batch_instances.len() - 5);
+            println!("    ... 还有 {} 个实�?, batch_instances.len() - 5);
         }
         println!();
     }
@@ -158,11 +159,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// 创建有限的真实通道点位定义（模拟正确分配表的14个通道）
+/// 创建有限的真实通道点位定义（模拟正确分配表�?4个通道�?
 fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
     let mut definitions = Vec::new();
 
-    // AI通道 (4个) - 有源
+    // AI通道 (4�? - 有源
     let ai_tags = ["PT_2101", "PT_2102", "TT_4101", "TT_4102"];
     for (i, tag) in ai_tags.iter().enumerate() {
         definitions.push(ChannelPointDefinition::new_with_power_type(
@@ -170,7 +171,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
             tag.to_string(),
             format!("AI通道{}", i + 1),
             "樟洋电厂".to_string(),
-            "8通道模拟量输入模块".to_string(),
+            "8通道模拟量输入模�?.to_string(),
             ModuleType::AI,
             format!("1_2_AI_{}", i),
             PointDataType::Float,
@@ -179,7 +180,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
         ));
     }
 
-    // AO通道 (2个) - 有源
+    // AO通道 (2�? - 有源
     let ao_tags = ["FCV_7101_AO", "YLDW1_4_AO_1"];
     for (i, tag) in ao_tags.iter().enumerate() {
         definitions.push(ChannelPointDefinition::new_with_power_type(
@@ -187,7 +188,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
             tag.to_string(),
             format!("AO通道{}", i + 1),
             "樟洋电厂".to_string(),
-            "8通道模拟量输出模块".to_string(),
+            "8通道模拟量输出模�?.to_string(),
             ModuleType::AO,
             format!("1_4_AO_{}", i),
             PointDataType::Float,
@@ -196,7 +197,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
         ));
     }
 
-    // DI通道 (4个) - 有源
+    // DI通道 (4�? - 有源
     let di_tags = ["ESDV6101_1", "ESDV6101_2", "ESDV6101_Z0", "ESDV6101_ZC"];
     for (i, tag) in di_tags.iter().enumerate() {
         definitions.push(ChannelPointDefinition::new_with_power_type(
@@ -204,7 +205,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
             tag.to_string(),
             format!("DI通道{}", i + 1),
             "樟洋电厂".to_string(),
-            "16通道数字量输入模块".to_string(),
+            "16通道数字量输入模�?.to_string(),
             ModuleType::DI,
             format!("1_5_DI_{}", i),
             PointDataType::Bool,
@@ -213,7 +214,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
         ));
     }
 
-    // DO通道 (4个) - 有源
+    // DO通道 (4�? - 有源
     let do_tags = ["DO_1_CL_1", "DO_2_OP_1", "SQ6103_S0", "SQ6103_SC"];
     for (i, tag) in do_tags.iter().enumerate() {
         definitions.push(ChannelPointDefinition::new_with_power_type(
@@ -221,7 +222,7 @@ fn create_limited_real_channel_definitions() -> Vec<ChannelPointDefinition> {
             tag.to_string(),
             format!("DO通道{}", i + 1),
             "樟洋电厂".to_string(),
-            "16通道数字量输出模块".to_string(),
+            "16通道数字量输出模�?.to_string(),
             ModuleType::DO,
             format!("1_7_DO_{}", i),
             PointDataType::Bool,
@@ -240,7 +241,7 @@ fn create_test_plc_config_from_channels(
     let mut comparison_tables = Vec::new();
 
     for channel in test_plc_channels {
-        // 根据channel_type枚举值判断是否有源
+        // 根据channel_type枚举值判断是否有�?
         let is_powered = match channel.channel_type {
             TestPlcChannelType::AI | TestPlcChannelType::AO |
             TestPlcChannelType::DI | TestPlcChannelType::DO => true,
@@ -276,3 +277,4 @@ fn convert_test_plc_channel_type_to_module_type(channel_type: &TestPlcChannelTyp
         TestPlcChannelType::DONone => ModuleType::DO,
     }
 }
+

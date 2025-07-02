@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 检查数据库中的报警设定值地址配置
 use sea_orm::{Database, Statement, ConnectionTrait};
 use std::path::PathBuf;
@@ -6,11 +7,11 @@ use std::path::PathBuf;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 检查数据库中的报警设定值地址配置");
 
-    // 连接数据库
+    // 连接数据�?
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
     let db = Database::connect(&db_url).await?;
-    println!("✅ 数据库连接成功");
+    println!("�?数据库连接成�?);
 
     // 查询PT_2102点位的报警设定值地址
     println!("\n📊 查询PT_2102点位的报警设定值地址:");
@@ -48,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   SH设定值地址: {:?}", sh_addr);
         println!("   SHH设定值地址: {:?}", shh_addr);
     } else {
-        println!("❌ 未找到PT_2102点位");
+        println!("�?未找到PT_2102点位");
     }
 
     // 查询所有AI点位的报警设定值地址配置情况
@@ -77,15 +78,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sh_count: i64 = row.try_get("", "sh_configured")?;
         let shh_count: i64 = row.try_get("", "shh_configured")?;
         
-        println!("   总AI点位数: {}", total);
+        println!("   总AI点位�? {}", total);
         println!("   配置SLL地址的点位数: {}", sll_count);
         println!("   配置SL地址的点位数: {}", sl_count);
         println!("   配置SH地址的点位数: {}", sh_count);
         println!("   配置SHH地址的点位数: {}", shh_count);
     }
 
-    // 查询前5个AI点位的详细地址信息
-    println!("\n📊 查询前5个AI点位的详细地址信息:");
+    // 查询�?个AI点位的详细地址信息
+    println!("\n📊 查询�?个AI点位的详细地址信息:");
     
     let detail_sql = r#"
         SELECT 
@@ -113,9 +114,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sh_addr: Option<String> = row.try_get("", "sh_set_point_communication_address").ok();
         let shh_addr: Option<String> = row.try_get("", "shh_set_point_communication_address").ok();
         
-        println!("   {}. {} (主:{}) SLL:{:?} SL:{:?} SH:{:?} SHH:{:?}", 
+        println!("   {}. {} (�?{}) SLL:{:?} SL:{:?} SH:{:?} SHH:{:?}", 
                  i+1, tag, main_addr, sll_addr, sl_addr, sh_addr, shh_addr);
     }
 
     Ok(())
 }
+

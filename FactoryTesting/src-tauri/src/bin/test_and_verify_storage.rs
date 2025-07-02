@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 文件: FactoryTesting/src-tauri/src/bin/test_and_verify_storage.rs
 // 测试硬点测试结果存储并立即验证数据库
 
@@ -36,7 +37,7 @@ async fn main() -> Result<(), AppError> {
         enable_compression: false,
     };
 
-    // 使用与检查工具相同的数据库路径
+    // 使用与检查工具相同的数据库路�?
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
     let persistence_service = SqliteOrmPersistenceService::new(config.clone(), Some(&db_path)).await?;
 
@@ -55,7 +56,7 @@ async fn main() -> Result<(), AppError> {
         station_name: None,
         creation_time: Utc::now(),
         last_updated_time: Utc::now(),
-        operator_name: Some("测试员".to_string()),
+        operator_name: Some("测试�?.to_string()),
         status_summary: None,
         total_points: 1,
         tested_points: 0,
@@ -67,7 +68,7 @@ async fn main() -> Result<(), AppError> {
     };
 
     persistence_service.save_batch_info(&test_batch).await?;
-    println!("✅ 创建测试批次: {}", test_batch.batch_id);
+    println!("�?创建测试批次: {}", test_batch.batch_id);
 
     // 创建通道定义
     let definition_id = Uuid::new_v4().to_string();
@@ -77,7 +78,7 @@ async fn main() -> Result<(), AppError> {
         tag: "TEST_AI_01".to_string(),
         variable_name: "测试AI变量".to_string(),
         variable_description: "测试AI变量描述".to_string(),
-        station_name: "测试站".to_string(),
+        station_name: "测试�?.to_string(),
         module_name: "AI模块".to_string(),
         module_type: ModuleType::AI,
         channel_tag_in_module: "1".to_string(),
@@ -88,7 +89,7 @@ async fn main() -> Result<(), AppError> {
         plc_communication_address: "40001".to_string(),
         range_low_limit: Some(0.0),
         range_high_limit: Some(100.0),
-        engineering_unit: Some("℃".to_string()),
+        engineering_unit: Some("�?.to_string()),
         sll_set_value: None,
         sll_set_point_address: None,
         sll_set_point_plc_address: None,
@@ -131,7 +132,7 @@ async fn main() -> Result<(), AppError> {
     };
 
     persistence_service.save_channel_definition(&channel_definition).await?;
-    println!("✅ 创建通道定义: {}", channel_definition.id);
+    println!("�?创建通道定义: {}", channel_definition.id);
     
     // 创建测试实例
     let mut test_instance = ChannelTestInstance {
@@ -159,7 +160,7 @@ async fn main() -> Result<(), AppError> {
         digital_test_steps: None,
     };
     
-    println!("✅ 创建测试实例: {}", test_instance.instance_id);
+    println!("�?创建测试实例: {}", test_instance.instance_id);
     
     // 创建硬点测试结果
     let hardpoint_outcome = RawTestOutcome {
@@ -200,24 +201,24 @@ async fn main() -> Result<(), AppError> {
         digital_steps: None,
     };
     
-    println!("✅ 创建硬点测试结果");
+    println!("�?创建硬点测试结果");
     
     // 应用测试结果
     state_manager.apply_raw_outcome(&mut test_instance, hardpoint_outcome.clone()).await?;
-    println!("✅ 应用测试结果到测试实例");
+    println!("�?应用测试结果到测试实�?);
     
     // 保存到数据库
     persistence_service.save_test_instance(&test_instance).await?;
-    println!("✅ 测试实例已保存到数据库");
+    println!("�?测试实例已保存到数据�?);
 
     // 保存原始测试结果
     persistence_service.save_test_outcome(&hardpoint_outcome).await?;
-    println!("✅ 原始测试结果已保存到数据库");
+    println!("�?原始测试结果已保存到数据�?);
 
-    // 立即验证数据库中的数据
-    println!("\n🔍 立即验证数据库中的数据...");
+    // 立即验证数据库中的数�?
+    println!("\n🔍 立即验证数据库中的数�?..");
 
-    // 获取数据库连接
+    // 获取数据库连�?
     let db = persistence_service.get_database_connection();
 
     // 查询测试实例
@@ -227,17 +228,17 @@ async fn main() -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::persistence_error(format!("查询测试实例失败: {}", e)))?;
     
-    println!("📊 找到 {} 个测试实例", instances.len());
+    println!("📊 找到 {} 个测试实�?, instances.len());
     
     if let Some(instance) = instances.first() {
-        println!("✅ 测试实例存在: {}", instance.instance_id);
+        println!("�?测试实例存在: {}", instance.instance_id);
         println!("   - test_result_0_percent: {:?}", instance.test_result_0_percent);
         println!("   - test_result_25_percent: {:?}", instance.test_result_25_percent);
         println!("   - test_result_50_percent: {:?}", instance.test_result_50_percent);
         println!("   - test_result_75_percent: {:?}", instance.test_result_75_percent);
         println!("   - test_result_100_percent: {:?}", instance.test_result_100_percent);
     } else {
-        println!("❌ 测试实例未找到！");
+        println!("�?测试实例未找到！");
     }
     
     // 查询原始测试结果
@@ -247,20 +248,21 @@ async fn main() -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::persistence_error(format!("查询原始测试结果失败: {}", e)))?;
     
-    println!("📊 找到 {} 个原始测试结果", outcomes.len());
+    println!("📊 找到 {} 个原始测试结�?, outcomes.len());
     
     if let Some(outcome) = outcomes.first() {
-        println!("✅ 原始测试结果存在: {}", outcome.id);
+        println!("�?原始测试结果存在: {}", outcome.id);
         println!("   - test_result_0_percent: {:?}", outcome.test_result_0_percent);
         println!("   - test_result_25_percent: {:?}", outcome.test_result_25_percent);
         println!("   - test_result_50_percent: {:?}", outcome.test_result_50_percent);
         println!("   - test_result_75_percent: {:?}", outcome.test_result_75_percent);
         println!("   - test_result_100_percent: {:?}", outcome.test_result_100_percent);
     } else {
-        println!("❌ 原始测试结果未找到！");
+        println!("�?原始测试结果未找到！");
     }
     
     println!("🎉 测试和验证完成！");
     
     Ok(())
 }
+

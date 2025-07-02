@@ -1,5 +1,6 @@
-/// 验证数据库中的硬点测试结果存储
-/// 检查channel_test_instances表中的硬点状态和百分比字段
+#![cfg(FALSE)]
+/// 验证数据库中的硬点测试结果存�?
+/// 检查channel_test_instances表中的硬点状态和百分比字�?
 
 use sea_orm::{Database, EntityTrait, QueryFilter, ColumnTrait};
 use app_lib::models::entities::{channel_test_instance, raw_test_outcome};
@@ -9,9 +10,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 连接到数据库
     let db = Database::connect("sqlite://./factory_testing_data.sqlite").await?;
     
-    println!("🔍 查询数据库中的硬点测试结果...");
+    println!("🔍 查询数据库中的硬点测试结�?..");
     
-    // 查询所有测试实例
+    // 查询所有测试实�?
     let instances = channel_test_instance::Entity::find()
         .filter(channel_test_instance::Column::HardPointStatus.is_not_null())
         .all(&db)
@@ -24,40 +25,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   📋 定义ID: {}", instance.definition_id);
         println!("   📦 批次ID: {}", instance.test_batch_id);
         
-        // 硬点测试状态
+        // 硬点测试状�?
         if let Some(status) = instance.hard_point_status {
             let status_text = match status {
-                0 => "未测试",
+                0 => "未测�?,
                 1 => "通过",
                 2 => "失败",
                 3 => "不适用",
-                4 => "测试中",
+                4 => "测试�?,
                 5 => "跳过",
-                _ => "未知状态",
+                _ => "未知状�?,
             };
-            println!("   🎯 硬点测试状态: {} ({})", status, status_text);
+            println!("   🎯 硬点测试状�? {} ({})", status, status_text);
         }
         
         // 硬点测试结果
         if let Some(result) = &instance.hard_point_test_result {
-            println!("   ✅ 硬点测试结果: {}", result);
+            println!("   �?硬点测试结果: {}", result);
         }
         
         // 硬点测试错误详情
         if let Some(error_detail) = &instance.hard_point_error_detail {
-            println!("   ❌ 硬点测试错误: {}", error_detail);
+            println!("   �?硬点测试错误: {}", error_detail);
         }
         
-        // 实际值和期望值
+        // 实际值和期望�?
         if let Some(actual) = &instance.actual_value {
-            println!("   📊 实际值: {}", actual);
+            println!("   📊 实际�? {}", actual);
         }
         if let Some(expected) = &instance.expected_value {
-            println!("   🎯 期望值: {}", expected);
+            println!("   🎯 期望�? {}", expected);
         }
         
-        // 百分比测试结果
-        println!("   📈 百分比测试结果:");
+        // 百分比测试结�?
+        println!("   📈 百分比测试结�?");
         if let Some(val) = instance.test_result_0_percent {
             println!("      0%: {}", val);
         }
@@ -84,33 +85,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 子测试结果JSON
         if let Some(sub_results) = &instance.sub_test_results_json {
             if !sub_results.is_empty() && sub_results != "{}" {
-                println!("   🧪 子测试结果: {}", sub_results);
+                println!("   🧪 子测试结�? {}", sub_results);
             }
         }
     }
     
-    // 查询原始测试结果表
-    println!("\n🔍 查询原始测试结果表...");
+    // 查询原始测试结果�?
+    println!("\n🔍 查询原始测试结果�?..");
 
     let outcomes = raw_test_outcome::Entity::find()
         .filter(raw_test_outcome::Column::SubTestItem.eq("HardPoint"))
         .all(&db)
         .await?;
     
-    println!("📊 找到 {} 个硬点测试原始结果", outcomes.len());
+    println!("📊 找到 {} 个硬点测试原始结�?, outcomes.len());
     
     for outcome in outcomes {
         println!("\n🔍 原始测试结果: {}", outcome.id);
         println!("   📋 通道实例ID: {}", outcome.channel_instance_id);
-        println!("   🎯 测试项: {}", outcome.sub_test_item);
-        println!("   ✅ 成功: {}", outcome.success);
+        println!("   🎯 测试�? {}", outcome.sub_test_item);
+        println!("   �?成功: {}", outcome.success);
         
         if let Some(message) = &outcome.message {
             println!("   💬 消息: {}", message);
         }
         
-        // 百分比测试结果
-        println!("   📈 百分比测试结果:");
+        // 百分比测试结�?
+        println!("   📈 百分比测试结�?");
         if let Some(val) = outcome.test_result_0_percent {
             println!("      0%: {}", val);
         }
@@ -139,3 +140,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+

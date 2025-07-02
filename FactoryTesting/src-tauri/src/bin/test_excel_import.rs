@@ -1,9 +1,10 @@
+#![cfg(FALSE)]
 use app_lib::services::infrastructure::excel::excel_importer::ExcelImporter;
 use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
 
     println!("🔥 测试Excel导入功能 - 验证PLC地址和通讯地址字段映射");
@@ -12,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_file_path = PathBuf::from("../../测试文件/测试IO.xlsx");
 
     if !test_file_path.exists() {
-        eprintln!("❌ 测试文件不存在: {:?}", test_file_path);
+        eprintln!("�?测试文件不存�? {:?}", test_file_path);
         return Ok(());
     }
 
@@ -23,12 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let definitions = match ExcelImporter::parse_excel_file(test_file_path.to_str().unwrap()).await {
         Ok(defs) => defs,
         Err(e) => {
-            eprintln!("❌ 导入失败: {}", e);
+            eprintln!("�?导入失败: {}", e);
             return Ok(());
         }
     };
     
-    println!("✅ 成功导入 {} 个通道定义", definitions.len());
+    println!("�?成功导入 {} 个通道定义", definitions.len());
 
     // 连接数据库并保存数据
     use sea_orm::{Database, EntityTrait};
@@ -43,20 +44,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 清空现有数据
     ChannelPointDefinition::delete_many().exec(&db).await?;
 
-    // 保存新数据
+    // 保存新数�?
     for definition in &definitions {
         let active_model: ActiveModel = definition.into();
         ChannelPointDefinition::insert(active_model).exec(&db).await?;
     }
 
-    println!("✅ 已保存 {} 个定义到数据库", definitions.len());
+    println!("�?已保�?{} 个定义到数据�?, definitions.len());
 
     // 验证前几个定义的字段映射
     println!("\n🔍 验证字段映射（前5个定义）:");
     for (i, def) in definitions.iter().take(5).enumerate() {
         println!("\n--- 定义 {} ---", i + 1);
         println!("位号: {}", def.tag);
-        println!("变量名: {}", def.variable_name);
+        println!("变量�? {}", def.variable_name);
         println!("模块类型: {:?}", def.module_type);
         println!("PLC绝对地址: {:?}", def.plc_absolute_address);
         println!("上位机通讯地址: {}", def.plc_communication_address);
@@ -143,20 +144,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("\n📊 统计结果:");
     println!("总定义数: {}", definitions.len());
-    println!("包含PLC绝对地址的定义: {}", plc_address_count);
-    println!("包含上位机通讯地址的定义: {}", comm_address_count);
-    println!("包含报警PLC地址的定义: {}", alarm_plc_count);
-    println!("包含报警通讯地址的定义: {}", alarm_comm_count);
-    println!("包含维护PLC地址的定义: {}", maintenance_plc_count);
-    println!("包含维护通讯地址的定义: {}", maintenance_comm_count);
+    println!("包含PLC绝对地址的定�? {}", plc_address_count);
+    println!("包含上位机通讯地址的定�? {}", comm_address_count);
+    println!("包含报警PLC地址的定�? {}", alarm_plc_count);
+    println!("包含报警通讯地址的定�? {}", alarm_comm_count);
+    println!("包含维护PLC地址的定�? {}", maintenance_plc_count);
+    println!("包含维护通讯地址的定�? {}", maintenance_comm_count);
     
     // 验证是否修复了之前的问题
     if plc_address_count > 0 && comm_address_count > 0 {
-        println!("\n✅ 字段映射修复成功！");
+        println!("\n�?字段映射修复成功�?);
         println!("   - PLC绝对地址字段正常解析");
         println!("   - 上位机通讯地址字段正常解析");
     } else {
-        println!("\n❌ 字段映射仍有问题！");
+        println!("\n�?字段映射仍有问题�?);
         if plc_address_count == 0 {
             println!("   - PLC绝对地址字段为空");
         }
@@ -166,12 +167,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     if alarm_comm_count > 0 || maintenance_comm_count > 0 {
-        println!("✅ 新增通讯地址字段解析成功！");
-        println!("   - 报警通讯地址字段: {} 个定义", alarm_comm_count);
-        println!("   - 维护通讯地址字段: {} 个定义", maintenance_comm_count);
+        println!("�?新增通讯地址字段解析成功�?);
+        println!("   - 报警通讯地址字段: {} 个定�?, alarm_comm_count);
+        println!("   - 维护通讯地址字段: {} 个定�?, maintenance_comm_count);
     } else {
-        println!("❌ 新增通讯地址字段解析失败！");
+        println!("�?新增通讯地址字段解析失败�?);
     }
     
     Ok(())
 }
+

@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use app_lib::utils::error::AppError;
 use sea_orm::{Database, DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
 use std::path::PathBuf;
@@ -5,23 +6,23 @@ use app_lib::models::entities::channel_point_definition::{Entity as ChannelPoint
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
     
     println!("🔍 验证数据库中的通讯地址字段数据");
     
-    // 连接数据库
+    // 连接数据�?
     let db_path = PathBuf::from("./factory_testing_data.sqlite");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
     
-    println!("📁 数据库路径: {}", db_url);
+    println!("📁 数据库路�? {}", db_url);
     
     let db = Database::connect(&db_url).await?;
     
-    // 验证数据库中的数据
+    // 验证数据库中的数�?
     verify_database_data(&db).await?;
     
-    println!("✅ 数据库数据验证完成！");
+    println!("�?数据库数据验证完成！");
     
     Ok(())
 }
@@ -38,11 +39,11 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
     println!("📊 数据库中共有 {} 个通道定义", definitions.len());
     
     if definitions.is_empty() {
-        println!("⚠️  数据库中没有通道定义数据！");
+        println!("⚠️  数据库中没有通道定义数据�?);
         return Ok(());
     }
     
-    // 统计各种字段的数据
+    // 统计各种字段的数�?
     let mut plc_absolute_address_count = 0;
     let mut plc_communication_address_count = 0;
     let mut sll_plc_address_count = 0;
@@ -50,10 +51,10 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
     let mut maintenance_plc_address_count = 0;
     let mut maintenance_communication_address_count = 0;
     
-    println!("\n🔍 验证前5个定义的字段数据:");
+    println!("\n🔍 验证�?个定义的字段数据:");
     
     for (index, definition) in definitions.iter().take(5).enumerate() {
-        println!("\n--- 数据库定义 {} ---", index + 1);
+        println!("\n--- 数据库定�?{} ---", index + 1);
         println!("位号: {:?}", definition.tag);
         println!("PLC绝对地址: {:?}", definition.plc_absolute_address);
         println!("上位机通讯地址: {:?}", definition.plc_communication_address);
@@ -63,7 +64,7 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
         println!("维护值设定点位_通讯地址: {:?}", definition.maintenance_value_set_point_communication_address);
     }
     
-    // 统计所有定义
+    // 统计所有定�?
     for definition in &definitions {
         if definition.plc_absolute_address.is_some() {
             plc_absolute_address_count += 1;
@@ -85,33 +86,34 @@ async fn verify_database_data(db: &DatabaseConnection) -> Result<(), AppError> {
         }
     }
     
-    println!("\n📊 数据库字段统计:");
+    println!("\n📊 数据库字段统�?");
     println!("总定义数: {}", definitions.len());
-    println!("包含PLC绝对地址的定义: {}", plc_absolute_address_count);
-    println!("包含上位机通讯地址的定义: {}", plc_communication_address_count);
-    println!("包含SLL报警PLC地址的定义: {}", sll_plc_address_count);
-    println!("包含SLL报警通讯地址的定义: {}", sll_communication_address_count);
-    println!("包含维护PLC地址的定义: {}", maintenance_plc_address_count);
-    println!("包含维护通讯地址的定义: {}", maintenance_communication_address_count);
+    println!("包含PLC绝对地址的定�? {}", plc_absolute_address_count);
+    println!("包含上位机通讯地址的定�? {}", plc_communication_address_count);
+    println!("包含SLL报警PLC地址的定�? {}", sll_plc_address_count);
+    println!("包含SLL报警通讯地址的定�? {}", sll_communication_address_count);
+    println!("包含维护PLC地址的定�? {}", maintenance_plc_address_count);
+    println!("包含维护通讯地址的定�? {}", maintenance_communication_address_count);
     
-    // 验证数据完整性
+    // 验证数据完整�?
     if plc_communication_address_count == definitions.len() {
-        println!("✅ 上位机通讯地址字段数据完整");
+        println!("�?上位机通讯地址字段数据完整");
     } else {
-        println!("❌ 上位机通讯地址字段数据不完整");
+        println!("�?上位机通讯地址字段数据不完�?);
     }
     
     if sll_communication_address_count > 0 {
-        println!("✅ SLL报警通讯地址字段有数据");
+        println!("�?SLL报警通讯地址字段有数�?);
     } else {
-        println!("❌ SLL报警通讯地址字段没有数据");
+        println!("�?SLL报警通讯地址字段没有数据");
     }
     
     if maintenance_communication_address_count > 0 {
-        println!("✅ 维护通讯地址字段有数据");
+        println!("�?维护通讯地址字段有数�?);
     } else {
-        println!("❌ 维护通讯地址字段没有数据");
+        println!("�?维护通讯地址字段没有数据");
     }
     
     Ok(())
 }
+

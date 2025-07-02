@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use super::*;
 
 /// Mock事件发布服务

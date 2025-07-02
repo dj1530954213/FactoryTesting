@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use app_lib::database_migration::DatabaseMigration;
 use app_lib::utils::error::AppError;
 use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
@@ -5,29 +6,29 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
     
     println!("🔧 开始数据库迁移：添加通讯地址字段");
     
-    // 连接数据库
+    // 连接数据�?
     let db_path = PathBuf::from("./factory_testing_data.sqlite");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
     
-    println!("📁 数据库路径: {}", db_url);
+    println!("📁 数据库路�? {}", db_url);
     
     let db = Database::connect(&db_url).await?;
     
     // 执行迁移
     migrate_communication_address_fields(&db).await?;
     
-    println!("✅ 数据库迁移完成！");
+    println!("�?数据库迁移完成！");
     
     Ok(())
 }
 
 async fn migrate_communication_address_fields(db: &DatabaseConnection) -> Result<(), AppError> {
-    println!("🔧 开始添加通讯地址字段到 channel_point_definitions 表...");
+    println!("🔧 开始添加通讯地址字段�?channel_point_definitions �?..");
     
     // 添加SLL相关通讯地址字段
     let sll_fields = vec![
@@ -71,30 +72,30 @@ async fn migrate_communication_address_fields(db: &DatabaseConnection) -> Result
             sql.to_string()
         )).await {
             Ok(_) => {
-                println!("✅ 迁移 {}/{} 成功", index + 1, all_statements.len());
+                println!("�?迁移 {}/{} 成功", index + 1, all_statements.len());
             },
             Err(e) => {
-                // 检查是否是"列已存在"的错误
+                // 检查是否是"列已存在"的错�?
                 let error_msg = e.to_string();
                 if error_msg.contains("duplicate column name") || error_msg.contains("already exists") {
-                    println!("⚠️  迁移 {}/{} 跳过：列已存在", index + 1, all_statements.len());
+                    println!("⚠️  迁移 {}/{} 跳过：列已存�?, index + 1, all_statements.len());
                 } else {
-                    eprintln!("❌ 迁移 {}/{} 失败: {}", index + 1, all_statements.len(), e);
+                    eprintln!("�?迁移 {}/{} 失败: {}", index + 1, all_statements.len(), e);
                     return Err(AppError::persistence_error(format!("迁移失败: {}", e)));
                 }
             }
         }
     }
     
-    println!("🔍 验证表结构...");
+    println!("🔍 验证表结�?..");
     
-    // 验证表结构
+    // 验证表结�?
     let table_info = db.execute(Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         "PRAGMA table_info(channel_point_definitions);".to_string()
-    )).await.map_err(|e| AppError::persistence_error(format!("获取表信息失败: {}", e)))?;
+    )).await.map_err(|e| AppError::persistence_error(format!("获取表信息失�? {}", e)))?;
     
-    println!("📊 当前表结构:");
+    println!("📊 当前表结�?");
     println!("{:?}", table_info);
     
     // 检查新字段是否存在
@@ -125,7 +126,8 @@ async fn migrate_communication_address_fields(db: &DatabaseConnection) -> Result
         println!("🔍 检查列 '{}': {:?}", column, result);
     }
     
-    println!("✅ 所有通讯地址字段迁移完成！");
+    println!("�?所有通讯地址字段迁移完成�?);
     
     Ok(())
 }
+

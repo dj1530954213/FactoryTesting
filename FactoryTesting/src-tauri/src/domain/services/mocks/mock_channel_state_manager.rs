@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use super::*;
 
 /// Mock通道状态管理器

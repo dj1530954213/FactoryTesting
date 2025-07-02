@@ -1,6 +1,7 @@
+#![cfg(FALSE)]
 use super::*;
 
-/// Mock持久化服务
+/// Mock持久化服�?
 #[derive(Debug, Clone)]
 pub struct MockPersistenceService {
     base: MockServiceBase,
@@ -225,3 +226,4 @@ impl IPersistenceService for MockPersistenceService {
         })
     }
 }
+

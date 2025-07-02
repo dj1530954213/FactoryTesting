@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use super::*;
 
 /// Mock批次分配服务

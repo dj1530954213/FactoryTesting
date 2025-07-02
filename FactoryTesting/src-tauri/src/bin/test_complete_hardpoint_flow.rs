@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::services::domain::channel_state_manager::{ChannelStateManager, IChannelStateManager};
 use app_lib::services::traits::PersistenceService;
@@ -12,7 +13,7 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     
-    println!("=== 测试完整硬点测试流程的数据保存功能 ===");
+    println!("=== 测试完整硬点测试流程的数据保存功�?===");
     
     // 初始化持久化服务
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
@@ -33,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化状态管理器
     let state_manager = ChannelStateManager::new(persistence_service.clone());
     
-    // 创建一个测试实例
+    // 创建一个测试实�?
     let mut test_instance = ChannelTestInstance::new(
         "test_definition_hardpoint_flow".to_string(),
         "test_batch_hardpoint_flow".to_string(),
@@ -49,11 +50,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("📝 创建测试实例: {}", test_instance.instance_id);
     
-    // 先保存测试实例到持久化服务
+    // 先保存测试实例到持久化服�?
     persistence_service.save_test_instance(&test_instance).await?;
-    println!("✅ 测试实例已保存到数据库");
+    println!("�?测试实例已保存到数据�?);
     
-    // 创建硬点测试结果（模拟AI硬点测试执行器的输出）
+    // 创建硬点测试结果（模拟AI硬点测试执行器的输出�?
     let readings = vec![
         AnalogReadingPoint {
             set_percentage: 0.0,
@@ -102,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     ];
     
-    // 创建RawTestOutcome，包含百分比测试结果（模拟测试执行引擎的输出）
+    // 创建RawTestOutcome，包含百分比测试结果（模拟测试执行引擎的输出�?
     let outcome = RawTestOutcome {
         channel_instance_id: test_instance.instance_id.clone(),
         sub_test_item: SubTestItem::HardPoint,
@@ -129,74 +130,74 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   75%: {:?}", outcome.test_result_75_percent);
     println!("   100%: {:?}", outcome.test_result_100_percent);
     
-    // 模拟测试协调服务的完整流程
-    println!("\n🔄 模拟测试协调服务的完整流程...");
+    // 模拟测试协调服务的完整流�?
+    println!("\n🔄 模拟测试协调服务的完整流�?..");
     
-    // 第1步：保存测试结果到持久化存储（模拟第327行）
-    println!("💾 第1步：保存测试结果到持久化存储...");
+    // �?步：保存测试结果到持久化存储（模拟第327行）
+    println!("💾 �?步：保存测试结果到持久化存储...");
     persistence_service.save_test_outcome(&outcome).await?;
-    println!("✅ 测试结果已保存到数据库");
+    println!("�?测试结果已保存到数据�?);
     
-    // 第2步：更新状态管理器中的测试实例状态（模拟第332行）
-    println!("🔄 第2步：更新状态管理器中的测试实例状态...");
+    // �?步：更新状态管理器中的测试实例状态（模拟�?32行）
+    println!("🔄 �?步：更新状态管理器中的测试实例状�?..");
     state_manager.update_test_result(outcome.clone()).await?;
-    println!("✅ 状态管理器已更新");
+    println!("�?状态管理器已更�?);
     
-    // 第3步：验证数据是否正确保存
-    println!("\n🔍 第3步：验证数据是否正确保存...");
+    // �?步：验证数据是否正确保存
+    println!("\n🔍 �?步：验证数据是否正确保存...");
     
     // 从状态管理器重新获取测试实例
     match state_manager.get_cached_test_instance(&test_instance.instance_id).await {
         Some(updated_instance) => {
-            println!("✅ 成功从状态管理器获取更新后的测试实例");
+            println!("�?成功从状态管理器获取更新后的测试实例");
             println!("   实例ID: {}", updated_instance.instance_id);
-            println!("   整体状态: {:?}", updated_instance.overall_status);
+            println!("   整体状�? {:?}", updated_instance.overall_status);
             
             // 检查百分比测试结果
-            println!("\n📊 百分比测试结果验证:");
+            println!("\n📊 百分比测试结果验�?");
             println!("   0%: {:?}", updated_instance.transient_data.get("test_result_0_percent"));
             println!("   25%: {:?}", updated_instance.transient_data.get("test_result_25_percent"));
             println!("   50%: {:?}", updated_instance.transient_data.get("test_result_50_percent"));
             println!("   75%: {:?}", updated_instance.transient_data.get("test_result_75_percent"));
             println!("   100%: {:?}", updated_instance.transient_data.get("test_result_100_percent"));
             
-            // 检查硬点读数
+            // 检查硬点读�?
             if let Some(readings) = &updated_instance.hardpoint_readings {
                 println!("\n📈 硬点读数验证:");
                 for reading in readings.iter() {
-                    println!("   {}%: 设定={:.3}, 实际原始={:.3}, 实际工程量={:.3}",
+                    println!("   {}%: 设定={:.3}, 实际原始={:.3}, 实际工程�?{:.3}",
                         reading.set_percentage,
                         reading.set_value_eng,
                         reading.actual_reading_raw.unwrap_or(0.0),
                         reading.actual_reading_eng.unwrap_or(0.0));
                 }
             } else {
-                println!("❌ 硬点读数数据丢失");
+                println!("�?硬点读数数据丢失");
             }
             
             // 检查子测试结果
             if let Some(hardpoint_result) = updated_instance.sub_test_results.get(&SubTestItem::HardPoint) {
-                println!("\n🧪 子测试结果验证:");
-                println!("   状态: {:?}", hardpoint_result.status);
-                println!("   实际值: {:?}", hardpoint_result.actual_value);
-                println!("   期望值: {:?}", hardpoint_result.expected_value);
+                println!("\n🧪 子测试结果验�?");
+                println!("   状�? {:?}", hardpoint_result.status);
+                println!("   实际�? {:?}", hardpoint_result.actual_value);
+                println!("   期望�? {:?}", hardpoint_result.expected_value);
                 println!("   详情: {:?}", hardpoint_result.details);
             }
         }
         None => {
-            println!("❌ 无法从状态管理器获取测试实例");
+            println!("�?无法从状态管理器获取测试实例");
         }
     }
     
     // 从数据库直接验证数据
-    println!("\n🗄️ 从数据库直接验证数据...");
+    println!("\n🗄�?从数据库直接验证数据...");
     match persistence_service.load_test_instance(&test_instance.instance_id).await? {
         Some(db_instance) => {
-            println!("✅ 成功从数据库加载测试实例");
+            println!("�?成功从数据库加载测试实例");
             println!("   实例ID: {}", db_instance.instance_id);
-            println!("   整体状态: {:?}", db_instance.overall_status);
+            println!("   整体状�? {:?}", db_instance.overall_status);
             
-            // 检查数据库中的百分比测试结果
+            // 检查数据库中的百分比测试结�?
             println!("\n📊 数据库中的百分比测试结果:");
             println!("   0%: {:?}", db_instance.transient_data.get("test_result_0_percent"));
             println!("   25%: {:?}", db_instance.transient_data.get("test_result_25_percent"));
@@ -205,7 +206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   100%: {:?}", db_instance.transient_data.get("test_result_100_percent"));
         }
         None => {
-            println!("❌ 无法从数据库加载测试实例");
+            println!("�?无法从数据库加载测试实例");
         }
     }
     
@@ -213,3 +214,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+

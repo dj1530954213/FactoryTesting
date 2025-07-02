@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
 use std::path::PathBuf;
 
@@ -6,10 +7,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== 修复数据库表结构问题 ===");
     
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
-    println!("📁 数据库文件: {:?}", db_path);
+    println!("📁 数据库文�? {:?}", db_path);
     
     if !db_path.exists() {
-        println!("❌ 数据库文件不存在！");
+        println!("�?数据库文件不存在�?);
         return Ok(());
     }
     
@@ -25,9 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )).await;
     
     match result {
-        Ok(_) => println!("✅ 表存在"),
+        Ok(_) => println!("�?表存�?),
         Err(e) => {
-            println!("❌ 表不存在或查询失败: {}", e);
+            println!("�?表不存在或查询失�? {}", e);
             return Ok(());
         }
     }
@@ -42,10 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match desc_result {
         Ok(_) => {
-            println!("✅ description字段已存在");
+            println!("�?description字段已存�?);
         },
         Err(e) => {
-            println!("⚠️  description字段不存在: {}", e);
+            println!("⚠️  description字段不存�? {}", e);
             println!("🔧 添加description字段...");
 
             let add_desc_sql = "ALTER TABLE channel_point_definitions ADD COLUMN description TEXT";
@@ -55,8 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )).await;
 
             match add_result {
-                Ok(_) => println!("✅ 成功添加description字段"),
-                Err(e) => println!("❌ 添加description字段失败: {}", e),
+                Ok(_) => println!("�?成功添加description字段"),
+                Err(e) => println!("�?添加description字段失败: {}", e),
             }
         }
     }
@@ -71,10 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match seq_result {
         Ok(_) => {
-            println!("✅ sequence_number字段已存在");
+            println!("�?sequence_number字段已存�?);
         },
         Err(e) => {
-            println!("⚠️  sequence_number字段不存在: {}", e);
+            println!("⚠️  sequence_number字段不存�? {}", e);
             println!("🔧 添加sequence_number字段...");
 
             let add_seq_sql = "ALTER TABLE channel_point_definitions ADD COLUMN sequence_number INTEGER";
@@ -84,8 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )).await;
 
             match add_seq_result {
-                Ok(_) => println!("✅ 成功添加sequence_number字段"),
-                Err(e) => println!("❌ 添加sequence_number字段失败: {}", e),
+                Ok(_) => println!("�?成功添加sequence_number字段"),
+                Err(e) => println!("�?添加sequence_number字段失败: {}", e),
             }
         }
     }
@@ -100,10 +101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match power_desc_result {
         Ok(_) => {
-            println!("✅ power_type_description字段已存在");
+            println!("�?power_type_description字段已存�?);
         },
         Err(e) => {
-            println!("⚠️  power_type_description字段不存在: {}", e);
+            println!("⚠️  power_type_description字段不存�? {}", e);
             println!("🔧 添加power_type_description字段...");
 
             let add_power_desc_sql = "ALTER TABLE channel_point_definitions ADD COLUMN power_type_description TEXT";
@@ -113,8 +114,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )).await;
 
             match add_power_desc_result {
-                Ok(_) => println!("✅ 成功添加power_type_description字段"),
-                Err(e) => println!("❌ 添加power_type_description字段失败: {}", e),
+                Ok(_) => println!("�?成功添加power_type_description字段"),
+                Err(e) => println!("�?添加power_type_description字段失败: {}", e),
             }
         }
     }
@@ -129,10 +130,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match pos_result {
         Ok(_) => {
-            println!("✅ channel_position字段已存在");
+            println!("�?channel_position字段已存�?);
         },
         Err(e) => {
-            println!("⚠️  channel_position字段不存在: {}", e);
+            println!("⚠️  channel_position字段不存�? {}", e);
             println!("🔧 添加channel_position字段...");
 
             let add_pos_sql = "ALTER TABLE channel_point_definitions ADD COLUMN channel_position TEXT";
@@ -142,8 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )).await;
 
             match add_pos_result {
-                Ok(_) => println!("✅ 成功添加channel_position字段"),
-                Err(e) => println!("❌ 添加channel_position字段失败: {}", e),
+                Ok(_) => println!("�?成功添加channel_position字段"),
+                Err(e) => println!("�?添加channel_position字段失败: {}", e),
             }
         }
     }
@@ -157,11 +158,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )).await;
     
     match verify_result {
-        Ok(_) => println!("✅ 表结构修复成功！"),
-        Err(e) => println!("❌ 表结构仍有问题: {}", e),
+        Ok(_) => println!("�?表结构修复成功！"),
+        Err(e) => println!("�?表结构仍有问�? {}", e),
     }
     
-    println!("\n🎉 数据库表结构修复完成！");
+    println!("\n🎉 数据库表结构修复完成�?);
     
     Ok(())
 }
+

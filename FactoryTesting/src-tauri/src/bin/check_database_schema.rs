@@ -1,4 +1,5 @@
-// 检查数据库表结构
+#![cfg(FALSE)]
+// 检查数据库表结�?
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use sea_orm::{DatabaseConnection, Statement, ConnectionTrait};
 use std::path::PathBuf;
@@ -7,7 +8,7 @@ use std::path::PathBuf;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     
-    println!("=== 检查数据库表结构 ===");
+    println!("=== 检查数据库表结�?===");
     
     // 初始化数据库连接
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
@@ -26,31 +27,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let persistence_service = SqliteOrmPersistenceService::new(persistence_config, Some(&db_path)).await?;
     let db_conn = persistence_service.get_database_connection();
     
-    // 检查 test_batch_info 表结构
-    println!("\n🔍 检查 test_batch_info 表结构:");
+    // 检�?test_batch_info 表结�?
+    println!("\n🔍 检�?test_batch_info 表结�?");
     check_table_schema(db_conn, "test_batch_info").await?;
     
-    // 检查 channel_test_instances 表结构
-    println!("\n🔍 检查 channel_test_instances 表结构:");
+    // 检�?channel_test_instances 表结�?
+    println!("\n🔍 检�?channel_test_instances 表结�?");
     check_table_schema(db_conn, "channel_test_instances").await?;
     
-    // 检查 channel_point_definitions 表结构
-    println!("\n🔍 检查 channel_point_definitions 表结构:");
+    // 检�?channel_point_definitions 表结�?
+    println!("\n🔍 检�?channel_point_definitions 表结�?");
     check_table_schema(db_conn, "channel_point_definitions").await?;
 
-    // 专门检查 channel_position 列
-    println!("\n🔧 专门检查 channel_position 列:");
+    // 专门检�?channel_position �?
+    println!("\n🔧 专门检�?channel_position �?");
     check_and_fix_channel_position_column(db_conn).await?;
 
-    // 检查 raw_test_outcomes 表结构
-    println!("\n📋 raw_test_outcomes 表结构:");
+    // 检�?raw_test_outcomes 表结�?
+    println!("\n📋 raw_test_outcomes 表结�?");
     check_table_schema(db_conn, "raw_test_outcomes").await?;
 
-    // 专门检查 test_result_0_percent 列
-    println!("\n🔧 专门检查 raw_test_outcomes 表的测试结果列:");
+    // 专门检�?test_result_0_percent �?
+    println!("\n🔧 专门检�?raw_test_outcomes 表的测试结果�?");
     check_and_fix_raw_test_outcomes_columns(db_conn).await?;
 
-    println!("\n=== 检查完成 ===");
+    println!("\n=== 检查完�?===");
     
     Ok(())
 }
@@ -65,20 +66,20 @@ async fn check_table_schema(db: &DatabaseConnection, table_name: &str) -> Result
     )).await?;
     
     if result.is_empty() {
-        println!("❌ 表 {} 不存在", table_name);
+        println!("�?�?{} 不存�?, table_name);
         return Ok(());
     }
     
-    println!("✅ 表 {} 存在", table_name);
+    println!("�?�?{} 存在", table_name);
     
-    // 获取表结构
+    // 获取表结�?
     let schema_sql = format!("PRAGMA table_info({})", table_name);
     let schema_result = db.query_all(Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         schema_sql
     )).await?;
     
-    println!("   列信息:");
+    println!("   列信�?");
     for row in schema_result {
         let column_name: String = row.try_get("", "name")?;
         let column_type: String = row.try_get("", "type")?;
@@ -98,30 +99,30 @@ async fn check_table_schema(db: &DatabaseConnection, table_name: &str) -> Result
 }
 
 async fn check_and_fix_channel_position_column(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
-    // 获取 channel_point_definitions 表结构
+    // 获取 channel_point_definitions 表结�?
     let schema_sql = "PRAGMA table_info(channel_point_definitions)";
     let schema_result = db.query_all(Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         schema_sql.to_string()
     )).await?;
 
-    // 检查是否存在 channel_position 列
+    // 检查是否存�?channel_position �?
     let has_channel_position = schema_result.iter().any(|row| {
         row.try_get::<String>("", "name").unwrap_or_default() == "channel_position"
     });
 
     if has_channel_position {
-        println!("✅ channel_position 列存在");
+        println!("�?channel_position 列存�?);
 
         // 测试一个简单的查询
-        println!("🧪 测试查询 channel_position 列...");
+        println!("🧪 测试查询 channel_position �?..");
         let test_sql = "SELECT id, channel_position FROM channel_point_definitions LIMIT 1";
         match db.query_all(Statement::from_string(
             sea_orm::DatabaseBackend::Sqlite,
             test_sql.to_string()
         )).await {
             Ok(rows) => {
-                println!("✅ 查询 channel_position 列成功，返回 {} 行", rows.len());
+                println!("�?查询 channel_position 列成功，返回 {} �?, rows.len());
                 for row in rows {
                     let id: String = row.try_get("", "id").unwrap_or_default();
                     let channel_position: String = row.try_get("", "channel_position").unwrap_or_default();
@@ -129,21 +130,21 @@ async fn check_and_fix_channel_position_column(db: &DatabaseConnection) -> Resul
                 }
             },
             Err(e) => {
-                println!("❌ 查询 channel_position 列失败: {}", e);
+                println!("�?查询 channel_position 列失�? {}", e);
             }
         }
     } else {
-        println!("❌ channel_position 列不存在");
+        println!("�?channel_position 列不存在");
 
-        // 尝试手动添加 channel_position 列
-        println!("🔧 尝试手动添加 channel_position 列...");
+        // 尝试手动添加 channel_position �?
+        println!("🔧 尝试手动添加 channel_position �?..");
         let add_column_sql = "ALTER TABLE channel_point_definitions ADD COLUMN channel_position TEXT NOT NULL DEFAULT ''";
         match db.execute(Statement::from_string(
             sea_orm::DatabaseBackend::Sqlite,
             add_column_sql.to_string()
         )).await {
-            Ok(_) => println!("✅ 成功添加 channel_position 列"),
-            Err(e) => println!("❌ 添加 channel_position 列失败: {}", e),
+            Ok(_) => println!("�?成功添加 channel_position �?),
+            Err(e) => println!("�?添加 channel_position 列失�? {}", e),
         }
     }
 
@@ -151,14 +152,14 @@ async fn check_and_fix_channel_position_column(db: &DatabaseConnection) -> Resul
 }
 
 async fn check_and_fix_raw_test_outcomes_columns(db: &DatabaseConnection) -> Result<(), Box<dyn std::error::Error>> {
-    // 获取 raw_test_outcomes 表结构
+    // 获取 raw_test_outcomes 表结�?
     let schema_sql = "PRAGMA table_info(raw_test_outcomes)";
     let schema_result = db.query_all(Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         schema_sql.to_string()
     )).await?;
 
-    // 检查需要的测试结果列
+    // 检查需要的测试结果�?
     let required_columns = vec![
         "test_result_0_percent",
         "test_result_25_percent",
@@ -171,26 +172,27 @@ async fn check_and_fix_raw_test_outcomes_columns(db: &DatabaseConnection) -> Res
         .map(|row| row.try_get::<String>("", "name").unwrap_or_default())
         .collect();
 
-    println!("   现有列: {:?}", existing_columns);
+    println!("   现有�? {:?}", existing_columns);
 
     for column in &required_columns {
         if existing_columns.contains(&column.to_string()) {
-            println!("✅ {} 列存在", column);
+            println!("�?{} 列存�?, column);
         } else {
-            println!("❌ {} 列不存在", column);
+            println!("�?{} 列不存在", column);
 
-            // 尝试手动添加列
-            println!("🔧 尝试手动添加 {} 列...", column);
+            // 尝试手动添加�?
+            println!("🔧 尝试手动添加 {} �?..", column);
             let add_column_sql = format!("ALTER TABLE raw_test_outcomes ADD COLUMN {} REAL", column);
             match db.execute(Statement::from_string(
                 sea_orm::DatabaseBackend::Sqlite,
                 add_column_sql
             )).await {
-                Ok(_) => println!("✅ 成功添加 {} 列", column),
-                Err(e) => println!("❌ 添加 {} 列失败: {}", column, e),
+                Ok(_) => println!("�?成功添加 {} �?, column),
+                Err(e) => println!("�?添加 {} 列失�? {}", column, e),
             }
         }
     }
 
     Ok(())
 }
+

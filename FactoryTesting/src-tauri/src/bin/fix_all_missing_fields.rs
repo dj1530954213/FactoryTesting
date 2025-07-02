@@ -1,22 +1,23 @@
+#![cfg(FALSE)]
 use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
 use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== 修复所有缺失的数据库字段 ===");
+    println!("=== 修复所有缺失的数据库字�?===");
     
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
-    println!("📁 数据库文件: {:?}", db_path);
+    println!("📁 数据库文�? {:?}", db_path);
     
     if !db_path.exists() {
-        println!("❌ 数据库文件不存在！");
+        println!("�?数据库文件不存在�?);
         return Ok(());
     }
     
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
     let db = Database::connect(&db_url).await?;
     
-    // 定义所有需要检查和添加的字段
+    // 定义所有需要检查和添加的字�?
     let fields_to_check = vec![
         ("description", "TEXT"),
         ("sequence_number", "INTEGER"),
@@ -87,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("updated_at", "TEXT"),
     ];
     
-    println!("\n🔍 检查并添加缺失的字段...");
+    println!("\n🔍 检查并添加缺失的字�?..");
     
     let mut added_count = 0;
     let mut existing_count = 0;
@@ -102,7 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match check_result {
             Ok(_) => {
                 existing_count += 1;
-                println!("✅ 字段 {} 已存在", field_name);
+                println!("�?字段 {} 已存�?, field_name);
             },
             Err(_) => {
                 println!("⚠️  字段 {} 不存在，正在添加...", field_name);
@@ -116,10 +117,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match add_result {
                     Ok(_) => {
                         added_count += 1;
-                        println!("✅ 成功添加字段 {}", field_name);
+                        println!("�?成功添加字段 {}", field_name);
                     },
                     Err(e) => {
-                        println!("❌ 添加字段 {} 失败: {}", field_name, e);
+                        println!("�?添加字段 {} 失败: {}", field_name, e);
                     }
                 }
             }
@@ -127,9 +128,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n📊 修复结果统计:");
-    println!("  已存在字段: {} 个", existing_count);
-    println!("  新添加字段: {} 个", added_count);
-    println!("  总检查字段: {} 个", fields_to_check.len());
+    println!("  已存在字�? {} �?, existing_count);
+    println!("  新添加字�? {} �?, added_count);
+    println!("  总检查字�? {} �?, fields_to_check.len());
     
     // 验证修复结果
     println!("\n🔍 验证修复结果...");
@@ -140,11 +141,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )).await;
     
     match verify_result {
-        Ok(_) => println!("✅ 表结构修复成功！"),
-        Err(e) => println!("❌ 表结构仍有问题: {}", e),
+        Ok(_) => println!("�?表结构修复成功！"),
+        Err(e) => println!("�?表结构仍有问�? {}", e),
     }
     
     println!("\n🎉 数据库字段修复完成！");
     
     Ok(())
 }
+

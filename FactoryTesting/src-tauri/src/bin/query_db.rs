@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 查询数据库中的通道定义数据
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::models::entities::channel_point_definition;
@@ -6,12 +7,12 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
 
     println!("正在查询数据库中的通道定义数据...");
 
-    // 数据库文件路径
+    // 数据库文件路�?
     let db_file_path = PathBuf::from("factory_testing_data.sqlite");
 
     if !db_file_path.exists() {
@@ -19,13 +20,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    println!("数据库文件路径: {:?}", db_file_path);
+    println!("数据库文件路�? {:?}", db_file_path);
 
     // 创建配置
     let mut config = PersistenceConfig::default();
     config.storage_root_dir = PathBuf::from(".");
 
-    // 创建持久化服务
+    // 创建持久化服�?
     let persistence_service = SqliteOrmPersistenceService::new(config, Some(&db_file_path)).await?;
     let db = persistence_service.get_database_connection();
 
@@ -41,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // 按模块类型分组统计
+    // 按模块类型分组统�?
     let mut ai_count = 0;
     let mut ao_count = 0;
     let mut di_count = 0;
@@ -58,13 +59,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("模块类型统计:");
-    println!("  AI: {} 个", ai_count);
-    println!("  AO: {} 个", ao_count);
-    println!("  DI: {} 个", di_count);
-    println!("  DO: {} 个", do_count);
+    println!("  AI: {} �?, ai_count);
+    println!("  AO: {} �?, ao_count);
+    println!("  DI: {} �?, di_count);
+    println!("  DO: {} �?, do_count);
 
-    // 显示前20个通道的详细信息
-    println!("\n前20个通道的详细信息:");
+    // 显示�?0个通道的详细信�?
+    println!("\n�?0个通道的详细信�?");
     for (i, def) in channel_definitions.iter().take(20).enumerate() {
         println!("{}. tag={}, module_type={}, plc_address={}, variable_name={}",
                  i + 1,
@@ -80,3 +81,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+

@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 导入默认的测试PLC配置
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::services::domain::test_plc_config_service::TestPlcConfigService;
@@ -17,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = PathBuf::from("data");
     if !data_dir.exists() {
         std::fs::create_dir_all(&data_dir)?;
-        println!("✅ 创建data目录");
+        println!("�?创建data目录");
     }
 
     // 初始化数据库连接
@@ -37,10 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let persistence_service = Arc::new(SqliteOrmPersistenceService::new(persistence_config, Some(&db_path)).await?);
     let test_plc_config_service = Arc::new(TestPlcConfigService::new(persistence_service.clone()));
 
-    println!("✅ 数据库连接成功");
+    println!("�?数据库连接成�?);
 
     // 先清空现有的测试PLC配置数据
-    println!("🗑️  清空现有的测试PLC配置数据...");
+    println!("🗑�? 清空现有的测试PLC配置数据...");
     let existing_request = GetTestPlcChannelsRequest {
         channel_type_filter: None,
         enabled_only: None,
@@ -50,23 +51,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for channel in &existing_channels {
         if let Some(ref id) = channel.id {
             match test_plc_config_service.delete_test_plc_channel(id).await {
-                Ok(_) => println!("🗑️  删除旧通道: {}", channel.channel_address),
-                Err(e) => println!("❌ 删除旧通道失败: {} - {}", channel.channel_address, e),
+                Ok(_) => println!("🗑�? 删除旧通道: {}", channel.channel_address),
+                Err(e) => println!("�?删除旧通道失败: {} - {}", channel.channel_address, e),
             }
         }
     }
 
-    println!("✅ 清空完成，删除了 {} 个旧通道配置", existing_channels.len());
+    println!("�?清空完成，删除了 {} 个旧通道配置", existing_channels.len());
 
     // 创建与原始数据完全一致的88个测试PLC通道配置
     let default_channels = create_default_test_plc_channels();
-    println!("✅ 创建了 {} 个新的测试PLC通道配置", default_channels.len());
+    println!("�?创建�?{} 个新的测试PLC通道配置", default_channels.len());
 
     // 批量保存到数据库
     for channel in &default_channels {
         match test_plc_config_service.save_test_plc_channel(channel.clone()).await {
-            Ok(_) => println!("✅ 保存通道: {} - {}", channel.channel_address, format!("{:?}", channel.channel_type)),
-            Err(e) => println!("❌ 保存通道失败: {} - {}", channel.channel_address, e),
+            Ok(_) => println!("�?保存通道: {} - {}", channel.channel_address, format!("{:?}", channel.channel_type)),
+            Err(e) => println!("�?保存通道失败: {} - {}", channel.channel_address, e),
         }
     }
 
@@ -77,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let saved_channels = test_plc_config_service.get_test_plc_channels(request).await?;
-    println!("\n🎉 导入完成！数据库中现有 {} 个测试PLC通道配置", saved_channels.len());
+    println!("\n🎉 导入完成！数据库中现�?{} 个测试PLC通道配置", saved_channels.len());
 
     // 统计各类型通道数量
     let mut stats = std::collections::HashMap::new();
@@ -87,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n📊 通道类型统计:");
     for (channel_type, count) in stats {
-        println!("   {}: {} 个", channel_type, count);
+        println!("   {}: {} �?, channel_type, count);
     }
 
     Ok(())
@@ -98,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
     let mut channels = Vec::new();
 
-    // AI1_1 到 AI1_8 (8个AI有源通道)
+    // AI1_1 �?AI1_8 (8个AI有源通道)
     for i in 1..=8 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -113,7 +114,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // AO1_1 到 AO1_8 (8个AO有源通道)
+    // AO1_1 �?AO1_8 (8个AO有源通道)
     for i in 1..=8 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -128,7 +129,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // AO2_1 到 AO2_8 (8个AO无源通道)
+    // AO2_1 �?AO2_8 (8个AO无源通道)
     for i in 1..=8 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -143,7 +144,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // DI1_1 到 DI1_16 (16个DI有源通道)
+    // DI1_1 �?DI1_16 (16个DI有源通道)
     for i in 1..=16 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -158,7 +159,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // DI2_1 到 DI2_16 (16个DI无源通道)
+    // DI2_1 �?DI2_16 (16个DI无源通道)
     for i in 1..=16 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -173,7 +174,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // DO1_1 到 DO1_16 (16个DO有源通道)
+    // DO1_1 �?DO1_16 (16个DO有源通道)
     for i in 1..=16 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -188,7 +189,7 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
         });
     }
 
-    // DO2_1 到 DO2_16 (16个DO无源通道)
+    // DO2_1 �?DO2_16 (16个DO无源通道)
     for i in 1..=16 {
         channels.push(TestPlcChannelConfig {
             id: Some(uuid::Uuid::new_v4().to_string()),
@@ -205,3 +206,4 @@ fn create_default_test_plc_channels() -> Vec<TestPlcChannelConfig> {
 
     channels
 }
+

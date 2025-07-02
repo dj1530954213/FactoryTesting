@@ -1,4 +1,5 @@
-// 测试数据库保存功能
+#![cfg(FALSE)]
+// 测试数据库保存功�?
 use sea_orm::Database;
 use app_lib::models::structs::ChannelPointDefinition;
 use app_lib::models::enums::{ModuleType, PointDataType};
@@ -8,26 +9,26 @@ use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🧪 测试数据库保存功能");
+    println!("🧪 测试数据库保存功�?);
 
-    // 连接数据库
+    // 连接数据�?
     let db_url = "sqlite://./factory_testing_data.sqlite?mode=rwc";
     let db = Database::connect(db_url).await?;
-    println!("✅ 数据库连接成功");
+    println!("�?数据库连接成�?);
 
-    // 创建持久化服务
+    // 创建持久化服�?
     let config = PersistenceConfig::default();
     let persistence_service = SqliteOrmPersistenceService::new(config, Some(Path::new("./factory_testing_data.sqlite"))).await?;
-    println!("✅ 持久化服务创建成功");
+    println!("�?持久化服务创建成�?);
 
     // 创建测试通道定义
     let test_definition = ChannelPointDefinition {
         id: uuid::Uuid::new_v4().to_string(),
         batch_id: None,
         tag: "TEST_AI_001".to_string(),
-        variable_name: "测试模拟量输入".to_string(),
+        variable_name: "测试模拟量输�?.to_string(),
         variable_description: "测试用的模拟量输入通道".to_string(),
-        station_name: "测试站".to_string(),
+        station_name: "测试�?.to_string(),
         module_name: "AI模块".to_string(),
         module_type: ModuleType::AI,
         channel_tag_in_module: "AI_1".to_string(),
@@ -38,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         plc_communication_address: "40001".to_string(),
         range_low_limit: Some(0.0),
         range_high_limit: Some(100.0),
-        engineering_unit: Some("℃".to_string()),
+        engineering_unit: Some("�?.to_string()),
         sll_set_value: None,
         sll_set_point_address: None,
         sll_set_point_plc_address: None,
@@ -83,16 +84,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📝 创建测试通道定义: ID={}, Tag={}", test_definition.id, test_definition.tag);
 
     // 尝试保存到数据库
-    println!("💾 开始保存到数据库...");
+    println!("💾 开始保存到数据�?..");
     match persistence_service.save_channel_definition(&test_definition).await {
         Ok(_) => {
-            println!("✅ 保存成功！");
+            println!("�?保存成功�?);
             
             // 立即验证保存结果
             println!("🔍 验证保存结果...");
             match persistence_service.load_channel_definition(&test_definition.id).await {
                 Ok(Some(loaded_def)) => {
-                    println!("✅ 验证成功！从数据库加载的定义:");
+                    println!("�?验证成功！从数据库加载的定义:");
                     println!("   ID: {}", loaded_def.id);
                     println!("   Tag: {}", loaded_def.tag);
                     println!("   Variable Name: {}", loaded_def.variable_name);
@@ -101,15 +102,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("   Power Supply Type: {}", loaded_def.power_supply_type);
                 }
                 Ok(None) => {
-                    println!("❌ 验证失败：保存后立即查询找不到记录");
+                    println!("�?验证失败：保存后立即查询找不到记�?);
                 }
                 Err(e) => {
-                    println!("❌ 验证失败：查询出错 - {}", e);
+                    println!("�?验证失败：查询出�?- {}", e);
                 }
             }
         }
         Err(e) => {
-            println!("❌ 保存失败: {}", e);
+            println!("�?保存失败: {}", e);
             return Err(e.into());
         }
     }
@@ -118,17 +119,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 查询所有通道定义...");
     match persistence_service.load_all_channel_definitions().await {
         Ok(definitions) => {
-            println!("✅ 查询成功，共找到 {} 个通道定义", definitions.len());
+            println!("�?查询成功，共找到 {} 个通道定义", definitions.len());
             for (index, def) in definitions.iter().enumerate() {
                 println!("   {}. ID={}, Tag={}, Type={:?}", 
                     index + 1, def.id, def.tag, def.module_type);
             }
         }
         Err(e) => {
-            println!("❌ 查询失败: {}", e);
+            println!("�?查询失败: {}", e);
         }
     }
 
-    println!("🎉 测试完成！");
+    println!("🎉 测试完成�?);
     Ok(())
 }
+

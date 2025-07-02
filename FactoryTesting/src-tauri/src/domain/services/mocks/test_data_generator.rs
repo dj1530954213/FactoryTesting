@@ -1,6 +1,7 @@
+#![cfg(FALSE)]
 use super::*;
 
-/// 测试数据生成器
+/// 测试数据生成�?
 pub struct TestDataGenerator;
 
 impl TestDataGenerator {
@@ -125,7 +126,7 @@ impl TestDataGenerator {
         }
     }
 
-    /// 生成完整的测试场景
+    /// 生成完整的测试场�?
     pub fn generate_test_scenario(channel_count: usize) -> TestScenario {
         let definitions = Self::generate_channel_definitions(channel_count);
         let batch_info = Self::generate_batch_info();
@@ -161,17 +162,17 @@ pub struct TestScenario {
 }
 
 impl TestScenario {
-    /// 创建小型测试场景（10个通道）
+    /// 创建小型测试场景�?0个通道�?
     pub fn small() -> Self {
         TestDataGenerator::generate_test_scenario(10)
     }
 
-    /// 创建中型测试场景（50个通道）
+    /// 创建中型测试场景�?0个通道�?
     pub fn medium() -> Self {
         TestDataGenerator::generate_test_scenario(50)
     }
 
-    /// 创建大型测试场景（88个通道）
+    /// 创建大型测试场景�?8个通道�?
     pub fn large() -> Self {
         TestDataGenerator::generate_test_scenario(88)
     }
@@ -181,3 +182,4 @@ impl TestScenario {
         TestDataGenerator::generate_test_scenario(channel_count)
     }
 }
+

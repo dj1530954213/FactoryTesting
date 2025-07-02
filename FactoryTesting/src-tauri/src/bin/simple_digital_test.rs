@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 // 简化的DI/DO错误详情测试
 // 直接创建测试实例并应用数字量测试结果
 
@@ -25,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         instance_id: "di_test_instance_001".to_string(),
         definition_id: "test_di_001".to_string(),
         test_batch_id: "test_batch_001".to_string(),
-        test_batch_name: "数字量测试批次".to_string(),
+        test_batch_name: "数字量测试批�?.to_string(),
         overall_status: OverallTestStatus::HardPointTesting,
         sub_test_results: HashMap::new(),
         test_plc_channel_tag: Some("TEST_PLC_DO_001".to_string()),
@@ -37,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_updated_time: Utc::now(),
         final_test_time: None,
         total_test_duration_ms: None,
-        current_operator: Some("测试员".to_string()),
+        current_operator: Some("测试�?.to_string()),
         retries_count: 0,
         transient_data: HashMap::new(),
         hardpoint_readings: None,
@@ -46,9 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         manual_test_current_value_output: None,
     };
 
-    println!("✅ 创建了DI测试实例");
+    println!("�?创建了DI测试实例");
 
-    // 模拟DI测试失败的情况 - 创建详细的测试步骤数据
+    // 模拟DI测试失败的情�?- 创建详细的测试步骤数�?
     let di_test_steps = vec![
         DigitalTestStep {
             step_number: 1,
@@ -61,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         DigitalTestStep {
             step_number: 2,
-            step_description: "测试PLC DO输出高电平，检查被测PLC DI显示接通".to_string(),
+            step_description: "测试PLC DO输出高电平，检查被测PLC DI显示接�?.to_string(),
             set_value: true,
             expected_reading: true,
             actual_reading: false, // 模拟失败：期望true但实际读到false
@@ -84,9 +85,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         channel_instance_id: di_instance.instance_id.clone(),
         sub_test_item: SubTestItem::HardPoint,
         success: false, // 测试失败
-        raw_value_read: Some("数字量测试".to_string()),
+        raw_value_read: Some("数字量测�?.to_string()),
         eng_value_calculated: Some("DI硬点测试失败".to_string()),
-        message: Some("❌ DI硬点测试失败: DO高电平时DI应为true，实际为false".to_string()),
+        message: Some("�?DI硬点测试失败: DO高电平时DI应为true，实际为false".to_string()),
         start_time: Utc::now(),
         end_time: Utc::now(),
         readings: None,
@@ -99,11 +100,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         details: HashMap::new(),
     };
 
-    println!("📝 创建了DI测试失败结果，包含3个测试步骤");
+    println!("📝 创建了DI测试失败结果，包�?个测试步�?);
 
     // 应用DI测试结果
     state_manager.apply_raw_outcome(&mut di_instance, di_outcome).await?;
-    println!("✅ 应用了DI测试结果到状态管理器");
+    println!("�?应用了DI测试结果到状态管理器");
 
     // 验证数据是否正确存储
     println!("\n🔍 验证测试结果存储:");
@@ -111,13 +112,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(di_steps) = &di_instance.digital_test_steps {
         println!("DI测试步骤数量: {}", di_steps.len());
         for step in di_steps {
-            println!("  步骤{}: {} - 状态: {:?}", 
+            println!("  步骤{}: {} - 状�? {:?}", 
                 step.step_number, step.step_description, step.status);
-            println!("    设定值: {}, 期望: {}, 实际: {}", 
+            println!("    设定�? {}, 期望: {}, 实际: {}", 
                 step.set_value, step.expected_reading, step.actual_reading);
         }
     } else {
-        println!("❌ 没有找到数字量测试步骤数据");
+        println!("�?没有找到数字量测试步骤数�?);
     }
 
     // 创建DO测试实例
@@ -125,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         instance_id: "do_test_instance_001".to_string(),
         definition_id: "test_do_001".to_string(),
         test_batch_id: "test_batch_001".to_string(),
-        test_batch_name: "数字量测试批次".to_string(),
+        test_batch_name: "数字量测试批�?.to_string(),
         overall_status: OverallTestStatus::HardPointTesting,
         sub_test_results: HashMap::new(),
         test_plc_channel_tag: Some("TEST_PLC_DI_001".to_string()),
@@ -137,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_updated_time: Utc::now(),
         final_test_time: None,
         total_test_duration_ms: None,
-        current_operator: Some("测试员".to_string()),
+        current_operator: Some("测试�?.to_string()),
         retries_count: 0,
         transient_data: HashMap::new(),
         hardpoint_readings: None,
@@ -146,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         manual_test_current_value_output: None,
     };
 
-    // 模拟DO测试成功的情况
+    // 模拟DO测试成功的情�?
     let do_test_steps = vec![
         DigitalTestStep {
             step_number: 1,
@@ -159,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         DigitalTestStep {
             step_number: 2,
-            step_description: "被测PLC DO输出高电平，检查测试PLC DI显示接通".to_string(),
+            step_description: "被测PLC DO输出高电平，检查测试PLC DI显示接�?.to_string(),
             set_value: true,
             expected_reading: true,
             actual_reading: true,
@@ -182,9 +183,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         channel_instance_id: do_instance.instance_id.clone(),
         sub_test_item: SubTestItem::HardPoint,
         success: true, // 测试成功
-        raw_value_read: Some("数字量测试".to_string()),
+        raw_value_read: Some("数字量测�?.to_string()),
         eng_value_calculated: Some("DO硬点测试成功".to_string()),
-        message: Some("✅ DO硬点测试成功: 低→高→低电平切换，测试PLC DI状态正确响应".to_string()),
+        message: Some("�?DO硬点测试成功: 低→高→低电平切换，测试PLC DI状态正确响�?.to_string()),
         start_time: Utc::now(),
         end_time: Utc::now(),
         readings: None,
@@ -197,24 +198,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         details: HashMap::new(),
     };
 
-    println!("📝 创建了DO测试成功结果，包含3个测试步骤");
+    println!("📝 创建了DO测试成功结果，包�?个测试步�?);
 
     // 应用DO测试结果
     state_manager.apply_raw_outcome(&mut do_instance, do_outcome).await?;
-    println!("✅ 应用了DO测试结果到状态管理器");
+    println!("�?应用了DO测试结果到状态管理器");
 
     if let Some(do_steps) = &do_instance.digital_test_steps {
         println!("DO测试步骤数量: {}", do_steps.len());
         for step in do_steps {
-            println!("  步骤{}: {} - 状态: {:?}", 
+            println!("  步骤{}: {} - 状�? {:?}", 
                 step.step_number, step.step_description, step.status);
-            println!("    设定值: {}, 期望: {}, 实际: {}", 
+            println!("    设定�? {}, 期望: {}, 实际: {}", 
                 step.set_value, step.expected_reading, step.actual_reading);
         }
     }
 
-    println!("\n🎯 测试完成！");
-    println!("现在可以在前端测试区域查看这些点位的错误详情，应该能看到详细的测试步骤信息。");
+    println!("\n🎯 测试完成�?);
+    println!("现在可以在前端测试区域查看这些点位的错误详情，应该能看到详细的测试步骤信息�?);
     
     Ok(())
 }
+

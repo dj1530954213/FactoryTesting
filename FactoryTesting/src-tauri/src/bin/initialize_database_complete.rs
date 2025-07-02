@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
 use std::path::PathBuf;
 
@@ -7,12 +8,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let db_path = PathBuf::from("./factory_testing_data.sqlite");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
-    println!("📁 数据库路径: {}", db_url);
+    println!("📁 数据库路�? {}", db_url);
     
     let db = Database::connect(&db_url).await?;
     
-    // 删除现有表
-    println!("🗑️ 删除现有通道定义表...");
+    // 删除现有�?
+    println!("🗑�?删除现有通道定义�?..");
     let drop_table_sql = "DROP TABLE IF EXISTS channel_point_definitions";
     db.execute(Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
@@ -20,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )).await?;
 
     // 创建通道定义表，完全匹配点表结构
-    println!("🔧 创建通道定义表（完全匹配点表结构）...");
+    println!("🔧 创建通道定义表（完全匹配点表结构�?..");
     let create_channel_definitions_sql = r#"
         CREATE TABLE channel_point_definitions (
             id TEXT PRIMARY KEY,
@@ -104,8 +105,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_channel_definitions_sql.to_string(),
     )).await?;
     
-    // 创建批次信息表
-    println!("🔧 创建批次信息表...");
+    // 创建批次信息�?
+    println!("🔧 创建批次信息�?..");
     let create_batch_info_sql = r#"
         CREATE TABLE IF NOT EXISTS test_batch_info (
             batch_id TEXT PRIMARY KEY,
@@ -123,8 +124,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_batch_info_sql.to_string(),
     )).await?;
     
-    // 创建测试实例表
-    println!("🔧 创建测试实例表...");
+    // 创建测试实例�?
+    println!("🔧 创建测试实例�?..");
     let create_test_instances_sql = r#"
         CREATE TABLE IF NOT EXISTS channel_test_instances (
             instance_id TEXT PRIMARY KEY,
@@ -144,8 +145,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_test_instances_sql.to_string(),
     )).await?;
     
-    // 创建测试PLC配置表
-    println!("🔧 创建测试PLC配置表...");
+    // 创建测试PLC配置�?
+    println!("🔧 创建测试PLC配置�?..");
     let create_test_plc_channels_sql = r#"
         CREATE TABLE IF NOT EXISTS test_plc_channels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,10 +183,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_plc_connections_sql.to_string(),
     )).await?;
     
-    println!("✅ 数据库表结构创建完成！");
+    println!("�?数据库表结构创建完成�?);
     
-    // 验证表结构
-    println!("🔍 验证表结构...");
+    // 验证表结�?
+    println!("🔍 验证表结�?..");
     let tables = vec![
         "channel_point_definitions",
         "test_batch_info", 
@@ -201,12 +202,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )).await;
         
         match result {
-            Ok(_) => println!("✅ 表 {} 创建成功", table),
-            Err(e) => println!("❌ 表 {} 创建失败: {}", table, e),
+            Ok(_) => println!("�?�?{} 创建成功", table),
+            Err(e) => println!("�?�?{} 创建失败: {}", table, e),
         }
     }
     
-    println!("🎉 数据库完整初始化完成！");
+    println!("🎉 数据库完整初始化完成�?);
     
     Ok(())
 }
+

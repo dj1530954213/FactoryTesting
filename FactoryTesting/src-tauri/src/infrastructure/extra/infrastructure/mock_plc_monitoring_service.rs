@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
@@ -15,7 +16,7 @@ use crate::utils::error::AppResult;
 /// Mock PLC监控服务
 /// 用于开发和测试阶段，提供模拟的PLC监控功能
 pub struct MockPlcMonitoringService {
-    /// 活跃的监控任务
+    /// 活跃的监控任�?
     active_monitors: Arc<Mutex<HashMap<String, String>>>,
 }
 
@@ -42,7 +43,7 @@ impl BaseService for MockPlcMonitoringService {
     async fn shutdown(&mut self) -> AppResult<()> {
         log::info!("🔧 [MOCK_PLC_MONITORING] 关闭Mock PLC监控服务");
         
-        // 清理所有监控任务
+        // 清理所有监控任�?
         let mut monitors = self.active_monitors.lock().await;
         monitors.clear();
         
@@ -63,19 +64,19 @@ pub trait IPlcMonitoringService: BaseService {
     /// 停止PLC监控
     async fn stop_monitoring(&self, request: StopPlcMonitoringRequest) -> AppResult<()>;
     
-    /// 检查是否正在监控指定实例
+    /// 检查是否正在监控指定实�?
     fn is_monitoring(&self, instance_id: &str) -> bool;
     
-    /// 获取当前监控的实例列表
+    /// 获取当前监控的实例列�?
     fn get_monitoring_instances(&self) -> Vec<String>;
 }
 
 #[async_trait]
 impl IPlcMonitoringService for MockPlcMonitoringService {
     async fn start_monitoring(&self, request: StartPlcMonitoringRequest) -> AppResult<StartPlcMonitoringResponse> {
-        log::info!("🔧 [MOCK_PLC_MONITORING] 开始监控: {:?}", request);
+        log::info!("🔧 [MOCK_PLC_MONITORING] 开始监�? {:?}", request);
         
-        // 检查是否已在监控
+        // 检查是否已在监�?
         if self.is_monitoring(&request.instance_id) {
             return Ok(StartPlcMonitoringResponse {
                 success: false,
@@ -91,7 +92,7 @@ impl IPlcMonitoringService for MockPlcMonitoringService {
         let mut monitors = self.active_monitors.lock().await;
         monitors.insert(request.instance_id.clone(), monitoring_id.clone());
         
-        // 启动模拟监控任务（在实际实现中这里会启动真实的PLC读取任务）
+        // 启动模拟监控任务（在实际实现中这里会启动真实的PLC读取任务�?
         let instance_id = request.instance_id.clone();
         let addresses = request.monitoring_addresses.clone();
         let module_type = request.module_type.clone();
@@ -151,7 +152,7 @@ impl IPlcMonitoringService for MockPlcMonitoringService {
         
         Ok(StartPlcMonitoringResponse {
             success: true,
-            message: Some("监控已启动".to_string()),
+            message: Some("监控已启�?.to_string()),
             monitoring_id: Some(monitoring_id),
         })
     }
@@ -161,9 +162,9 @@ impl IPlcMonitoringService for MockPlcMonitoringService {
         
         let mut monitors = self.active_monitors.lock().await;
         if let Some(_monitoring_id) = monitors.remove(&request.instance_id) {
-            log::info!("✅ [MOCK_PLC_MONITORING] 监控已停止: {}", request.instance_id);
+            log::info!("�?[MOCK_PLC_MONITORING] 监控已停�? {}", request.instance_id);
         } else {
-            log::warn!("⚠️ [MOCK_PLC_MONITORING] 未找到监控任务: {}", request.instance_id);
+            log::warn!("⚠️ [MOCK_PLC_MONITORING] 未找到监控任�? {}", request.instance_id);
         }
         
         Ok(())
@@ -186,3 +187,4 @@ impl IPlcMonitoringService for MockPlcMonitoringService {
         }
     }
 }
+

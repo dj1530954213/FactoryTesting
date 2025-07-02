@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 /// Mock PLC服务实现
 /// 用于测试和开发环境的PLC通信模拟
 
@@ -14,13 +15,13 @@ use super::plc_communication_service::{
 };
 
 /// Mock PLC服务
-/// 模拟PLC通信行为，用于测试和开发
+/// 模拟PLC通信行为，用于测试和开�?
 pub struct MockPlcService {
     /// 服务名称
     name: String,
-    /// 连接状态
+    /// 连接状�?
     connection_status: PlcConnectionStatus,
-    /// 预设的读取值
+    /// 预设的读取�?
     preset_values: Arc<Mutex<HashMap<String, Value>>>,
     /// 写入历史记录
     write_history: Arc<Mutex<Vec<(String, Value)>>>,
@@ -41,9 +42,9 @@ impl MockPlcService {
         }
     }
 
-    /// 预设读取值
+    /// 预设读取�?
     pub fn preset_read_value(&self, address: &str, value: Value) {
-        log::info!("🔧 [MOCK_PLC] 预设读取值: {} -> {:?}", address, value);
+        log::info!("🔧 [MOCK_PLC] 预设读取�? {} -> {:?}", address, value);
         let mut values = self.preset_values.lock().unwrap();
         values.insert(address.to_string(), value);
     }
@@ -67,7 +68,7 @@ impl MockPlcService {
         history.push((address.to_string(), value));
     }
 
-    /// 获取预设值
+    /// 获取预设�?
     fn get_preset_value(&self, address: &str) -> Option<Value> {
         let values = self.preset_values.lock().unwrap();
         values.get(address).cloned()
@@ -125,19 +126,19 @@ impl PlcCommunicationService for MockPlcService {
         if let Some(value) = self.get_preset_value(address) {
             match value {
                 Value::Bool(b) => {
-                    log::info!("✅ [MOCK_PLC_READ_BOOL] 地址: {}, 值: {}", address, b);
+                    log::info!("�?[MOCK_PLC_READ_BOOL] 地址: {}, �? {}", address, b);
                     Ok(b)
                 },
                 _ => {
-                    log::error!("❌ [MOCK_PLC_READ_BOOL] 地址: {}, 类型错误: {:?}", address, value);
+                    log::error!("�?[MOCK_PLC_READ_BOOL] 地址: {}, 类型错误: {:?}", address, value);
                     Err(AppError::PlcCommunicationError { 
-                        message: format!("地址 {} 的预设值不是布尔类型", address) 
+                        message: format!("地址 {} 的预设值不是布尔类�?, address) 
                     })
                 }
             }
         } else {
             // 默认返回false
-            log::info!("🔍 [MOCK_PLC_READ_BOOL] 地址: {}, 使用默认值: false", address);
+            log::info!("🔍 [MOCK_PLC_READ_BOOL] 地址: {}, 使用默认�? false", address);
             Ok(false)
         }
     }
@@ -147,7 +148,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_i64().unwrap_or(0) as i8),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -160,7 +161,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_u64().unwrap_or(0) as u8),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -173,7 +174,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_i64().unwrap_or(0) as i16),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -186,7 +187,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_u64().unwrap_or(0) as u16),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -199,7 +200,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_i64().unwrap_or(0) as i32),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -212,7 +213,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_u64().unwrap_or(0) as u32),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -225,7 +226,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_i64().unwrap_or(0)),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -238,7 +239,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_u64().unwrap_or(0)),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -253,18 +254,18 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => {
                     let f_val = n.as_f64().unwrap_or(0.0) as f32;
-                    log::info!("✅ [MOCK_PLC_READ_F32] 地址: {}, 值: {}", address, f_val);
+                    log::info!("�?[MOCK_PLC_READ_F32] 地址: {}, �? {}", address, f_val);
                     Ok(f_val)
                 },
                 _ => {
-                    log::error!("❌ [MOCK_PLC_READ_F32] 地址: {}, 类型错误: {:?}", address, value);
+                    log::error!("�?[MOCK_PLC_READ_F32] 地址: {}, 类型错误: {:?}", address, value);
                     Err(AppError::PlcCommunicationError { 
-                        message: format!("地址 {} 的预设值不是数字类型", address) 
+                        message: format!("地址 {} 的预设值不是数字类�?, address) 
                     })
                 }
             }
         } else {
-            log::info!("🔍 [MOCK_PLC_READ_F32] 地址: {}, 使用默认值: 0.0", address);
+            log::info!("🔍 [MOCK_PLC_READ_F32] 地址: {}, 使用默认�? 0.0", address);
             Ok(0.0)
         }
     }
@@ -274,7 +275,7 @@ impl PlcCommunicationService for MockPlcService {
             match value {
                 Value::Number(n) => Ok(n.as_f64().unwrap_or(0.0)),
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数字类型", address) 
+                    message: format!("地址 {} 的预设值不是数字类�?, address) 
                 })
             }
         } else {
@@ -308,7 +309,7 @@ impl PlcCommunicationService for MockPlcService {
                     Ok(bytes)
                 },
                 _ => Err(AppError::PlcCommunicationError { 
-                    message: format!("地址 {} 的预设值不是数组类型", address) 
+                    message: format!("地址 {} 的预设值不是数组类�?, address) 
                 })
             }
         } else {
@@ -318,9 +319,9 @@ impl PlcCommunicationService for MockPlcService {
 
     // 基础数据类型写入方法
     async fn write_bool_impl(&self, address: &str, value: bool) -> AppResult<()> {
-        log::info!("📝 [MOCK_PLC_WRITE_BOOL] 地址: {}, 值: {}", address, value);
+        log::info!("📝 [MOCK_PLC_WRITE_BOOL] 地址: {}, �? {}", address, value);
         self.record_write(address, Value::Bool(value));
-        log::info!("✅ [MOCK_PLC_WRITE_BOOL] 地址: {}, 值: {} - 写入成功", address, value);
+        log::info!("�?[MOCK_PLC_WRITE_BOOL] 地址: {}, �? {} - 写入成功", address, value);
         Ok(())
     }
 
@@ -365,9 +366,9 @@ impl PlcCommunicationService for MockPlcService {
     }
 
     async fn write_float32_impl(&self, address: &str, value: f32) -> AppResult<()> {
-        log::info!("📝 [MOCK_PLC_WRITE_F32] 地址: {}, 值: {}", address, value);
+        log::info!("📝 [MOCK_PLC_WRITE_F32] 地址: {}, �? {}", address, value);
         self.record_write(address, Value::Number(serde_json::Number::from_f64(value as f64).unwrap()));
-        log::info!("✅ [MOCK_PLC_WRITE_F32] 地址: {}, 值: {} - 写入成功", address, value);
+        log::info!("�?[MOCK_PLC_WRITE_F32] 地址: {}, �? {} - 写入成功", address, value);
         Ok(())
     }
 
@@ -462,3 +463,4 @@ impl PlcCommunicationService for MockPlcService {
         Ok(info)
     }
 }
+

@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
 
 #[tokio::main]

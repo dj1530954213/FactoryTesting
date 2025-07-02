@@ -1,4 +1,5 @@
-// 使用真实的88个被测PLC点位数据测试分配算法
+#![cfg(FALSE)]
+// 使用真实�?8个被测PLC点位数据测试分配算法
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::services::domain::{TestPlcConfigService, ITestPlcConfigService};
 use app_lib::services::channel_allocation_service::{ChannelAllocationService, IChannelAllocationService};
@@ -11,12 +12,12 @@ use std::fs;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
+    // 初始化日�?
     env_logger::init();
 
     println!("=== 使用真实88个被测PLC点位数据测试分配算法 ===");
 
-    // 初始化服务
+    // 初始化服�?
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
     let persistence_config = PersistenceConfig {
         storage_root_dir: PathBuf::from("data"),
@@ -41,16 +42,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let test_plc_channels = test_plc_config_service.get_test_plc_channels(request).await?;
-    println!("从数据库获取到 {} 个测试PLC通道配置", test_plc_channels.len());
+    println!("从数据库获取�?{} 个测试PLC通道配置", test_plc_channels.len());
 
     // 创建测试PLC配置
     let test_plc_config = create_test_plc_config_from_channels(test_plc_channels);
 
     // 从真实的测试IO.txt文件读取88个被测PLC点位数据
     let real_channel_definitions = load_real_channel_definitions_from_file()?;
-    println!("从测试IO.txt文件加载了 {} 个真实被测PLC点位定义", real_channel_definitions.len());
+    println!("从测试IO.txt文件加载�?{} 个真实被测PLC点位定义", real_channel_definitions.len());
 
-    // 统计真实数据的类型分布
+    // 统计真实数据的类型分�?
     let mut ai_powered = 0;
     let mut ai_unpowered = 0;
     let mut ao_powered = 0;
@@ -80,18 +81,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n=== 真实数据类型统计 ===");
-    println!("AI有源: {} 个", ai_powered);
-    println!("AI无源: {} 个", ai_unpowered);
-    println!("AO有源: {} 个", ao_powered);
-    println!("AO无源: {} 个", ao_unpowered);
-    println!("DI有源: {} 个", di_powered);
-    println!("DI无源: {} 个", di_unpowered);
-    println!("DO有源: {} 个", do_powered);
-    println!("DO无源: {} 个", do_unpowered);
-    println!("总计: {} 个", real_channel_definitions.len());
+    println!("AI有源: {} �?, ai_powered);
+    println!("AI无源: {} �?, ai_unpowered);
+    println!("AO有源: {} �?, ao_powered);
+    println!("AO无源: {} �?, ao_unpowered);
+    println!("DI有源: {} �?, di_powered);
+    println!("DI无源: {} �?, di_unpowered);
+    println!("DO有源: {} �?, do_powered);
+    println!("DO无源: {} �?, do_unpowered);
+    println!("总计: {} �?, real_channel_definitions.len());
 
     // 执行分配
-    println!("\n=== 开始执行真实数据分配测试 ===");
+    println!("\n=== 开始执行真实数据分配测�?===");
     let allocation_result = allocation_service.allocate_channels(
         real_channel_definitions,
         test_plc_config,
@@ -100,8 +101,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).await?;
 
     println!("分配结果:");
-    println!("  生成批次数: {} 个", allocation_result.batches.len());
-    println!("  分配实例数: {} 个", allocation_result.allocated_instances.len());
+    println!("  生成批次�? {} �?, allocation_result.batches.len());
+    println!("  分配实例�? {} �?, allocation_result.allocated_instances.len());
 
     // 详细分析每个批次
     println!("\n=== 详细批次分析 ===");
@@ -147,10 +148,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                      j + 1,
                      instance.definition_id,
                      channel_type,
-                     instance.test_plc_channel_tag.as_ref().unwrap_or(&"未分配".to_string()));
+                     instance.test_plc_channel_tag.as_ref().unwrap_or(&"未分�?.to_string()));
         }
         if batch_instances.len() > 10 {
-            println!("    ... 还有 {} 个实例", batch_instances.len() - 10);
+            println!("    ... 还有 {} 个实�?, batch_instances.len() - 10);
         }
         println!();
     }
@@ -161,13 +162,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if unallocated_count > 0 {
         println!("=== 未分配的通道 ===");
-        println!("  未分配数量: {} 个", unallocated_count);
+        println!("  未分配数�? {} �?, unallocated_count);
     }
 
-    // 与正确分配结果对比
-    println!("\n=== 与正确分配结果对比 ===");
-    println!("期望结果: 批次1(59个) + 批次2(29个) = 88个");
-    println!("实际结果: {} 个批次，共 {} 个实例",
+    // 与正确分配结果对�?
+    println!("\n=== 与正确分配结果对�?===");
+    println!("期望结果: 批次1(59�? + 批次2(29�? = 88�?);
+    println!("实际结果: {} 个批次，�?{} 个实�?,
              allocation_result.batches.len(),
              allocation_result.allocated_instances.len());
 
@@ -183,7 +184,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                  batch1_count, batch2_count, batch1_count + batch2_count);
 
         if batch1_count == 59 && batch2_count == 29 {
-            println!("🎉 完美匹配！分配结果与期望的59+29完全一致！");
+            println!("🎉 完美匹配！分配结果与期望�?9+29完全一致！");
         } else {
             println!("⚠️  分配结果与期望不完全一致，但分批逻辑正确");
         }
@@ -196,20 +197,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// 从测试IO.txt文件加载真实的88个被测PLC点位定义
+/// 从测试IO.txt文件加载真实�?8个被测PLC点位定义
 fn load_real_channel_definitions_from_file() -> Result<Vec<ChannelPointDefinition>, Box<dyn std::error::Error>> {
     let file_content = fs::read_to_string("../../测试文件/测试IO.txt")?;
     let mut definitions = Vec::new();
 
     for (line_num, line) in file_content.lines().enumerate() {
-        // 跳过标题行
+        // 跳过标题�?
         if line_num == 0 {
             continue;
         }
 
         let fields: Vec<&str> = line.split(',').collect();
         if fields.len() < 10 {
-            continue; // 跳过格式不正确的行
+            continue; // 跳过格式不正确的�?
         }
 
         // 解析字段
@@ -250,7 +251,7 @@ fn load_real_channel_definitions_from_file() -> Result<Vec<ChannelPointDefinitio
             power_type_str.to_string(),
         );
 
-        // 设置ID和其他字段
+        // 设置ID和其他字�?
         definition.id = format!("real_{}_{}", module_type_str.to_lowercase(), line_num);
         definition.wire_system = fields.get(4).unwrap_or(&"").to_string();
 
@@ -260,14 +261,14 @@ fn load_real_channel_definitions_from_file() -> Result<Vec<ChannelPointDefinitio
     Ok(definitions)
 }
 
-// 从测试PLC通道创建配置的辅助函数
+// 从测试PLC通道创建配置的辅助函�?
 use app_lib::models::test_plc_config::{TestPlcChannelType};
 
 fn create_test_plc_config_from_channels(test_plc_channels: Vec<app_lib::models::test_plc_config::TestPlcChannelConfig>) -> TestPlcConfig {
     let mut comparison_tables = Vec::new();
 
     for channel in test_plc_channels {
-        // 根据channel_type枚举值判断是否有源
+        // 根据channel_type枚举值判断是否有�?
         let is_powered = match channel.channel_type {
             TestPlcChannelType::AI | TestPlcChannelType::AO |
             TestPlcChannelType::DI | TestPlcChannelType::DO => true,
@@ -303,3 +304,4 @@ fn convert_test_plc_channel_type_to_module_type(channel_type: &TestPlcChannelTyp
         TestPlcChannelType::DONone => ModuleType::DO,
     }
 }
+

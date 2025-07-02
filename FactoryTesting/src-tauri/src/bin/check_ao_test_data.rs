@@ -1,3 +1,4 @@
+#![cfg(FALSE)]
 use app_lib::services::infrastructure::persistence::{SqliteOrmPersistenceService, PersistenceConfig};
 use app_lib::services::traits::PersistenceService;
 use app_lib::models::ModuleType;
@@ -8,7 +9,7 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     
-    println!("=== 检查数据库中AO点位的测试数据 ===");
+    println!("=== 检查数据库中AO点位的测试数�?===");
     
     // 初始化持久化服务
     let db_path = PathBuf::from("data/factory_testing_data.sqlite");
@@ -39,12 +40,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             i + 1, def.id, def.tag, def.module_type);
     }
     
-    // 获取所有测试实例
+    // 获取所有测试实�?
     println!("\n📊 检查测试实例中的AO点位:");
     let all_instances = persistence_service.load_all_test_instances().await?;
     let ao_instances: Vec<_> = all_instances.iter()
         .filter(|instance| {
-            // 通过definition_id查找对应的定义
+            // 通过definition_id查找对应的定�?
             ao_definitions.iter().any(|def| def.id == instance.definition_id)
         })
         .collect();
@@ -53,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (i, instance) in ao_instances.iter().enumerate() {
         println!("   {}. 实例ID: {}", i + 1, instance.instance_id);
         println!("      定义ID: {}", instance.definition_id);
-        println!("      整体状态: {:?}", instance.overall_status);
+        println!("      整体状�? {:?}", instance.overall_status);
         
         // 检查百分比测试结果
         let has_percentage_data = instance.transient_data.get("test_result_0_percent").is_some() ||
@@ -63,33 +64,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                  instance.transient_data.get("test_result_100_percent").is_some();
         
         if has_percentage_data {
-            println!("      ✅ 有百分比测试结果:");
+            println!("      �?有百分比测试结果:");
             println!("         0%: {:?}", instance.transient_data.get("test_result_0_percent"));
             println!("         25%: {:?}", instance.transient_data.get("test_result_25_percent"));
             println!("         50%: {:?}", instance.transient_data.get("test_result_50_percent"));
             println!("         75%: {:?}", instance.transient_data.get("test_result_75_percent"));
             println!("         100%: {:?}", instance.transient_data.get("test_result_100_percent"));
         } else {
-            println!("      ❌ 没有百分比测试结果");
+            println!("      �?没有百分比测试结�?);
         }
         
-        // 检查硬点读数
+        // 检查硬点读�?
         if let Some(readings) = &instance.hardpoint_readings {
-            println!("      ✅ 有硬点读数数据 ({} 个读数)", readings.len());
+            println!("      �?有硬点读数数�?({} 个读�?", readings.len());
             for reading in readings.iter() {
-                println!("         {}%: 设定={:.3}, 实际工程量={:.3}", 
+                println!("         {}%: 设定={:.3}, 实际工程�?{:.3}", 
                     reading.set_percentage, 
                     reading.set_value_eng,
                     reading.actual_reading_eng.unwrap_or(0.0));
             }
         } else {
-            println!("      ❌ 没有硬点读数数据");
+            println!("      �?没有硬点读数数据");
         }
         
         println!();
     }
     
-    // 检查原始测试结果
+    // 检查原始测试结�?
     println!("\n📈 检查原始测试结果中的AO点位:");
     let mut all_outcomes = Vec::new();
 
@@ -100,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 all_outcomes.extend(outcomes);
             }
             Err(e) => {
-                println!("   ⚠️ 获取实例 {} 的测试结果失败: {}", instance.instance_id, e);
+                println!("   ⚠️ 获取实例 {} 的测试结果失�? {}", instance.instance_id, e);
             }
         }
     }
@@ -122,27 +123,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                  outcome.test_result_100_percent.is_some();
         
         if has_percentage_data {
-            println!("      ✅ 有百分比测试结果:");
+            println!("      �?有百分比测试结果:");
             println!("         0%: {:?}", outcome.test_result_0_percent);
             println!("         25%: {:?}", outcome.test_result_25_percent);
             println!("         50%: {:?}", outcome.test_result_50_percent);
             println!("         75%: {:?}", outcome.test_result_75_percent);
             println!("         100%: {:?}", outcome.test_result_100_percent);
         } else {
-            println!("      ❌ 没有百分比测试结果");
+            println!("      �?没有百分比测试结�?);
         }
         
         // 检查readings数据
         if let Some(readings) = &outcome.readings {
-            println!("      ✅ 有readings数据 ({} 个读数)", readings.len());
+            println!("      �?有readings数据 ({} 个读�?", readings.len());
             for reading in readings.iter() {
-                println!("         {}%: 设定={:.3}, 实际工程量={:.3}", 
+                println!("         {}%: 设定={:.3}, 实际工程�?{:.3}", 
                     reading.set_percentage, 
                     reading.set_value_eng,
                     reading.actual_reading_eng.unwrap_or(0.0));
             }
         } else {
-            println!("      ❌ 没有readings数据");
+            println!("      �?没有readings数据");
         }
         
         println!();
@@ -166,10 +167,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("有百分比测试结果的AO原始结果数量: {}", outcomes_with_data);
     
     if instances_with_data == 0 && outcomes_with_data == 0 {
-        println!("❌ 发现问题：AO点位没有百分比测试结果数据！");
+        println!("�?发现问题：AO点位没有百分比测试结果数据！");
     } else {
-        println!("✅ AO点位有百分比测试结果数据");
+        println!("�?AO点位有百分比测试结果数据");
     }
     
     Ok(())
 }
+
