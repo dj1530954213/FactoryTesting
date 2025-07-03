@@ -13,7 +13,7 @@ use crate::domain::services::TestResult;
 /// 这是系统中唯一允许修改 ChannelTestInstance 状态的组件
 /// 符合 FAT-CSM-001 规则：状态管理唯一入口
 // removed duplicate trait definition
-#[cfg(FALSE)]
+#[cfg(any())]
 pub trait IChannelStateManager: BaseService {
     /// 应用原始测试结果到实例状态
     /// 

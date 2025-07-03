@@ -2,7 +2,7 @@
 ///
 /// 用于发布系统事件到前端或其他订阅者
 use async_trait::async_trait;
-use crate::services::traits::{EventPublisher, BaseService};
+use crate::domain::services::{EventPublisher, BaseService};
 use crate::models::structs::RawTestOutcome;
 use crate::models::enums::OverallTestStatus;
 use crate::error::AppError;
@@ -128,7 +128,7 @@ impl EventPublisher for SimpleEventPublisher {
     }
 
     /// 发布批次状态变化事件
-    async fn publish_batch_status_changed(&self, batch_id: &str, statistics: &crate::services::traits::BatchStatistics) -> AppResult<()> {
+    async fn publish_batch_status_changed(&self, batch_id: &str, statistics: &crate::domain::services::BatchStatistics) -> AppResult<()> {
         // 🔧 移除 [EventPublisher] 日志
 
         // 判断批次状态

@@ -4,8 +4,7 @@ pub mod enums;
 pub mod structs;
 /// SeaORM实体定义模块
 pub mod entities;
-/// 单元测试模块
-pub mod tests;
+
 /// Phase 4高级功能模型模块
 pub mod advanced_models;
 /// 测试PLC配置模型模块

@@ -7,8 +7,8 @@ use chrono::Utc;
 use log::{info, debug, warn};
 
 use crate::models::test_plc_config::*;
-use crate::services::traits::BaseService;
-use crate::services::infrastructure::IPersistenceService;
+use crate::domain::services::BaseService;
+use crate::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use crate::domain::services::plc_communication_service::{IPlcCommunicationService, PlcConnectionConfig as DomainPlcConnectionConfig, PlcProtocol, ConnectionTestResult};
 
@@ -58,7 +58,7 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
     async fn initialize_default_test_plc_channels(&self) -> AppResult<()>;
     
     /// 获取测试PLC配置 (用于通道分配服务)
-    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig>;
+    async fn get_test_plc_config(&self) -> AppResult<crate::application::services::channel_allocation_service::TestPlcConfig>;
 }
 
 /// 测试PLC配置管理服务实现
@@ -531,7 +531,7 @@ impl ITestPlcConfigService for TestPlcConfigService {
         Ok(())
     }
 
-    async fn get_test_plc_config(&self) -> AppResult<crate::services::TestPlcConfig> {
+    async fn get_test_plc_config(&self) -> AppResult<crate::application::services::channel_allocation_service::TestPlcConfig> {
         debug!("获取测试PLC配置");
         
         // 获取所有测试PLC通道配置
@@ -564,7 +564,7 @@ impl ITestPlcConfigService for TestPlcConfigService {
                 crate::models::test_plc_config::TestPlcChannelType::DONone => crate::models::ModuleType::DO,
             };
             
-            comparison_tables.push(crate::services::ComparisonTable {
+            comparison_tables.push(crate::application::services::channel_allocation_service::ComparisonTable {
                 channel_address: channel.channel_address,
                 communication_address: channel.communication_address,
                 channel_type: module_type,
@@ -574,7 +574,7 @@ impl ITestPlcConfigService for TestPlcConfigService {
         
         debug!("转换完成：{} 个通道映射表", comparison_tables.len());
         
-        Ok(crate::services::TestPlcConfig {
+        Ok(crate::application::services::channel_allocation_service::TestPlcConfig {
             brand_type: format!("{:?}", test_plc_connection.plc_type),
             ip_address: test_plc_connection.ip_address.clone(),
             comparison_tables,
@@ -982,8 +982,8 @@ impl TestPlcConfigService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::infrastructure::persistence::SqliteOrmPersistenceService;
-    use crate::services::infrastructure::persistence::persistence_service::PersistenceConfig;
+    use crate::infrastructure::persistence::SqliteOrmPersistenceService;
+    use crate::infrastructure::persistence::persistence_service::PersistenceConfig;
     use std::path::Path;
     use tokio;
 

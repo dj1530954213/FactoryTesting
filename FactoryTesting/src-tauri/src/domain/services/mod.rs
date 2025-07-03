@@ -20,6 +20,24 @@ pub use plc_communication_service::*;
 pub use batch_allocation_service::*;
 pub use event_publisher::*;
 pub use persistence_service::*;
+
+// ---------------------------------------------------------------------------
+// 兼容旧路径 / 命名的重新导出（Backward-compatibility Aliases）
+// 在 Phase 3 清理时可删除。
+// ---------------------------------------------------------------------------
+// 将具体实现结构体重新导出到 `services` 命名空间
+pub use crate::domain::impls::{
+    ChannelStateManager,
+    TestExecutionEngine,
+    TestPlcConfigService,
+    PlcConnectionManager,
+};
+// 为旧的不带 `I` 前缀的 trait 名称提供别名
+pub use event_publisher::IEventPublisher as EventPublisher;
+pub use persistence_service::IPersistenceService as PersistenceService;
+// 将 ITestPlcConfigService 重新导出到 services 命名空间
+pub use crate::domain::impls::test_plc_config_service::ITestPlcConfigService;
+
 // Re-export enums for easy access within domain services
 pub use crate::models::enums::*;
 

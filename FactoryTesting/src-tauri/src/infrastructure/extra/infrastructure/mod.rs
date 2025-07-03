@@ -26,7 +26,7 @@ pub mod excel_export_service;
 
 // 重新导出PLC相关接口和实现
 pub use plc::{
-    PlcCommunicationService as IPlcCommunicationService,
+    // PlcCommunicationService as IPlcCommunicationService, // 已在 crate::infrastructure::plc_communication 中导出，避免名称冲突
     PlcTag,
     PlcDataType,
     PlcConnectionStatus,

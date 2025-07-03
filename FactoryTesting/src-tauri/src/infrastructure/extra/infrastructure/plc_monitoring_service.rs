@@ -11,11 +11,11 @@ use crate::models::structs::{
     StopPlcMonitoringRequest,
     PlcMonitoringData,
 };
-use crate::services::traits::BaseService;
+use crate::domain::services::BaseService;
 use crate::utils::error::AppResult;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::infrastructure::plc_compat::PlcServiceLegacyExt;
-use crate::services::traits::EventPublisher;
+use crate::domain::services::EventPublisher;
 
 /// PLC监控服务接口
 /// 

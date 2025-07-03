@@ -5,8 +5,8 @@ use rust_xlsxwriter::{Workbook, Format, FormatAlign, FormatBorder, Color};
 
 use crate::models::{ChannelPointDefinition, ModuleType, ChannelTestInstance};
 use crate::utils::error::{AppResult, AppError};
-use crate::services::infrastructure::IPersistenceService;
-use crate::services::domain::IChannelStateManager;
+use crate::infrastructure::IPersistenceService;
+use crate::domain::services::IChannelStateManager;
 
 /// 颜色常量（柔和不刺眼）
 fn color_for_module(module_type: &ModuleType) -> Color {

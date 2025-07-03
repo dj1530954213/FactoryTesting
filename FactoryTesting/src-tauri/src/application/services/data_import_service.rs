@@ -6,7 +6,7 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait, QueryFilter, ColumnTrait, PaginatorTrait};
 use crate::models::entities::channel_point_definition::{Entity as ChannelPointDefinitionEntity, ActiveModel as ChannelPointDefinitionActiveModel};
 use crate::models::structs::ChannelPointDefinition;
-use crate::services::infrastructure::excel::ExcelImporter;
+use crate::infrastructure::excel::ExcelImporter;
 use crate::error::AppError;
 use log::{info, warn, error};
 

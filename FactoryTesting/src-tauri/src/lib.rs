@@ -1,7 +1,6 @@
 /// FAT_TEST 工厂测试系统 - Rust后端核心库
 pub mod models;//数据模型层
 pub mod utils;//工具类层
-pub mod services;//服务层
 pub mod tauri_commands;//Tauri命令器
 pub mod commands;//命令处理器
 pub mod error;//错误处理器
@@ -16,7 +15,6 @@ pub mod interfaces;//接口适配层
 // 重新导出常用类型，方便使用
 pub use models::*;
 pub use utils::{AppConfig};
-pub use services::*;
 pub use tauri_commands::{AppState, SystemStatus, init_app_state};
 pub use database_migration::DatabaseMigration;
 
@@ -130,7 +128,7 @@ pub fn run() {
                 let app_handle = app.handle();
 
                 // 设置全局AppHandle，用于事件发布
-                crate::services::infrastructure::event_publisher::set_global_app_handle(app_handle.clone());
+                crate::infrastructure::event_publisher::set_global_app_handle(app_handle.clone());
 
                 log::info!("Tauri应用启动完成，AppHandle已设置到事件发布器");
 

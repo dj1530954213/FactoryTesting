@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::utils::error::{AppError, AppResult};
-use crate::services::traits::BaseService;
+use crate::domain::services::BaseService;
 use crate::models::structs::AppSettings;
 
 /// 应用配置服务接口

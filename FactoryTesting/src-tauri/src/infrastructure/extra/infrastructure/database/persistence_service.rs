@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use crate::utils::error::AppResult;
-use crate::services::traits::{PersistenceService};
+use crate::domain::services::{PersistenceService};
 use crate::models::structs::*;
 
 /// 持久化服务配置
@@ -231,12 +231,12 @@ pub struct PersistenceServiceFactory;
 
 impl PersistenceServiceFactory {
     /// 创建JSON文件持久化服务
-    pub fn create_json_service(config: PersistenceConfig) -> crate::services::infrastructure::persistence::JsonPersistenceService {
-        crate::services::infrastructure::persistence::JsonPersistenceService::new(config)
+    pub fn create_json_service(config: PersistenceConfig) -> crate::infrastructure::persistence::JsonPersistenceService {
+        crate::infrastructure::persistence::JsonPersistenceService::new(config)
     }
     
     /// 创建默认的JSON文件持久化服务
-    pub fn create_default_json_service() -> crate::services::infrastructure::persistence::JsonPersistenceService {
+    pub fn create_default_json_service() -> crate::infrastructure::persistence::JsonPersistenceService {
         Self::create_json_service(PersistenceConfig::default())
     }
 }

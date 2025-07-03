@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::utils::error::AppResult;
-use crate::services::traits::BaseService;
+use crate::domain::services::BaseService;
 
 /// PLC标签信息结构
 /// 用于描述PLC中的一个数据点的完整信息

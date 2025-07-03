@@ -8,7 +8,7 @@ use log::{info, warn, error, debug};
 use serde::{Serialize, Deserialize};
 
 use crate::models::test_plc_config::PlcConnectionConfig;
-use crate::services::domain::test_plc_config_service::ITestPlcConfigService;
+use crate::domain::test_plc_config_service::ITestPlcConfigService;
 use crate::error::AppError;
 
 /// PLC连接状态

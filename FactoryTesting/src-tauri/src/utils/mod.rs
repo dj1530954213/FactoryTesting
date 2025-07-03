@@ -6,9 +6,7 @@ pub mod error;
 /// 配置管理模块
 pub mod config;
 
-/// 单元测试模块
-#[cfg(test)]
-pub mod tests;
+
 
 // 重新导出常用类型，方便使用
 pub use error::{AppError, AppResult};

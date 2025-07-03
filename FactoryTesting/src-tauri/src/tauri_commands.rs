@@ -7,27 +7,26 @@ use crate::models::{
     ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome,
     TestReport, ReportTemplate, ReportGenerationRequest, AppSettings
 };
-use crate::services::application::{
+use crate::application::services::{
     ITestCoordinationService, TestCoordinationService,
     TestExecutionRequest, TestExecutionResponse, TestProgressUpdate,
     IReportGenerationService, ReportGenerationService
 };
-use crate::services::domain::{
+use crate::domain::services::{
     IChannelStateManager, ChannelStateManager,
     ITestExecutionEngine, TestExecutionEngine,
     ITestPlcConfigService, TestPlcConfigService,
     PlcConnectionManager
 };
-use crate::services::infrastructure::{
+use crate::infrastructure::{
     IPersistenceService, SqliteOrmPersistenceService,
     excel::ExcelImporter,
     persistence::{AppSettingsService, JsonAppSettingsService, AppSettingsConfig},
     SimpleEventPublisher
 };
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
-use crate::services::{IChannelAllocationService, ChannelAllocationService};
+use crate::application::services::channel_allocation_service::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -53,7 +52,7 @@ pub struct AppState {
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
     pub plc_connection_manager: Arc<PlcConnectionManager>,
-    pub plc_monitoring_service: Arc<dyn crate::services::infrastructure::IPlcMonitoringService>,
+    pub plc_monitoring_service: Arc<dyn crate::infrastructure::IPlcMonitoringService>,
 
     // 会话管理：跟踪当前会话中创建的批次
     pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
@@ -72,7 +71,7 @@ impl AppState {
     /// 创建新的应用状态
     pub async fn new() -> AppResult<Self> {
         // 创建数据库配置
-        let config = crate::services::infrastructure::persistence::PersistenceConfig::default();
+        let config = crate::infrastructure::persistence::PersistenceConfig::default();
 
         // 创建持久化服务 - 使用实际的SQLite文件而不是内存数据库
         let db_file_path = config.storage_root_dir.join("factory_testing_data.sqlite");
@@ -146,10 +145,10 @@ impl AppState {
             target_plc_connection.ip_address, target_plc_connection.port);
 
         // 使用 PLC 连接配置中的字节顺序与地址基准构造 ModbusConfig
-        let test_rig_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(test_plc_connection)
+        let test_rig_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(test_plc_connection)
             .map_err(|e| e.to_string())?;
 
-        let target_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(target_plc_connection)
+        let target_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(target_plc_connection)
             .map_err(|e| e.to_string())?;
 
         let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
@@ -169,12 +168,12 @@ impl AppState {
         );
 
         // 创建事件发布器
-        let event_publisher: Arc<dyn crate::services::traits::EventPublisher> = Arc::new(
+        let event_publisher: Arc<dyn crate::domain::services::EventPublisher> = Arc::new(
             SimpleEventPublisher::new()
         );
 
         // 创建通道分配服务
-        let channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService> = Arc::new(
+        let channel_allocation_service: Arc<dyn crate::application::services::channel_allocation_service::IChannelAllocationService> = Arc::new(
             ChannelAllocationService::new()
         );
 
@@ -209,13 +208,13 @@ impl AppState {
         ));
 
         // 设置全局PLC连接管理器，让ModbusPlcService能够访问
-        crate::services::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
+        crate::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
 
         // 创建PLC监控服务 - 使用真实的PLC监控服务
-        let plc_monitoring_service: Arc<dyn crate::services::infrastructure::IPlcMonitoringService> = Arc::new(
-            crate::services::infrastructure::plc_monitoring_service::PlcMonitoringService::new(
+        let plc_monitoring_service: Arc<dyn crate::infrastructure::IPlcMonitoringService> = Arc::new(
+            crate::infrastructure::plc_monitoring_service::PlcMonitoringService::new(
                 plc_service_target.clone(),
-                Arc::new(crate::services::infrastructure::event_publisher::SimpleEventPublisher::new()),
+                Arc::new(crate::infrastructure::event_publisher::SimpleEventPublisher::new()),
             )
         );
 
@@ -873,7 +872,7 @@ pub async fn export_channel_allocation_cmd(
         if set.is_empty() { None } else { Some(set.into_iter().collect()) }
     };
 
-    let service = crate::services::infrastructure::excel_export_service::ExcelExportService::new(
+    let service = crate::infrastructure::excel_export_service::ExcelExportService::new(
         state.persistence_service.clone(),
         state.channel_state_manager.clone(),
     );

@@ -5,10 +5,10 @@
 use tauri::State;
 use serde::{Deserialize, Serialize};
 use crate::models::structs::{ChannelPointDefinition, TestBatchInfo};
-use crate::services::application::data_import_service::{DataImportService, ImportResult};
-use crate::services::application::batch_allocation_service::{BatchAllocationService, AllocationStrategy, AllocationResult as BatchAllocationResult};
-use crate::services::infrastructure::excel::ExcelImporter;
-use crate::services::channel_allocation_service::{ChannelAllocationService, IChannelAllocationService};
+use crate::application::services::data_import_service::{DataImportService, ImportResult};
+use crate::application::services::batch_allocation_service::{BatchAllocationService, AllocationStrategy, AllocationResult as BatchAllocationResult};
+use crate::infrastructure::excel::ExcelImporter;
+use crate::application::services::channel_allocation_service::{ChannelAllocationService, IChannelAllocationService};
 use crate::tauri_commands::AppState;
 use log::{info, error, warn, debug};
 use sea_orm::ActiveModelTrait;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 pub struct AllocationResult {
     pub batches: Vec<TestBatchInfo>,
     pub allocated_instances: Vec<crate::models::structs::ChannelTestInstance>,
-    pub allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary,
+    pub allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary,
     /// 🔧 修复：添加通道定义字段，用于保存到数据库
     pub channel_definitions: Option<Vec<ChannelPointDefinition>>,
 }
@@ -47,7 +47,7 @@ pub struct ExcelParseResponse {
     pub message: Option<String>,
     pub definitions: Vec<ChannelPointDefinition>,
     pub suggested_batch_info: Option<TestBatchInfo>,
-    pub allocation_summary: Option<crate::services::application::batch_allocation_service::AllocationSummary>,
+    pub allocation_summary: Option<crate::application::services::batch_allocation_service::AllocationSummary>,
 }
 
 /// 创建批次请求
@@ -411,7 +411,7 @@ pub struct ImportAndPrepareBatchResponse {
     pub batch_info: TestBatchInfo,
     pub instances: Vec<crate::models::ChannelTestInstance>,
     /// 分配摘要（包含各模块类型点位数量等统计信息）
-    pub allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary,
+    pub allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary,
 }
 
 /// 开始批次测试的参数
@@ -879,7 +879,7 @@ pub async fn import_excel_and_allocate_channels_cmd(
     Ok(AllocationResult {
         batches: Vec::new(), // 不创建批次
         allocated_instances: Vec::new(), // 不创建实例
-        allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary {
+        allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary {
             total_channels: definitions.len(),
             ai_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::AI).count(),
             ao_channels: definitions.iter().filter(|d| d.module_type == crate::models::ModuleType::AO).count(),
@@ -1285,14 +1285,14 @@ pub async fn create_batch_and_persist_data_cmd(
 
     // 调用通道分配服务
     let db_conn = state.persistence_service.get_database_connection();
-    let allocation_service = crate::services::application::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
+    let allocation_service = crate::application::services::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
 
     let allocation_result = match allocation_service
         .create_test_batch(
             request.batch_info.batch_name.clone(),
             request.batch_info.product_model.clone(),
             request.batch_info.operator_name.clone(),
-            crate::services::application::batch_allocation_service::AllocationStrategy::Smart,
+            crate::application::services::batch_allocation_service::AllocationStrategy::Smart,
             None, // filter_criteria
         )
         .await
@@ -1911,7 +1911,7 @@ async fn execute_batch_allocation(
     let allocation_result = AllocationResult {
         batches: batch_allocation_result.batches,
         allocated_instances: batch_allocation_result.allocated_instances,
-        allocation_summary: crate::services::application::batch_allocation_service::AllocationSummary {
+        allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary {
             total_channels: batch_allocation_result.allocation_summary.total_definitions as usize,
             ai_channels: batch_allocation_result.allocation_summary.by_module_type
                 .get(&crate::models::ModuleType::AI)

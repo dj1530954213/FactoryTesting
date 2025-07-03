@@ -4,7 +4,7 @@
 
 use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
-use crate::services::domain::specific_test_executors::{
+use crate::domain::specific_test_executors::{
     ISpecificTestStepExecutor, AIHardPointPercentExecutor,
     DIHardPointTestExecutor, DOHardPointTestExecutor, AOHardPointTestExecutor
 };

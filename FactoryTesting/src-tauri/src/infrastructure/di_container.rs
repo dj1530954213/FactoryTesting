@@ -209,7 +209,7 @@ impl ServiceContainer for AppServiceContainer {
             let test_execution_engine = self.get_test_execution_engine();
             let persistence_service = self.get_persistence_service();
             let event_publisher = self.get_event_publisher();
-            let channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService> = Arc::new(ChannelAllocationService::new());
+            let channel_allocation_service: Arc<dyn crate::application::services::channel_allocation_service::IChannelAllocationService> = Arc::new(ChannelAllocationService::new());
             let plc_config_service = Arc::new(TestPlcConfigService::new(persistence_service.clone()));
 
             let tc_service = TestCoordinationService::new(

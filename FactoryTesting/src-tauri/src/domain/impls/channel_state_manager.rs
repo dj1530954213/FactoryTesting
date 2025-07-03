@@ -6,7 +6,7 @@ use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, 
     OverallTestStatus, SubTestStatus, SubTestItem, ModuleType, SubTestExecutionResult
 };
-use crate::services::infrastructure::IPersistenceService;
+use crate::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use std::sync::Arc;

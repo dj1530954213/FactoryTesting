@@ -10,10 +10,10 @@ use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, TestBatchInfo,
     OverallTestStatus
 };
-use crate::services::domain::{
+use crate::domain::services::{
     IChannelStateManager, ITestExecutionEngine
 };
-use crate::services::infrastructure::{
+use crate::infrastructure::{
     IPersistenceService
 };
 use crate::utils::error::{AppError, AppResult};
@@ -24,8 +24,8 @@ use tokio::sync::{mpsc, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
 use log::{debug, warn, error, info, trace};
 use chrono::Utc;
-use crate::services::{IChannelAllocationService};
-use crate::services::traits::EventPublisher;
+use crate::application::services::channel_allocation_service::{IChannelAllocationService};
+use crate::domain::services::EventPublisher;
 use tokio_util::sync::CancellationToken;
 
 /// 测试执行请求
@@ -277,9 +277,9 @@ pub struct TestCoordinationService {
     /// 事件发布器
     event_publisher: Arc<dyn EventPublisher>,
     /// 通道分配服务
-    channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService>,
+    channel_allocation_service: Arc<dyn crate::application::services::channel_allocation_service::IChannelAllocationService>,
     /// 测试PLC配置服务
-    test_plc_config_service: Arc<dyn crate::services::domain::test_plc_config_service::ITestPlcConfigService>,
+    test_plc_config_service: Arc<dyn crate::domain::test_plc_config_service::ITestPlcConfigService>,
     /// 当前活跃的批次
     active_batches: Arc<Mutex<HashMap<String, BatchExecutionInfo>>>,
     /// 测试进度缓存
@@ -297,8 +297,8 @@ impl TestCoordinationService {
         test_execution_engine: Arc<dyn ITestExecutionEngine>,
         persistence_service: Arc<dyn IPersistenceService>,
         event_publisher: Arc<dyn EventPublisher>,
-        channel_allocation_service: Arc<dyn crate::services::channel_allocation_service::IChannelAllocationService>,
-        test_plc_config_service: Arc<dyn crate::services::domain::test_plc_config_service::ITestPlcConfigService>,
+        channel_allocation_service: Arc<dyn crate::application::services::channel_allocation_service::IChannelAllocationService>,
+        test_plc_config_service: Arc<dyn crate::domain::test_plc_config_service::ITestPlcConfigService>,
     ) -> Self {
         Self {
             channel_state_manager,
@@ -407,7 +407,7 @@ impl TestCoordinationService {
                             }
 
                             // 创建批次统计信息
-                            let batch_statistics = crate::services::traits::BatchStatistics {
+                            let batch_statistics = crate::domain::services::BatchStatistics {
                                 total_channels: total_instances as u32,
                                 tested_channels: tested_instances as u32,
                                 passed_channels: passed_instances as u32,
@@ -486,7 +486,7 @@ impl ITestCoordinationService for TestCoordinationService {
         }
 
         // 获取真实的测试PLC配置
-        use crate::services::channel_allocation_service::TestPlcConfig;
+        use crate::application::services::channel_allocation_service::TestPlcConfig;
         let test_plc_config = match self.test_plc_config_service.get_test_plc_config().await {
             Ok(config) => config,
             Err(e) => {
@@ -1057,11 +1057,11 @@ impl ITestCoordinationService for TestCoordinationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::domain::{ChannelStateManager, TestExecutionEngine};
-    use crate::services::infrastructure::{MockPlcService, SqliteOrmPersistenceService};
-    use crate::services::infrastructure::plc::plc_communication_service::PlcCommunicationService;
-    use crate::services::infrastructure::persistence::persistence_service::PersistenceConfig;
-    use crate::services::channel_allocation_service::{
+    use crate::domain::services::{ChannelStateManager, TestExecutionEngine};
+    use crate::infrastructure::{MockPlcService, SqliteOrmPersistenceService};
+    use crate::infrastructure::plc::plc_communication_service::PlcCommunicationService;
+    use crate::infrastructure::persistence::persistence_service::PersistenceConfig;
+    use crate::application::services::channel_allocation_service::{
         IChannelAllocationService, BatchAllocationResult, AllocationSummary, ModuleTypeStats,
         ValidationResult, TestPlcConfig
     };
@@ -1069,7 +1069,7 @@ mod tests {
     use std::sync::Arc;
     use std::path::Path;
     use async_trait::async_trait;
-    use crate::services::traits::{EventPublisher, BaseService, BatchStatistics};
+    use crate::domain::services::{EventPublisher, BaseService, BatchStatistics};
     use crate::models::RawTestOutcome;
     use crate::utils::error::AppResult;
 
@@ -1261,7 +1261,7 @@ mod tests {
         Arc<dyn IPersistenceService>,
         Arc<dyn EventPublisher>,
         Arc<dyn IChannelAllocationService>,
-        Arc<dyn crate::services::domain::test_plc_config_service::ITestPlcConfigService>,
+        Arc<dyn crate::domain::test_plc_config_service::ITestPlcConfigService>,
     ) {
         // 创建Mock PLC服务
         let mut mock_test_rig = MockPlcService::new_for_testing("TestRig");
@@ -1298,7 +1298,7 @@ mod tests {
         let channel_allocation_service = Arc::new(MockChannelAllocationService);
 
         // 创建Mock测试PLC配置服务
-        use crate::services::domain::test_plc_config_service::TestPlcConfigService;
+        use crate::domain::test_plc_config_service::TestPlcConfigService;
         let test_plc_config_service = Arc::new(
             TestPlcConfigService::new(persistence_service.clone())
         );

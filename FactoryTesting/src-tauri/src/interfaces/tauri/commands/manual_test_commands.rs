@@ -17,8 +17,8 @@ use crate::models::structs::{
 };
 // 注意：ManualTestSubItem 需要在 models 中定义
 // 暂时使用字符串代替，后续需要定义正确的枚举
-use crate::services::application::ITestCoordinationService;
-use crate::services::infrastructure::IPlcMonitoringService;
+use crate::application::services::ITestCoordinationService;
+use crate::infrastructure::IPlcMonitoringService;
 use crate::infrastructure::plc_compat::PlcServiceLegacyExt;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
@@ -560,7 +560,7 @@ async fn write_to_test_plc(
     };
 
     // 使用测试PLC的IP地址创建Modbus PLC服务
-    let modbus_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
         ip_address: test_plc_config.ip_address.clone(),
         port: 502,
         slave_id: 1,
@@ -571,7 +571,7 @@ async fn write_to_test_plc(
         zero_based_address: false,
     };
 
-    let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
+    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
 
     // 连接到PLC
     match plc_service.connect().await {
@@ -621,7 +621,7 @@ async fn write_bool_to_target_plc(
 
     // 使用被测PLC的IP地址创建Modbus PLC服务
     // 在实际环境中，被测PLC和测试PLC可能是不同的设备
-    let modbus_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
         ip_address: test_plc_config.ip_address.clone(), // 暂时使用相同IP
         port: 502,
         slave_id: 1,
@@ -632,7 +632,7 @@ async fn write_bool_to_target_plc(
         zero_based_address: false,
     };
 
-    let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
+    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
 
     // 连接到PLC
     match plc_service.connect().await {
@@ -757,7 +757,7 @@ async fn write_bool_to_test_plc(
     };
 
     // 创建 Modbus 服务
-    let modbus_config = crate::services::infrastructure::plc::modbus_plc_service::ModbusConfig {
+    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
         ip_address: test_plc_config.ip_address.clone(),
         port: 502,
         slave_id: 1,
@@ -768,7 +768,7 @@ async fn write_bool_to_test_plc(
         zero_based_address: false,
     };
 
-    let mut plc_service = crate::services::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
+    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
 
     // 连接
     if let Err(e) = plc_service.connect().await {

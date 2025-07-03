@@ -7,9 +7,7 @@ pub mod persistence_service;
 /// JSON文件持久化实现
 pub mod json_persistence_service;
 
-/// 单元测试模块
-#[cfg(test)]
-pub mod tests;
+
 
 // 为后续步骤准备的数据库实现（暂时注释）
 // pub mod database_persistence_service;

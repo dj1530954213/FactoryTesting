@@ -1,4 +1,4 @@
-use sea_orm::{Database, DatabaseConnection, Statement, ConnectionTrait};
+use sea_orm::{DatabaseConnection, Statement, ConnectionTrait};
 use crate::error::AppError;
 
 /// 数据库迁移管理器

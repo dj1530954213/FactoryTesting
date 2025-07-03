@@ -10,22 +10,22 @@ use std::sync::OnceLock;
 use std::str::FromStr;
 
 use crate::utils::error::{AppError, AppResult};
-use crate::services::traits::BaseService;
+use crate::domain::services::BaseService;
 use super::plc_communication_service::{
     PlcCommunicationService, PlcConnectionStatus, PlcDataType, PlcTag, PlcCommunicationStats
 };
 use crate::models::test_plc_config::PlcConnectionConfig;
 
 // 全局PLC连接管理器注册表
-static GLOBAL_PLC_MANAGER: OnceLock<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> = OnceLock::new();
+static GLOBAL_PLC_MANAGER: OnceLock<Arc<crate::domain::plc_connection_manager::PlcConnectionManager>> = OnceLock::new();
 
 /// 设置全局PLC连接管理器
-pub fn set_global_plc_manager(manager: Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>) {
+pub fn set_global_plc_manager(manager: Arc<crate::domain::plc_connection_manager::PlcConnectionManager>) {
     let _ = GLOBAL_PLC_MANAGER.set(manager);
 }
 
 /// 获取全局PLC连接管理器
-pub fn get_global_plc_manager() -> Option<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> {
+pub fn get_global_plc_manager() -> Option<Arc<crate::domain::plc_connection_manager::PlcConnectionManager>> {
     GLOBAL_PLC_MANAGER.get().cloned()
 }
 
@@ -872,17 +872,17 @@ impl PlcCommunicationService for ModbusPlcService {
 
 impl ModbusPlcService {
     /// 获取全局PLC连接管理器实例
-    async fn get_plc_connection_manager(&self) -> Option<Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>> {
+    async fn get_plc_connection_manager(&self) -> Option<Arc<crate::domain::plc_connection_manager::PlcConnectionManager>> {
         get_global_plc_manager()
     }
 
     /// 从PLC连接管理器读取布尔值
     async fn read_bool_from_manager(
         &self,
-        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        manager: &Arc<crate::domain::plc_connection_manager::PlcConnectionManager>,
         address: &str,
     ) -> AppResult<bool> {
-        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+        use crate::domain::plc_connection_manager::PlcConnectionState;
 
         // 获取连接
         let connections = manager.connections.read().await;
@@ -969,11 +969,11 @@ impl ModbusPlcService {
     /// 向PLC连接管理器写入布尔值
     async fn write_bool_to_manager(
         &self,
-        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        manager: &Arc<crate::domain::plc_connection_manager::PlcConnectionManager>,
         address: &str,
         value: bool,
     ) -> AppResult<()> {
-        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+        use crate::domain::plc_connection_manager::PlcConnectionState;
 
         // 获取连接
         let connections = manager.connections.read().await;
@@ -1032,10 +1032,10 @@ impl ModbusPlcService {
     /// 从PLC连接管理器读取32位浮点数
     async fn read_float32_from_manager(
         &self,
-        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        manager: &Arc<crate::domain::plc_connection_manager::PlcConnectionManager>,
         address: &str,
     ) -> AppResult<f32> {
-        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+        use crate::domain::plc_connection_manager::PlcConnectionState;
 
         // 获取连接
         let connections = manager.connections.read().await;
@@ -1135,11 +1135,11 @@ impl ModbusPlcService {
     /// 向PLC连接管理器写入32位浮点数
     async fn write_float32_to_manager(
         &self,
-        manager: &Arc<crate::services::domain::plc_connection_manager::PlcConnectionManager>,
+        manager: &Arc<crate::domain::plc_connection_manager::PlcConnectionManager>,
         address: &str,
         value: f32,
     ) -> AppResult<()> {
-        use crate::services::domain::plc_connection_manager::PlcConnectionState;
+        use crate::domain::plc_connection_manager::PlcConnectionState;
 
         // 获取连接
         let connections = manager.connections.read().await;

@@ -1,10 +1,9 @@
-//! 临时兼容层：在目录重构过渡期间，保持旧 `crate::services::...` 路径可用。
+//! (已废弃) 原 services 兼容层已移除。
 //! 
 //! ⚠️ 重构完成后请删除本文件，并将所有 `use crate::services::...` 改为新层级路径。
 
 // === traits 文件模块声明 ===
 pub mod traits;
-
 // 重新导出 traits 中的内容，供旧路径使用
 pub use traits::*;
 

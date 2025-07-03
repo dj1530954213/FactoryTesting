@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use crate::models::ByteOrder;
 
 /// 通道类型枚举 - 对应数据库中的ChannelType字段
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

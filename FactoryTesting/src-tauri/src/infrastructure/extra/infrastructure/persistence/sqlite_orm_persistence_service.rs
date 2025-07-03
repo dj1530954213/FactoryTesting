@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome};
 use crate::models::entities; // 导入实体模块
-use crate::services::traits::{BaseService, PersistenceService};
+use crate::domain::services::{BaseService, PersistenceService};
 // 导入 ExtendedPersistenceService 和相关结构体
-use crate::services::infrastructure::persistence::persistence_service::{
+use crate::infrastructure::persistence::persistence_service::{
     ExtendedPersistenceService,
     BackupInfo,
     QueryCriteria,

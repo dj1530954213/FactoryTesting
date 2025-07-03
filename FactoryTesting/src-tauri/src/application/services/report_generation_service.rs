@@ -6,7 +6,7 @@ use crate::models::{
     TestReport, ReportTemplate, ReportGenerationRequest, ReportType, ReportStatus,
     ChannelTestInstance, RawTestOutcome
 };
-use crate::services::infrastructure::IPersistenceService;
+use crate::infrastructure::IPersistenceService;
 use crate::utils::error::{AppError, AppResult};
 use async_trait::async_trait;
 use chrono::Utc;

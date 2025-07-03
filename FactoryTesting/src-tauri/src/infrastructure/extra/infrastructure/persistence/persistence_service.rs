@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use crate::utils::error::AppResult;
-use crate::services::traits::{PersistenceService};
+use crate::domain::services::{PersistenceService};
 use crate::models::structs::*;
 use chrono::Utc;
 
@@ -290,12 +290,12 @@ pub struct PersistenceServiceFactory;
 
 impl PersistenceServiceFactory {
     /// 创建SQLite ORM持久化服务
-    pub async fn create_sqlite_service(config: PersistenceConfig, db_path: Option<&std::path::Path>) -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
-        crate::services::infrastructure::persistence::SqliteOrmPersistenceService::new(config, db_path).await
+    pub async fn create_sqlite_service(config: PersistenceConfig, db_path: Option<&std::path::Path>) -> AppResult<crate::infrastructure::persistence::SqliteOrmPersistenceService> {
+        crate::infrastructure::persistence::SqliteOrmPersistenceService::new(config, db_path).await
     }
 
     /// 创建默认的SQLite ORM持久化服务（使用内存数据库）
-    pub async fn create_default_sqlite_service() -> AppResult<crate::services::infrastructure::persistence::SqliteOrmPersistenceService> {
+    pub async fn create_default_sqlite_service() -> AppResult<crate::infrastructure::persistence::SqliteOrmPersistenceService> {
         Self::create_sqlite_service(PersistenceConfig::default(), Some(std::path::Path::new(":memory:"))).await
     }
 }
