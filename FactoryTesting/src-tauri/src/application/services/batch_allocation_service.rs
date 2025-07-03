@@ -4,11 +4,14 @@
 /// 基于原C#项目的分配逻辑重构
 use std::sync::Arc;
 use std::collections::HashMap;
-use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter, ActiveModelTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter, ActiveModelTrait, Statement, ConnectionTrait};
 use crate::models::entities::{channel_point_definition, channel_test_instance, test_batch_info};
 use crate::models::structs::{ChannelPointDefinition, ChannelTestInstance, TestBatchInfo};
 use crate::models::enums::ModuleType;
 use crate::error::AppError;
+use chrono::Utc;
+use uuid::Uuid;
+use serde_json;
 use log::{info, warn, error};
 
 /// 分配策略
@@ -33,7 +36,7 @@ pub struct AllocationResult {
 }
 
 /// 分配摘要
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AllocationSummary {
     pub total_channels: usize,
     pub ai_channels: usize,
@@ -139,7 +142,7 @@ impl BatchAllocationService {
         let batch_info = self.create_batch_info(
             batch_name,
             product_model,
-            operator_name,
+            operator_name.clone(),
             &available_definitions,
         ).await?;
 
@@ -158,6 +161,9 @@ impl BatchAllocationService {
             allocation_summary.total_channels,
             allocation_summary.estimated_test_duration_minutes
         );
+
+        // 保存分配记录到数据库
+        self.save_allocation_record(&batch_info.batch_id, &strategy, &allocation_summary, operator_name.as_deref()).await?;
 
         Ok(AllocationResult {
             batch_info,
@@ -237,6 +243,9 @@ impl BatchAllocationService {
             allocation_summary.total_channels,
             allocation_summary.estimated_test_duration_minutes
         );
+
+        // 保存分配记录到数据库
+        self.save_allocation_record(&final_batch_info.batch_id, &strategy, &allocation_summary, final_batch_info.operator_name.as_deref()).await?;
 
         Ok(AllocationResult {
             batch_info: final_batch_info,
@@ -412,5 +421,38 @@ impl BatchAllocationService {
 
         summary.calculate_estimated_duration();
         summary
+    }
+
+    /// 保存批次分配记录
+    async fn save_allocation_record(&self,
+        batch_id: &str,
+        strategy: &AllocationStrategy,
+        summary: &AllocationSummary,
+        operator_name: Option<&str>,
+    ) -> Result<(), AppError> {
+        let record_id = Uuid::new_v4().to_string();
+        let summary_json = serde_json::to_string(summary)
+            .map_err(|e| AppError::generic(format!("序列化分配摘要失败: {}", e)))?;
+        let now = Utc::now().to_rfc3339();
+
+        let sql = r#"INSERT INTO allocation_records (id, batch_id, strategy, summary_json, operator_name, created_time)
+                     VALUES (?, ?, ?, ?, ?, ?)"#;
+
+        self.db.execute(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql,
+            vec![
+                record_id.into(),
+                batch_id.into(),
+                format!("{:?}", strategy).into(),
+                summary_json.into(),
+                operator_name.unwrap_or("").into(),
+                now.into(),
+            ],
+        ))
+        .await
+        .map_err(|e| AppError::persistence_error(format!("保存分配记录失败: {}", e)))?;
+
+        Ok(())
     }
 }

@@ -19,6 +19,7 @@ impl DatabaseMigration {
 
         // 阶段二：创建新表（如果不存在）
         Self::migrate_raw_test_outcomes(db).await?;
+        Self::migrate_allocation_records(db).await?;
         Self::create_missing_tables(db).await?;
 
         // 补充：PLC连接配置表新增字节顺序与地址基数列
@@ -165,6 +166,45 @@ impl DatabaseMigration {
         }
 
         log::info!("raw_test_outcomes表迁移完成");
+        Ok(())
+    }
+
+    /// 迁移批次分配记录表
+    async fn migrate_allocation_records(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("开始迁移allocation_records表...");
+
+        let table_exists = Self::check_table_exists(db, "allocation_records").await?;
+
+        if !table_exists {
+            Self::create_allocation_records_table(db).await?;
+        } else {
+            // 如需添加新列可在此处实现
+        }
+
+        log::info!("allocation_records表迁移完成");
+        Ok(())
+    }
+
+    /// 创建批次分配记录表
+    async fn create_allocation_records_table(db: &DatabaseConnection) -> Result<(), AppError> {
+        log::info!("创建allocation_records表");
+
+        let sql = r#"
+            CREATE TABLE IF NOT EXISTS allocation_records (
+                id TEXT PRIMARY KEY NOT NULL,
+                batch_id TEXT NOT NULL,
+                strategy TEXT,
+                summary_json TEXT,
+                operator_name TEXT,
+                created_time TEXT NOT NULL
+            )
+        "#;
+
+        db.execute(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql.to_string()
+        )).await.map_err(|e| AppError::persistence_error(format!("创建allocation_records表失败: {}", e)))?;
+
         Ok(())
     }
 

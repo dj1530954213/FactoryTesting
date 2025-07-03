@@ -15,7 +15,13 @@ pub mod application {
 
 // === channel_allocation_service 兼容模块 ===
 pub mod channel_allocation_service {
-    pub use crate::application::services::channel_allocation_service::*;
+    // 重新导出通道分配相关核心类型，保持旧路径兼容
+    pub use crate::application::services::channel_allocation_service::{
+        ChannelAllocationService,
+        IChannelAllocationService,
+        TestPlcConfig,
+        ComparisonTable,
+    };
 }
 
 // === domain  traits / 实现 ===
@@ -40,5 +46,10 @@ pub mod infrastructure {
 }
 
 // === 旧顶层 helpers ===
-// ChannelAllocationService 暂时 re-export 供旧代码使用
-pub use crate::application::services::channel_allocation_service::*; 
+// 旧路径 helpers：直接在顶层重新导出常用类型
+pub use crate::application::services::channel_allocation_service::{
+    ChannelAllocationService,
+    IChannelAllocationService,
+    TestPlcConfig,
+    ComparisonTable,
+};
