@@ -122,6 +122,12 @@ pub trait IPlcCommunicationService: BaseService {
     /// # 返回
     /// * `ConnectionTestResult` - 连接测试结果
     async fn test_connection(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionTestResult>;
+
+    /// 获取指定连接ID的默认连接句柄（若尚未连接则返回 None）
+    async fn default_handle_by_id(&self, connection_id: &str) -> Option<ConnectionHandle>;
+
+    /// 获取最后一次连接的默认连接句柄（向后兼容）
+    async fn default_handle(&self) -> Option<ConnectionHandle>;
 }
 
 /// PLC连接配置
@@ -150,6 +156,12 @@ pub struct PlcConnectionConfig {
     
     /// 写入超时（毫秒）
     pub write_timeout_ms: u64,
+
+    /// 字节顺序，如 "ABCD" "CDAB" "BADC" "DCBA"
+    pub byte_order: String,
+
+    /// 地址是否从0开始（Modbus中有的PLC地址0基）
+    pub zero_based_address: bool,
     
     /// 重试次数
     pub retry_count: u32,

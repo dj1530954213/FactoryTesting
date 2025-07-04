@@ -70,6 +70,10 @@ pub struct TestExecutionEngine {
     plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
     /// 目标PLC服务
     plc_service_target: Arc<dyn IPlcCommunicationService>,
+    /// 测试PLC连接ID
+    test_rig_conn_id: String,
+    /// 被测PLC连接ID
+    target_conn_id: String,
     /// 活动任务管理
     active_tasks: Arc<RwLock<HashMap<String, TestTask>>>,
     /// 全局取消令牌
@@ -82,11 +86,15 @@ impl TestExecutionEngine {
         max_concurrent_tasks: usize,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
+        test_rig_conn_id: String,
+        target_conn_id: String,
     ) -> Self {
         Self {
             semaphore: Arc::new(Semaphore::new(max_concurrent_tasks)),
             plc_service_test_rig,
             plc_service_target,
+            test_rig_conn_id,
+            target_conn_id,
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
             global_cancellation_token: CancellationToken::new(),
         }
@@ -199,6 +207,8 @@ impl TestExecutionEngine {
             match executor.execute(
                 &instance,
                 &definition,
+                &self.test_rig_conn_id,
+                &self.target_conn_id,
                 self.plc_service_test_rig.clone(),
                 self.plc_service_target.clone(),
             ).await {
@@ -295,6 +305,8 @@ impl ITestExecutionEngine for TestExecutionEngine {
             semaphore: semaphore.clone(),
             plc_service_test_rig: plc_test_rig,
             plc_service_target: plc_target,
+            test_rig_conn_id: self.test_rig_conn_id.clone(),
+            target_conn_id: self.target_conn_id.clone(),
             active_tasks: active_tasks.clone(),
             global_cancellation_token: global_token,
         };

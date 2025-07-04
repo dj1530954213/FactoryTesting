@@ -165,6 +165,8 @@ impl AppConfig for ConfigBasedAppConfig {
 pub struct AppServiceContainer {
     config: Arc<dyn AppConfig>,
     persistence_service: Arc<dyn IPersistenceService>,
+    /// 全局共享的 PLC 通信服务实例（同时用于测试PLC与被测PLC）
+    plc_service: Arc<ModbusTcpPlcService>,
 }
 
 impl AppServiceContainer {
@@ -179,7 +181,8 @@ impl AppServiceContainer {
             SqliteOrmPersistenceService::new(cfg, None).await
         })?;
         let persistence_service: Arc<dyn IPersistenceService> = Arc::new(persistence_service);
-        Ok(Self { config, persistence_service })
+        let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+        Ok(Self { config, persistence_service, plc_service })
     }
 
     /// 从配置文件创建服务容器
@@ -230,22 +233,21 @@ impl ServiceContainer for AppServiceContainer {
 
     fn get_test_execution_engine(&self) -> Arc<dyn ITestExecutionEngine> {
         Arc::new(TestExecutionEngine::new(
-            4,
-            Arc::new(ModbusTcpPlcService::default()),
-            Arc::new(ModbusTcpPlcService::default()),
-        ))
+             4,
+             self.plc_service.clone(),
+             self.plc_service.clone(),
+             String::new(),
+             String::new(),
+         ))
     }
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
-        // 使用默认配置创建Modbus PLC服务
-        Arc::new(crate::infrastructure::ModbusTcpPlcService::default())
+        self.plc_service.clone()
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
-        {
-            let db = Arc::new(self.persistence_service.get_database_connection());
-            Arc::new(RealBatchAllocationService::new(db))
-        }
+        let db = Arc::new(self.persistence_service.get_database_connection());
+        Arc::new(RealBatchAllocationService::new(db))
     }
 
     fn get_event_publisher(&self) -> Arc<dyn IEventPublisher> {
@@ -289,7 +291,7 @@ impl ServiceContainer for AppServiceContainer {
 
     fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
         // 在Mock容器中也使用真实的Modbus PLC服务
-        Arc::new(crate::infrastructure::ModbusTcpPlcService::default())
+        crate::infrastructure::plc_communication::global_plc_service()
     }
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {

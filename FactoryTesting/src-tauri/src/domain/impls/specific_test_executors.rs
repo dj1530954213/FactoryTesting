@@ -28,6 +28,8 @@ pub trait ISpecificTestStepExecutor: Send + Sync {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome>;
@@ -70,6 +72,8 @@ impl AIHardPointPercentExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         test_rig_plc: Arc<dyn IPlcCommunicationService>,
         target_plc: Arc<dyn IPlcCommunicationService>,
     ) -> Result<RawTestOutcome, AppError> {
@@ -103,25 +107,53 @@ impl AIHardPointPercentExecutor {
             // 设置测试台架输出值(直接输出0-100因为在测试PLC中直接设定了工程量为0-100)
             let test_rig_output_value = percentage * 100.0;
             info!("变量:{}, 写[{}]={:.2}", definition.tag, test_rig_address, test_rig_output_value);
-            test_rig_plc.write_float32(&test_rig_address, test_rig_output_value).await
-                .map_err(|e| AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)))?;
+            if let Err(e) = test_rig_plc.write_float32_by_id(test_rig_conn_id, &test_rig_address, test_rig_output_value).await {
+                error!(
+                    "变量:{}, 写[{}] 失败: {}",
+                    definition.tag, test_rig_address, e
+                );
+                return Err(AppError::plc_communication_error(format!("设置测试台架输出失败: {}", e)));
+            }
 
-                // 等待信号稳定时间 - 调整为2秒
-                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+            // 等待信号稳定时间 - 调整为2秒
+            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
-                // 读取被测PLC的实际值
-                let actual_raw = target_plc.read_float32(&definition.plc_communication_address).await
-                    .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC值失败: {}", e)))?;
-                info!("变量:{}, 读[{}]={:.2}", definition.tag, definition.plc_communication_address, actual_raw);
+            // 读取被测PLC的实际值
+            info!(
+                "变量:{}, 读[{}] 请求开始",
+                definition.tag, definition.plc_communication_address
+            );
+            let actual_raw = match target_plc
+                .read_float32_by_id(target_conn_id, &definition.plc_communication_address)
+                .await
+            {
+                Ok(v) => {
+                    info!(
+                        "变量:{}, 读[{}]={:.2}",
+                        definition.tag, definition.plc_communication_address, v
+                    );
+                    v
+                }
+                Err(e) => {
+                    error!(
+                        "变量:{}, 读[{}] 失败: {}",
+                        definition.tag, definition.plc_communication_address, e
+                    );
+                    return Err(AppError::plc_communication_error(format!(
+                        "读取被测PLC值失败: {}",
+                        e
+                    )));
+                }
+            };
 
-                // 计算误差
-                let error_percentage = if eng_value != 0.0 {
-                    Some(((actual_raw - eng_value) / eng_value * 100.0).abs())
-                } else {
-                    Some(actual_raw.abs())
-                };
+               // 计算误差
+            let error_percentage = if eng_value != 0.0 {
+                Some(((actual_raw - eng_value) / eng_value * 100.0).abs())
+            } else {
+                Some(actual_raw.abs())
+            };
 
-                // 判断测试状态（误差容忍度2%）
+            // 判断测试状态（误差容忍度2%）
                 let test_status = if error_percentage.unwrap_or(100.0) <= 2.0 {
                     SubTestStatus::Passed
                 } else {
@@ -172,7 +204,7 @@ impl AIHardPointPercentExecutor {
         // 🔄 测试完成后复位测试PLC输出为0%
         let test_rig_address = self.get_test_rig_address_for_channel(instance)?;
         debug!("🔄 测试完成，复位测试PLC [{}]: 0.00", test_rig_address);
-        if let Err(e) = test_rig_plc.write_float32(&test_rig_address, 0.0).await {
+        if let Err(e) = test_rig_plc.write_float32_by_id(test_rig_conn_id, &test_rig_address, 0.0).await {
             // 复位失败不影响测试结果，只记录警告
             log::warn!("⚠️ 测试PLC复位失败: {}", e);
         } else {
@@ -239,13 +271,15 @@ impl ISpecificTestStepExecutor for AIHardPointPercentExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
         // 🔧 精简日志：移除详细调试信息
         info!("🚀 开始测试: {} [{}]", definition.tag, instance.instance_id);
 
-        let result = self.execute_complete_ai_hardpoint_test(instance, definition, plc_service_test_rig, plc_service_target).await?;
+        let result = self.execute_complete_ai_hardpoint_test(instance, definition, test_rig_conn_id, target_conn_id, plc_service_test_rig, plc_service_target).await?;
 
         Ok(result)
     }
@@ -339,7 +373,9 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
-        _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
+        plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
         // 🔧 精简日志：移除详细调试信息
@@ -356,7 +392,7 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
 
         // 步骤3: 读取报警反馈状态
         info!("📖 读取报警反馈 [{}]", feedback_address);
-        let alarm_active = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, &feedback_address).await?;
+        let alarm_active = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, &feedback_address).await?;
 
         // 步骤4: 复位报警（设置安全值）
         let safe_value = match self.alarm_type {
@@ -380,7 +416,7 @@ impl ISpecificTestStepExecutor for AIAlarmTestExecutor {
 
         // 步骤6: 确认报警已复位
         info!("📖 读取报警复位状态 [{}]", feedback_address);
-        let alarm_reset = !crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, &feedback_address).await?;
+        let alarm_reset = !crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, &feedback_address).await?;
 
         let end_time = Utc::now();
 
@@ -466,6 +502,8 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
@@ -481,14 +519,14 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         // 步骤1: 测试PLC DO输出低电平
         info!("变量:{}, 写[{}]=false", definition.tag, test_rig_do_address);
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_test_rig, &test_rig_do_address, false).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO低电平失败: {}", e)))?;
 
         // 等待信号稳定
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤2: 检查被测PLC DI是否显示"断开"
-        let di_state_1 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, target_di_address).await
+        let di_state_1 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
         info!("变量:{}, 读[{}]={}", definition.tag, target_di_address, di_state_1);
 
@@ -523,14 +561,14 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         // 步骤3: 测试PLC DO输出高电平
         info!("变量:{}, 写[{}]=true", definition.tag, test_rig_do_address);
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_test_rig, &test_rig_do_address, true).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_do_address, true).await
             .map_err(|e| AppError::plc_communication_error(format!("设置测试PLC DO高电平失败: {}", e)))?;
 
         // 等待信号稳定
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤4: 检查被测PLC DI是否显示"接通"
-        let di_state_2 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, target_di_address).await
+        let di_state_2 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
 
         // 记录步骤2结果
@@ -564,7 +602,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         // 步骤5: 测试PLC DO输出低电平(复位)
         info!("变量:{}, 写[{}]=false", definition.tag, test_rig_do_address);
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_test_rig, &test_rig_do_address, false).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("复位测试PLC DO低电平失败: {}", e)))?;
 
         // 等待信号稳定
@@ -572,7 +610,7 @@ impl ISpecificTestStepExecutor for DIHardPointTestExecutor {
 
         // 步骤6: 最终检查被测PLC DI是否显示"断开"
         let di_state_3;
-        di_state_3 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, target_di_address).await
+        di_state_3 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, target_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取被测PLC DI状态失败: {}", e)))?;
         info!("变量:{}, 读[{}]={}", definition.tag, target_di_address, di_state_3);
 
@@ -674,6 +712,8 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
@@ -688,14 +728,14 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let mut digital_steps = Vec::new();
 
         // 步骤1: 被测PLC DO输出低电平
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_target, target_do_address, false).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_target, target_conn_id, target_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO低电平失败: {}", e)))?;
 
         // 等待信号稳定
         tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
         // 步骤2: 检查测试PLC DI是否显示"断开"
-        let di_state_1 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_test_rig, &test_rig_di_address).await
+        let di_state_1 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
 
         // 记录步骤1结果
@@ -729,7 +769,7 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
 
         // 步骤3: 被测PLC DO输出高电平
         info!("变量:{}, 写[{}]=true", definition.tag, target_do_address);
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_target, target_do_address, true).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_target, target_conn_id, target_do_address, true).await
             .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC DO高电平失败: {}", e)))?;
 
         // 等待信号稳定
@@ -739,7 +779,7 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
         let di_state_2;
         // 读取后再记录
         // 读取测试PLC DI
-        di_state_2 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_test_rig, &test_rig_di_address).await
+        di_state_2 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
         info!("变量:{}, 读[{}]={}", definition.tag, test_rig_di_address, di_state_2);
 
@@ -774,7 +814,7 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
 
         // 步骤5: 被测PLC DO输出低电平(复位)
         info!("变量:{}, 写[{}]=false", definition.tag, target_do_address);
-        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool(&plc_service_target, target_do_address, false).await
+        crate::infrastructure::plc_compat::PlcServiceLegacyExt::write_bool_by_id(&plc_service_target, target_conn_id, target_do_address, false).await
             .map_err(|e| AppError::plc_communication_error(format!("复位被测PLC DO低电平失败: {}", e)))?;
 
         // 等待信号稳定
@@ -782,7 +822,7 @@ impl ISpecificTestStepExecutor for DOHardPointTestExecutor {
 
         // 步骤6: 最终检查测试PLC DI是否显示"断开"
         let di_state_3;
-        di_state_3 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_test_rig, &test_rig_di_address).await
+        di_state_3 = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_test_rig, test_rig_conn_id, &test_rig_di_address).await
             .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC DI状态失败: {}", e)))?;
         info!("变量:{}, 读[{}]={}", definition.tag, test_rig_di_address, di_state_3);
 
@@ -882,6 +922,8 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
@@ -914,14 +956,14 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
             info!("📝 写入 [{}]: {:.2}", target_ao_address, output_value);
 
             // 设置被测PLC AO输出
-            plc_service_target.write_float32(target_ao_address, output_value).await
+            plc_service_target.write_float32_by_id(target_conn_id, target_ao_address, output_value).await
                 .map_err(|e| AppError::plc_communication_error(format!("设置被测PLC AO输出失败: {}", e)))?;
 
             // 等待信号稳定
             tokio::time::sleep(tokio::time::Duration::from_millis(self.step_interval_ms)).await;
 
             // 读取测试PLC AI采集值
-            let read_value = plc_service_test_rig.read_float32(&test_rig_ai_address).await
+            let read_value = plc_service_test_rig.read_float32_by_id(test_rig_conn_id, &test_rig_ai_address).await
                 .map_err(|e| AppError::plc_communication_error(format!("读取测试PLC AI值失败: {}", e)))?;
             info!("📖 读取 [{}]: {:.2}", test_rig_ai_address, read_value);
 
@@ -989,7 +1031,7 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
         // 🔄 测试完成后复位被测PLC的AO输出为0%
         let reset_value = range_lower; // 复位为量程下限
         info!("🔄 测试完成，复位被测PLC AO [{}]: {:.2}", target_ao_address, reset_value);
-        if let Err(e) = plc_service_target.write_float32(target_ao_address, reset_value).await {
+        if let Err(e) = plc_service_target.write_float32_by_id(target_conn_id, target_ao_address, reset_value).await {
             // 复位失败不影响测试结果，只记录警告
             log::warn!("⚠️ 被测PLC AO复位失败: {}", e);
         } else {
@@ -1033,13 +1075,15 @@ impl ISpecificTestStepExecutor for DIStateReadExecutor {
         &self,
         instance: &ChannelTestInstance,
         definition: &ChannelPointDefinition,
+        test_rig_conn_id: &str,
+        target_conn_id: &str,
         _plc_service_test_rig: Arc<dyn IPlcCommunicationService>,
         plc_service_target: Arc<dyn IPlcCommunicationService>,
     ) -> AppResult<RawTestOutcome> {
         // 可配置读取间隔，简单 sleep
         sleep(Duration::from_millis(self.read_interval_ms)).await;
 
-        let actual_state = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service_target, &definition.plc_communication_address).await?;
+        let actual_state = crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool_by_id(&plc_service_target, target_conn_id, &definition.plc_communication_address).await?;
 
         let success = match self.expected_state {
             Some(expect) => actual_state == expect,

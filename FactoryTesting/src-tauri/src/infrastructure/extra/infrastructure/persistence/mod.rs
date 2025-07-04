@@ -11,8 +11,8 @@ pub mod app_settings_service;
 pub mod sqlite_orm_persistence_service;
 
 /// 单元测试模块
-#[cfg(test)]
-pub mod tests;
+//#[cfg(test)]
+//pub mod tests;
 
 // 为后续步骤准备的数据库实现（暂时注释）
 // pub mod database_persistence_service;

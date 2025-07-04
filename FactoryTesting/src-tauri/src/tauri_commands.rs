@@ -51,6 +51,9 @@ pub struct AppState {
     pub app_settings_service: Arc<dyn AppSettingsService>,
     pub test_plc_config_service: Arc<dyn ITestPlcConfigService>,
     pub channel_allocation_service: Arc<dyn IChannelAllocationService>,
+    // 新增：测试台架与被测PLC的连接ID
+    pub test_rig_connection_id: String,
+    pub target_connection_id: String,
     pub plc_connection_manager: Arc<PlcConnectionManager>,
     pub plc_monitoring_service: Arc<dyn crate::infrastructure::IPlcMonitoringService>,
 
@@ -144,26 +147,60 @@ impl AppState {
             test_plc_connection.ip_address, test_plc_connection.port,
             target_plc_connection.ip_address, target_plc_connection.port);
 
-        // 使用 PLC 连接配置中的字节顺序与地址基准构造 ModbusConfig
-        let test_rig_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(test_plc_connection)
-            .map_err(|e| e.to_string())?;
+        // 构造统一的 PlcConnectionConfig 供 PLC 服务使用
+        use std::collections::HashMap;
+        use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
 
-        let target_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig::try_from(target_plc_connection)
-            .map_err(|e| e.to_string())?;
+        let test_rig_conn_cfg = PlcConnectionConfig {
+            id: test_plc_connection.id.clone(),
+            name: test_plc_connection.name.clone(),
+            protocol: PlcProtocol::ModbusTcp,
+            host: test_plc_connection.ip_address.clone(),
+            port: test_plc_connection.port as u16,
+            timeout_ms: test_plc_connection.timeout as u64,
+            read_timeout_ms: test_plc_connection.timeout as u64,
+            write_timeout_ms: test_plc_connection.timeout as u64,
+            retry_count: test_plc_connection.retry_count as u32,
+            retry_interval_ms: 500,
+            protocol_params: HashMap::new(),
+            byte_order: String::from("CDAB"),
+            zero_based_address: false,
+        };
 
-        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::infrastructure::ModbusTcpPlcService::default()
-        );
-        let plc_service_target: Arc<dyn IPlcCommunicationService> = Arc::new(
-            crate::infrastructure::ModbusTcpPlcService::default()
-        );
+        let target_conn_cfg = PlcConnectionConfig {
+            id: target_plc_connection.id.clone(),
+            name: target_plc_connection.name.clone(),
+            protocol: PlcProtocol::ModbusTcp,
+            host: target_plc_connection.ip_address.clone(),
+            port: target_plc_connection.port as u16,
+            timeout_ms: target_plc_connection.timeout as u64,
+            read_timeout_ms: target_plc_connection.timeout as u64,
+            write_timeout_ms: target_plc_connection.timeout as u64,
+            retry_count: target_plc_connection.retry_count as u32,
+            retry_interval_ms: 500,
+            protocol_params: HashMap::new(),
+            byte_order: String::from("CDAB"),
+            zero_based_address: false,
+        };
+
+        // 全局共享的 PLC 服务实例，测试PLC与被测PLC 共用同一个实例
+        let plc_service: Arc<crate::infrastructure::ModbusTcpPlcService> = crate::infrastructure::plc_communication::global_plc_service();
+
+        // 启动阶段不再直接建立PLC连接，改为延迟到用户确认接线后再连接
+        let test_rig_connection_id = test_rig_conn_cfg.id.clone();
+        let target_connection_id = target_conn_cfg.id.clone();
+
+        let plc_service_test_rig: Arc<dyn IPlcCommunicationService> = plc_service.clone();
+        let plc_service_target: Arc<dyn IPlcCommunicationService> = plc_service.clone();
 
         // 创建测试执行引擎
         let test_execution_engine: Arc<dyn ITestExecutionEngine> = Arc::new(
             TestExecutionEngine::new(
                 88, // 最大并发测试数，和PLC通道数量一致
-                plc_service_test_rig,
+                plc_service_test_rig.clone(),
                 plc_service_target.clone(),
+                test_rig_connection_id.clone(),
+                target_connection_id.clone(),
             )
         );
 
@@ -231,6 +268,10 @@ impl AppState {
             channel_allocation_service,
             plc_connection_manager,
             plc_monitoring_service,
+
+            // 新增连接ID
+            test_rig_connection_id,
+            target_connection_id,
 
             // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),

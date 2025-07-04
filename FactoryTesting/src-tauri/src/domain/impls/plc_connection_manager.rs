@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, sleep};
+use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 use tokio_modbus::prelude::*;
 use log::{info, warn, error, debug};
 use serde::{Serialize, Deserialize};
@@ -43,6 +44,12 @@ pub struct PlcConnectionManager {
 }
 
 impl PlcConnectionManager {
+    /// 根据连接ID获取 "ip:port" 字符串，若不存在返回 None
+    pub async fn endpoint_by_id(&self, connection_id: &str) -> Option<String> {
+        let conns = self.connections.read().await;
+        conns.get(connection_id).map(|c| format!("{}:{}", c.config.ip_address, c.config.port))
+    }
+
     pub fn new(test_plc_config_service: Arc<dyn ITestPlcConfigService>) -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -79,10 +86,39 @@ impl PlcConnectionManager {
             }
             
             info!("🔗 初始化PLC连接: {} ({}:{})", config.name, config.ip_address, config.port);
-            
+
+            // 调用全局 PLC 服务建立连接，确保句柄注册到 default_handles
+            use crate::domain::services::plc_communication_service::{PlcConnectionConfig as ServicePlcConfig, PlcProtocol};
+            use std::collections::HashMap;
+            let svc_cfg = ServicePlcConfig {
+                id: config.id.clone(),
+                name: config.name.clone(),
+                protocol: PlcProtocol::ModbusTcp,
+                host: config.ip_address.clone(),
+                port: config.port as u16,
+                timeout_ms: config.timeout as u64,
+                read_timeout_ms: config.timeout as u64,
+                write_timeout_ms: config.timeout as u64,
+                retry_count: config.retry_count as u32,
+                retry_interval_ms: 500,
+                byte_order: config.byte_order.clone(),
+                zero_based_address: config.zero_based_address,
+                protocol_params: HashMap::new(),
+            };
+            let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+            let mut connection_state = PlcConnectionState::Disconnected;
+            match plc_service.connect(&svc_cfg).await {
+                Ok(handle) => {
+                    info!("✅ PLC连接成功: {} → connection_id={}", config.name, handle.connection_id);
+                    connection_state = PlcConnectionState::Connected;
+                },
+                Err(err) => {
+                    error!("❌ PLC连接失败: {} - {}", config.name, err);
+                }
+            }
             let connection = PlcConnection {
                 config: config.clone(),
-                state: PlcConnectionState::Disconnected,
+                state: connection_state,
                 context: None,
                 last_heartbeat: None,
                 error_message: None,

@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::timeout;
 use tokio_modbus::prelude::*;
+use std::str::FromStr;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
@@ -19,49 +20,19 @@ use crate::domain::services::{
 };
 use crate::utils::error::{AppError, AppResult};
 
-/// PLC通信服务接口
-///
-/// 定义了PLC通信的核心功能，支持连接管理、数据读写和批量操作
-#[async_trait::async_trait]
-pub trait IPlcCommunicationService: BaseService {
-    /// 连接到PLC
-    async fn connect(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionHandle>;
+// 复用领域层定义的通信服务接口，避免重复定义造成类型不一致
+pub use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 
-    /// 断开PLC连接
-    async fn disconnect(&self, handle: &ConnectionHandle) -> AppResult<()>;
+use once_cell::sync::OnceCell;
 
-    /// 检查连接状态
-    async fn is_connected(&self, handle: &ConnectionHandle) -> AppResult<bool>;
+/// 全局唯一的 ModbusTcpPlcService 实例
+static GLOBAL_PLC_SERVICE: OnceCell<Arc<ModbusTcpPlcService>> = OnceCell::new();
 
-    /// 读取布尔值
-    async fn read_bool(&self, handle: &ConnectionHandle, address: &str) -> AppResult<bool>;
-
-    /// 写入布尔值
-    async fn write_bool(&self, handle: &ConnectionHandle, address: &str, value: bool) -> AppResult<()>;
-
-    /// 读取32位浮点数
-    async fn read_f32(&self, handle: &ConnectionHandle, address: &str) -> AppResult<f32>;
-
-    /// 写入32位浮点数
-    async fn write_f32(&self, handle: &ConnectionHandle, address: &str, value: f32) -> AppResult<()>;
-
-    /// 读取32位整数
-    async fn read_i32(&self, handle: &ConnectionHandle, address: &str) -> AppResult<i32>;
-
-    /// 写入32位整数
-    async fn write_i32(&self, handle: &ConnectionHandle, address: &str, value: i32) -> AppResult<()>;
-
-    /// 批量读取
-    async fn batch_read(&self, handle: &ConnectionHandle, requests: &[ReadRequest]) -> AppResult<Vec<ReadResult>>;
-
-    /// 批量写入
-    async fn batch_write(&self, handle: &ConnectionHandle, requests: &[WriteRequest]) -> AppResult<Vec<WriteResult>>;
-
-    /// 获取连接统计信息
-    async fn get_connection_stats(&self, handle: &ConnectionHandle) -> AppResult<ConnectionStats>;
-
-    /// 测试连接
-    async fn test_connection(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionTestResult>;
+/// 获取全局 PLC 服务单例
+pub fn global_plc_service() -> Arc<ModbusTcpPlcService> {
+    GLOBAL_PLC_SERVICE
+        .get_or_init(|| Arc::new(ModbusTcpPlcService::default()))
+        .clone()
 }
 
 /// Modbus TCP连接池管理器
@@ -80,6 +51,10 @@ pub struct ModbusTcpConnectionPool {
 /// 单个Modbus TCP连接
 #[derive(Debug, Clone)]
 struct ModbusTcpConnection {
+    /// 字节顺序
+    byte_order: crate::models::ByteOrder,
+    /// 地址是否从0开始
+    zero_based_address: bool,
     /// 连接句柄
     handle: ConnectionHandle,
 
@@ -94,6 +69,7 @@ struct ModbusTcpConnection {
 
     /// 最后心跳时间
     last_heartbeat: Arc<Mutex<DateTime<Utc>>>,
+
 }
 
 /// 全局连接统计
@@ -191,12 +167,15 @@ impl ModbusTcpConnectionPool {
         };
 
         // 创建连接对象
+        let byte_order_enum = crate::models::ByteOrder::from_str(&config.byte_order).unwrap_or_default();
         let connection = ModbusTcpConnection {
             handle: handle.clone(),
             context: Arc::new(Mutex::new(Some(context))),
             is_connected: Arc::new(Mutex::new(true)),
             stats: Arc::new(Mutex::new(stats)),
             last_heartbeat: Arc::new(Mutex::new(Utc::now())),
+            byte_order: byte_order_enum,
+            zero_based_address: config.zero_based_address,
         };
 
         // 存储连接和配置
@@ -265,14 +244,28 @@ pub struct ModbusTcpPlcService {
 
     /// 服务状态
     is_initialized: Arc<Mutex<bool>>,
+    /// 多默认连接句柄映射，key 为连接ID
+    default_handles: Arc<Mutex<HashMap<String, ConnectionHandle>>>,
+    /// 向后兼容的最后一次默认连接句柄
+    default_handle: Arc<Mutex<Option<ConnectionHandle>>>,
+    /// 最后一次成功建立的默认连接配置（用于日志）
+    last_default_config: Arc<Mutex<Option<PlcConnectionConfig>>>,
 }
 
 impl ModbusTcpPlcService {
+    /// 返回最后一次成功建立的默认连接地址，如 127.0.0.1:502
+    pub async fn last_default_address(&self) -> Option<String> {
+        let guard = self.last_default_config.lock().await;
+        guard.as_ref().map(|c| format!("{}:{}", c.host, c.port))
+    }
     /// 创建新的服务实例
     pub fn new() -> Self {
         Self {
             pool: ModbusTcpConnectionPool::new(),
             is_initialized: Arc::new(Mutex::new(false)),
+            default_handles: Arc::new(Mutex::new(HashMap::new())),
+            default_handle: Arc::new(Mutex::new(None)),
+            last_default_config: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -345,6 +338,21 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
 
         let connection = self.pool.get_or_create_connection(config).await?;
 
+        // 保存默认句柄
+        {
+            // 向后兼容：更新单一默认句柄
+            let mut guard = self.default_handle.lock().await;
+            *guard = Some(connection.handle.clone());
+
+            // 更新多连接句柄映射
+            let mut map = self.default_handles.lock().await;
+            map.insert(config.id.clone(), connection.handle.clone());
+
+            // 记录最后成功连接的配置，便于后续日志输出
+            let mut cfg_guard = self.last_default_config.lock().await;
+            *cfg_guard = Some(config.clone());
+        }
+
         Ok(connection.handle.clone())
     }
 
@@ -373,7 +381,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         };
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         log::info!("🔍 [PLC_READ_BOOL] 开始读取布尔值: PLC={}({}:{}), 地址={}, 类型={:?}, 偏移={}",
                    plc_name, plc_host, plc_port, address, register_type, offset);
@@ -455,7 +463,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         };
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         log::info!("🔍 [PLC_WRITE_BOOL] 开始写入布尔值: PLC={}, 地址={}, 类型={:?}, 偏移={}, 值={}",
                    plc_name, address, register_type, offset, value);
@@ -502,7 +510,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let start_time = Utc::now();
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
@@ -535,7 +543,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         }
 
         // 转换为f32 (使用大端字节序)
-        let result = registers_to_f32(&registers[0..2]);
+        let result = ByteOrderConverter::registers_to_float(registers[0], registers[1], connection.byte_order);
 
         // 更新统计信息
         update_read_stats(&connection.stats, start_time).await;
@@ -548,7 +556,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let start_time = Utc::now();
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
@@ -556,7 +564,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
 
         match register_type {
             ModbusRegisterType::HoldingRegister => {
-                let registers = f32_to_registers(value);
+                let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, connection.byte_order);
+                let registers = [reg1, reg2];
                 context.write_multiple_registers(offset, &registers).await
                     .map_err(|e| AppError::plc_communication_error(format!("写入保持寄存器失败: {}", e)))?;
             },
@@ -576,7 +585,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let start_time = Utc::now();
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
@@ -622,7 +631,7 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         let start_time = Utc::now();
 
         // 解析Modbus地址
-        let (register_type, offset) = parse_modbus_address(address)?;
+        let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
@@ -796,6 +805,16 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         Ok(stats.clone())
     }
 
+    async fn default_handle_by_id(&self, connection_id: &str) -> Option<ConnectionHandle> {
+        let guard = self.default_handles.lock().await;
+        guard.get(connection_id).cloned()
+    }
+
+    async fn default_handle(&self) -> Option<ConnectionHandle> {
+        let guard = self.default_handle.lock().await;
+        guard.clone()
+    }
+
     async fn test_connection(&self, config: &PlcConnectionConfig) -> AppResult<ConnectionTestResult> {
         let start_time = Utc::now();
 
@@ -853,7 +872,7 @@ pub enum ModbusRegisterType {
 /// - 1xxxx: 离散输入 (Discrete Input)
 /// - 3xxxx: 输入寄存器 (Input Register)
 /// - 4xxxx: 保持寄存器 (Holding Register)
-pub fn parse_modbus_address(address: &str) -> AppResult<(ModbusRegisterType, u16)> {
+pub fn parse_modbus_address_ex(address: &str, zero_based: bool) -> AppResult<(ModbusRegisterType, u16)> {
     if address.is_empty() {
         return Err(AppError::validation_error("地址不能为空".to_string()));
     }
@@ -872,8 +891,7 @@ pub fn parse_modbus_address(address: &str) -> AppResult<(ModbusRegisterType, u16
             format!("无效的地址偏移量: {}", offset_str)
         ))?;
 
-    // Modbus地址通常从1开始，但协议中是从0开始
-    let protocol_offset = if offset > 0 { offset - 1 } else { 0 };
+    let protocol_offset = if zero_based { offset } else { if offset > 0 { offset - 1 } else { 0 } };
 
     let register_type = match first_char {
         '0' => ModbusRegisterType::Coil,
@@ -886,6 +904,71 @@ pub fn parse_modbus_address(address: &str) -> AppResult<(ModbusRegisterType, u16
     };
 
     Ok((register_type, protocol_offset))
+}
+
+/// 兼容旧代码的单参数版本，默认按1基地址（zero_based = false）
+pub fn parse_modbus_address(address: &str) -> AppResult<(ModbusRegisterType, u16)> {
+    parse_modbus_address_ex(address, false)
+}
+
+/// 字节序转换工具
+struct ByteOrderConverter;
+impl ByteOrderConverter {
+    fn registers_to_float(reg1: u16, reg2: u16, order: crate::models::ByteOrder) -> f32 {
+        let bytes = match order {
+            crate::models::ByteOrder::ABCD => [
+                (reg1 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+            ],
+            crate::models::ByteOrder::CDAB => [
+                (reg2 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+            ],
+            crate::models::ByteOrder::BADC => [
+                (reg1 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+            ],
+            crate::models::ByteOrder::DCBA => [
+                (reg2 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+            ],
+        };
+        f32::from_be_bytes(bytes)
+    }
+
+    fn float_to_registers(value: f32, order: crate::models::ByteOrder) -> (u16, u16) {
+        let bytes = value.to_be_bytes();
+        match order {
+            crate::models::ByteOrder::ABCD => {
+                let reg1 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                let reg2 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::CDAB => {
+                let reg1 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                let reg2 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::BADC => {
+                let reg1 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                let reg2 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::DCBA => {
+                let reg1 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                let reg2 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                (reg1, reg2)
+            }
+        }
+    }
 }
 
 /// 将两个16位寄存器转换为32位浮点数 (大端字节序)
