@@ -19,7 +19,7 @@ use crate::models::structs::{
 // 暂时使用字符串代替，后续需要定义正确的枚举
 use crate::application::services::ITestCoordinationService;
 use crate::infrastructure::IPlcMonitoringService;
-use crate::infrastructure::plc_compat::PlcServiceLegacyExt;
+use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
 use crate::infrastructure::plc_communication::global_plc_service;

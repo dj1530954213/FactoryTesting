@@ -4,7 +4,7 @@
 
 pub mod di_container;
 pub mod plc_communication;
-pub mod plc_compat;
+// pub mod plc_compat; // 已迁移到 domain::services::plc_comm_extension
 pub mod extra; // 临时迁移的基础设施代码，后续合并重构
 
 // 重新导出基础设施组件

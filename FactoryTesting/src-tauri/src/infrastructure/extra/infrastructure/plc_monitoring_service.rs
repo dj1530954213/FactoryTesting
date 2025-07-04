@@ -14,7 +14,7 @@ use crate::models::structs::{
 use crate::domain::services::BaseService;
 use crate::utils::error::AppResult;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
-use crate::infrastructure::plc_compat::PlcServiceLegacyExt;
+use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
 use crate::domain::services::EventPublisher;
 
 /// PLC监控服务接口
@@ -216,7 +216,7 @@ impl PlcMonitoringService {
                 crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AO |
                 crate::models::enums::ModuleType::AINone | crate::models::enums::ModuleType::AONone => {
                     // 读取浮点数值
-                    match crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_float32(&plc_service, address).await {
+                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_float32(&plc_service, address).await {
                         Ok(value) => {
                             // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             if let Some(number) = serde_json::Number::from_f64(value as f64) {
@@ -232,7 +232,7 @@ impl PlcMonitoringService {
                 crate::models::enums::ModuleType::DI | crate::models::enums::ModuleType::DO |
                 crate::models::enums::ModuleType::DINone | crate::models::enums::ModuleType::DONone => {
                     // 读取布尔值
-                    match crate::infrastructure::plc_compat::PlcServiceLegacyExt::read_bool(&plc_service, address).await {
+                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_bool(&plc_service, address).await {
                         Ok(value) => {
                             // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             values.insert(value_key, serde_json::Value::Bool(value));
