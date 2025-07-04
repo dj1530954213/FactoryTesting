@@ -1,6 +1,6 @@
 /// PLC通信服务接口定义及相关数据结构
 
-use async_trait::async_trait;
+/*use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::utils::error::AppResult;
@@ -338,3 +338,5 @@ pub trait PlcCommunicationService: BaseService {
         }
     }
 } 
+
+*/

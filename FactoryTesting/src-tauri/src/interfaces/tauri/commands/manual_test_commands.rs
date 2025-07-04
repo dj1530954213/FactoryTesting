@@ -23,7 +23,7 @@ use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
 use crate::infrastructure::plc_communication::global_plc_service;
-use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
+//use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
 
 /// 开始手动测试命令
 #[tauri::command]

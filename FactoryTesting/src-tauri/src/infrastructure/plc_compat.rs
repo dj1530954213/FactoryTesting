@@ -1,7 +1,7 @@
 // 兼容旧版 PLC 通信调用的扩展方法
 // 该 trait 仅用于过渡期，待调用方全部迁移到 IPlcCommunicationService 后可删除。
 
-use crate::domain::services::plc_communication_service::IPlcCommunicationService;
+/*use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 use crate::utils::error::{AppError, AppResult};
 
 #[async_trait::async_trait]
@@ -274,3 +274,5 @@ impl PlcServiceLegacyExt for &std::sync::Arc<dyn IPlcCommunicationService> {
         (*self).read_bool_by_id(connection_id, address).await
     }
 }
+
+    */

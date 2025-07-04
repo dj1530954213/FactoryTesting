@@ -2,7 +2,7 @@
 /// 负责与外部系统的交互，如PLC通信、数据持久化等
 
 /// PLC通信相关模块
-pub mod plc;
+//pub mod plc;
 
 /// 数据持久化相关模块
 pub mod persistence;
@@ -25,7 +25,7 @@ pub mod excel_export_service;
 // pub mod excel;
 
 // 重新导出PLC相关接口和实现
-pub use plc::{
+/*pub use plc::{
     // PlcCommunicationService as IPlcCommunicationService, // 已在 crate::infrastructure::plc_communication 中导出，避免名称冲突
     PlcTag,
     PlcDataType,
@@ -35,6 +35,7 @@ pub use plc::{
     ModbusPlcService,
     ModbusConfig,
 };
+*/
 
 // 重新导出PLC监控服务
 

@@ -1,5 +1,5 @@
 // modbus_plc_service.rs
-use async_trait::async_trait;
+/*use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -1212,3 +1212,5 @@ impl ModbusPlcService {
         })
     }
 }
+
+    */
