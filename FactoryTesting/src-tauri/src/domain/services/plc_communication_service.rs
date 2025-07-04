@@ -1,5 +1,25 @@
 use super::*;
 use std::collections::HashMap;
+use once_cell::sync::OnceCell;
+use std::sync::Arc;
+use crate::domain::impls::plc_connection_manager::PlcConnectionManager;
+
+
+
+
+/// —— 全局 PLC 连接管理器 ——
+/// 使用 OnceCell 确保只初始化一次，供命令 / 服务查询端点信息等
+static GLOBAL_PLC_MANAGER: OnceCell<Arc<PlcConnectionManager>> = OnceCell::new();
+
+/// 设置全局 PLC 连接管理器（仅允许调用一次）
+pub fn set_global_plc_manager(mgr: Arc<PlcConnectionManager>) {
+    let _ = GLOBAL_PLC_MANAGER.set(mgr);
+}
+
+/// 获取全局 PLC 连接管理器
+pub fn get_global_plc_manager() -> Option<Arc<PlcConnectionManager>> {
+    GLOBAL_PLC_MANAGER.get().cloned()
+}
 
 /// PLC通信服务接口
 /// 
