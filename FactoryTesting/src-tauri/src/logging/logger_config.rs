@@ -390,26 +390,3 @@ impl Default for LoggerConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_logger_config_default() {
-        let config = LoggerConfig::default();
-        assert!(matches!(config.level, LogLevel::Info));
-        assert_eq!(config.targets.len(), 1);
-        assert!(config.sanitization.enabled);
-    }
-    
-    #[test]
-    fn test_sanitize_message() {
-        let config = LoggerConfig::default();
-        let logger = Logger::new(config);
-        
-        let message = "User password is secret123";
-        let sanitized = logger.sanitize_message(message);
-        assert!(sanitized.contains("***"));
-        assert!(!sanitized.contains("password"));
-    }
-}

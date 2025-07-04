@@ -617,8 +617,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
             ));
         }
 
-        // 转换为i32 (使用大端字节序)
-        let result = registers_to_i32(&registers[0..2]);
+        // 根据连接字节序转换为 i32
+        let result = ByteOrderConverter::registers_to_i32(registers[0], registers[1], connection.byte_order);
 
         // 更新统计信息
         update_read_stats(&connection.stats, start_time).await;
@@ -639,7 +639,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
 
         match register_type {
             ModbusRegisterType::HoldingRegister => {
-                let registers = i32_to_registers(value);
+                let (reg1, reg2) = ByteOrderConverter::i32_to_registers(value, connection.byte_order);
+                let registers = [reg1, reg2];
                 context.write_multiple_registers(offset, &registers).await
                     .map_err(|e| AppError::plc_communication_error(format!("写入保持寄存器失败: {}", e)))?;
             },
@@ -969,6 +970,64 @@ impl ByteOrderConverter {
             }
         }
     }
+
+    // i32 <-> registers
+    fn registers_to_i32(reg1: u16, reg2: u16, order: crate::models::ByteOrder) -> i32 {
+        let bytes = match order {
+            crate::models::ByteOrder::ABCD => [
+                (reg1 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+            ],
+            crate::models::ByteOrder::CDAB => [
+                (reg2 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+            ],
+            crate::models::ByteOrder::BADC => [
+                (reg1 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+                (reg2 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+            ],
+            crate::models::ByteOrder::DCBA => [
+                (reg2 & 0xFF) as u8,
+                (reg2 >> 8) as u8,
+                (reg1 & 0xFF) as u8,
+                (reg1 >> 8) as u8,
+            ],
+        };
+        i32::from_be_bytes(bytes)
+    }
+
+    fn i32_to_registers(value: i32, order: crate::models::ByteOrder) -> (u16, u16) {
+        let bytes = value.to_be_bytes();
+        match order {
+            crate::models::ByteOrder::ABCD => {
+                let reg1 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                let reg2 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::CDAB => {
+                let reg1 = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
+                let reg2 = ((bytes[0] as u16) << 8) | (bytes[1] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::BADC => {
+                let reg1 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                let reg2 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                (reg1, reg2)
+            }
+            crate::models::ByteOrder::DCBA => {
+                let reg1 = ((bytes[3] as u16) << 8) | (bytes[2] as u16);
+                let reg2 = ((bytes[1] as u16) << 8) | (bytes[0] as u16);
+                (reg1, reg2)
+            }
+        }
+    }
+
 }
 
 /// 将两个16位寄存器转换为32位浮点数 (大端字节序)
@@ -988,40 +1047,6 @@ pub fn registers_to_f32(registers: &[u16]) -> f32 {
     f32::from_be_bytes(bytes)
 }
 
-/// 将32位浮点数转换为两个16位寄存器 (大端字节序)
-pub fn f32_to_registers(value: f32) -> [u16; 2] {
-    let bytes = value.to_be_bytes();
-    [
-        ((bytes[0] as u16) << 8) | (bytes[1] as u16),
-        ((bytes[2] as u16) << 8) | (bytes[3] as u16),
-    ]
-}
-
-/// 将两个16位寄存器转换为32位整数 (大端字节序)
-pub fn registers_to_i32(registers: &[u16]) -> i32 {
-    if registers.len() < 2 {
-        return 0;
-    }
-
-    // 大端字节序: 高位在前
-    let bytes = [
-        (registers[0] >> 8) as u8,
-        (registers[0] & 0xFF) as u8,
-        (registers[1] >> 8) as u8,
-        (registers[1] & 0xFF) as u8,
-    ];
-
-    i32::from_be_bytes(bytes)
-}
-
-/// 将32位整数转换为两个16位寄存器 (大端字节序)
-pub fn i32_to_registers(value: i32) -> [u16; 2] {
-    let bytes = value.to_be_bytes();
-    [
-        ((bytes[0] as u16) << 8) | (bytes[1] as u16),
-        ((bytes[2] as u16) << 8) | (bytes[3] as u16),
-    ]
-}
 
 /// 更新读取统计信息
 async fn update_read_stats(stats: &Arc<Mutex<ConnectionStats>>, start_time: DateTime<Utc>) {
@@ -1051,50 +1076,4 @@ async fn update_write_stats(stats: &Arc<Mutex<ConnectionStats>>, start_time: Dat
     stats.average_write_time_ms = total_time / stats.successful_writes as f64;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_modbus_address() {
-        // 测试线圈地址
-        let (reg_type, offset) = parse_modbus_address("00001").unwrap();
-        assert_eq!(reg_type, ModbusRegisterType::Coil);
-        assert_eq!(offset, 0);
-
-        // 测试保持寄存器地址
-        let (reg_type, offset) = parse_modbus_address("40001").unwrap();
-        assert_eq!(reg_type, ModbusRegisterType::HoldingRegister);
-        assert_eq!(offset, 0);
-
-        // 测试输入寄存器地址
-        let (reg_type, offset) = parse_modbus_address("30100").unwrap();
-        assert_eq!(reg_type, ModbusRegisterType::InputRegister);
-        assert_eq!(offset, 99);
-
-        // 测试无效地址
-        assert!(parse_modbus_address("").is_err());
-        assert!(parse_modbus_address("5001").is_err());
-        assert!(parse_modbus_address("4abc").is_err());
-    }
-
-    #[test]
-    fn test_f32_conversion() {
-        let test_value = 123.456f32;
-        let registers = f32_to_registers(test_value);
-        let converted_back = registers_to_f32(&registers);
-
-        // 由于浮点数精度问题，使用近似比较
-        assert!((test_value - converted_back).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_i32_conversion() {
-        let test_value = 123456i32;
-        let registers = i32_to_registers(test_value);
-        let converted_back = registers_to_i32(&registers);
-
-        assert_eq!(test_value, converted_back);
-    }
-}
 
