@@ -9,8 +9,7 @@ pub mod plc_connection_manager;
 pub mod real_test_orchestration_service;
 // pub mod stub_batch_allocation_service; // retired after real implementation
 pub mod real_batch_allocation_service;
-#[cfg(FALSE)]
-pub mod noop_services;
+// pub mod noop_services; // 已弃用
 pub mod test_plc_config_service;
 
 // 仅导出实现结构体及关联枚举

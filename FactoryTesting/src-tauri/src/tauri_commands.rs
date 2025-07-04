@@ -33,7 +33,6 @@ use tauri::State;
 use tokio::sync::Mutex;
 use std::collections::HashSet;
 use chrono::{DateTime, Utc};
-use std::convert::TryFrom;
 use std::path::PathBuf;
 
 // ============================================================================
