@@ -244,7 +244,7 @@ impl AppState {
         ));
 
         // 设置全局PLC连接管理器，让ModbusPlcService能够访问
-        crate::infrastructure::plc::modbus_plc_service::set_global_plc_manager(plc_connection_manager.clone());
+        crate::infrastructure::plc_communication::set_global_plc_manager(plc_connection_manager.clone());
 
         // 创建PLC监控服务 - 使用真实的PLC监控服务
         let plc_monitoring_service: Arc<dyn crate::infrastructure::IPlcMonitoringService> = Arc::new(

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+/*use std::sync::Arc;
 use async_trait::async_trait;
 use crate::utils::error::{AppResult, AppError};
 use crate::models::*;
@@ -97,3 +97,4 @@ impl IPersistenceService for NoopPersistenceService {
     async fn load_batch_info(&self, _batch_id: &str) -> AppResult<Option<TestBatchInfo>> { Err(AppError::not_implemented_error("load_batch_info")) }
     async fn load_all_batch_info(&self) -> AppResult<Vec<TestBatchInfo>> { Err(AppError::not_implemented_error("load_all_batch_info")) }
 }
+*/

@@ -104,7 +104,7 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
                 format!("PLC连接未建立: {}", connection_id)
             ));
         };
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {}({}) 写[{}]={}", ep, connection_id, address, value);
             }
@@ -121,13 +121,13 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
                 format!("PLC连接未建立: {}", connection_id)
             ));
         };
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {}({}) 读[{}] 请求开始", ep, connection_id, address);
             }
         }
         let value = svc.read_f32(&handle, address).await?;
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {}({}) 读[{}]={}", ep, connection_id, address, value);
             }
@@ -144,7 +144,7 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
                 format!("PLC连接未建立: {}", connection_id)
             ));
         };
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {} 写Bool[{}]={}", ep, address, value);
             }
@@ -161,13 +161,13 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
                 format!("PLC连接未建立: {}", connection_id)
             ));
         };
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {} 读Bool[{}] 请求开始", ep, address);
             }
         }
         let value = svc.read_bool(&handle, address).await?;
-        if let Some(mgr) = crate::infrastructure::plc::modbus_plc_service::get_global_plc_manager() {
+        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
                 log::info!("PLC {} 读Bool[{}]={}", ep, address, value);
             }

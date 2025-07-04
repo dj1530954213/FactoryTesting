@@ -24,15 +24,28 @@ use crate::utils::error::{AppError, AppResult};
 pub use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 
 use once_cell::sync::OnceCell;
+use crate::domain::impls::plc_connection_manager::PlcConnectionManager;
 
 /// 全局唯一的 ModbusTcpPlcService 实例
 static GLOBAL_PLC_SERVICE: OnceCell<Arc<ModbusTcpPlcService>> = OnceCell::new();
+/// 全局 PLC 连接管理器（供外层服务/命令查询端点信息等）
+static GLOBAL_PLC_MANAGER: OnceCell<Arc<PlcConnectionManager>> = OnceCell::new();
 
 /// 获取全局 PLC 服务单例
 pub fn global_plc_service() -> Arc<ModbusTcpPlcService> {
     GLOBAL_PLC_SERVICE
         .get_or_init(|| Arc::new(ModbusTcpPlcService::default()))
         .clone()
+}
+
+/// 设置全局 PLC 连接管理器（仅允许设置一次）
+pub fn set_global_plc_manager(mgr: Arc<PlcConnectionManager>) {
+    let _ = GLOBAL_PLC_MANAGER.set(mgr);
+}
+
+/// 获取全局 PLC 连接管理器
+pub fn get_global_plc_manager() -> Option<Arc<PlcConnectionManager>> {
+    GLOBAL_PLC_MANAGER.get().cloned()
 }
 
 /// Modbus TCP连接池管理器

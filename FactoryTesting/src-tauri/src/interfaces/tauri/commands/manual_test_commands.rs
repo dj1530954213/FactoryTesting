@@ -21,6 +21,8 @@ use crate::application::services::ITestCoordinationService;
 use crate::infrastructure::IPlcMonitoringService;
 use crate::infrastructure::plc_compat::PlcServiceLegacyExt;
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
+use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
+use crate::infrastructure::plc_communication::global_plc_service;
 use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
 
 /// 开始手动测试命令
@@ -550,49 +552,64 @@ async fn write_to_test_plc(
 ) -> Result<(), String> {
     info!("📝 [AI_MANUAL_TEST] 写入测试PLC [{}]: {:.2}%", address, percentage);
 
-    // 获取测试PLC配置
-    let test_plc_config = match app_state.test_plc_config_service.get_test_plc_config().await {
-        Ok(config) => config,
+    // 获取测试 PLC 配置（仅需 IP）
+    let test_plc_config = match app_state
+        .test_plc_config_service
+        .get_test_plc_config()
+        .await
+    {
+        Ok(cfg) => cfg,
         Err(e) => {
             error!("❌ [AI_MANUAL_TEST] 获取测试PLC配置失败: {}", e);
             return Err(format!("获取测试PLC配置失败: {}", e));
         }
     };
 
-    // 使用测试PLC的IP地址创建Modbus PLC服务
-    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
-        ip_address: test_plc_config.ip_address.clone(),
+    // --- 新版全局 PLC 服务 ---
+    let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
+    let connection_id = "manual_test_plc".to_string();
+
+    // 连接配置
+    use std::collections::HashMap;
+    let plc_config = PlcConnectionConfig {
+        id: connection_id.clone(),
+        name: "ManualTestPLC".to_string(),
+        protocol: PlcProtocol::ModbusTcp,
+        host: test_plc_config.ip_address.clone(),
         port: 502,
-        slave_id: 1,
-        byte_order: crate::models::ByteOrder::default(),
-        connection_timeout_ms: 5000,
+        timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        byte_order: crate::models::ByteOrder::default().to_string(),
         zero_based_address: false,
+        retry_count: 0,
+        retry_interval_ms: 500,
+        protocol_params: HashMap::new(),
     };
 
-    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
-
-    // 连接到PLC
-    match plc_service.connect().await {
-        Ok(_) => {
-            info!("✅ [AI_MANUAL_TEST] 测试PLC连接成功: {}", test_plc_config.ip_address);
-        }
-        Err(e) => {
-            error!("❌ [AI_MANUAL_TEST] 测试PLC连接失败: {}", e);
-            return Err(format!("测试PLC连接失败: {}", e));
-        }
+    // 建立连接（已存在则复用）
+    if let Err(e) = plc_service.connect(&plc_config).await {
+        error!("❌ [AI_MANUAL_TEST] 测试PLC连接失败: {}", e);
+        return Err(format!("测试PLC连接失败: {}", e));
     }
 
-    // 执行PLC写入操作
-    match plc_service.write_float32(address, percentage as f32).await {
+    // 写入百分比
+    match plc_service
+        .write_float32_by_id(&connection_id, address, percentage as f32)
+        .await
+    {
         Ok(_) => {
-            info!("✅ [AI_MANUAL_TEST] 测试PLC写入成功: [{}] = {:.2}%", address, percentage);
+            info!(
+                "✅ [AI_MANUAL_TEST] 测试PLC写入成功: [{}] = {:.2}%",
+                address, percentage
+            );
             Ok(())
         }
         Err(e) => {
-            error!("❌ [AI_MANUAL_TEST] 测试PLC写入失败: [{}] = {:.2}%, 错误: {}",
-                   address, percentage, e);
+            error!(
+                "❌ [AI_MANUAL_TEST] 测试PLC写入失败: [{}] = {:.2}%, 错误: {}",
+                address, percentage, e
+            );
             Err(format!("PLC写入失败: {}", e))
         }
     }
@@ -604,61 +621,71 @@ async fn write_bool_to_target_plc(
     address: &str,
     value: bool,
 ) -> Result<(), String> {
-    // -------- 地址长度校正 ---------
+    // 对地址执行规范化，确保 0X 开头 4 位对齐等
     let fixed_address = normalize_modbus_address(address);
-
     info!("📝 [AI_MANUAL_TEST] 写入被测PLC [{}]: {}", fixed_address, value);
 
-    // 暂时使用测试PLC的IP地址作为被测PLC地址
-    // TODO: 在实际部署时，需要配置独立的被测PLC地址
-    let test_plc_config = match app_state.test_plc_config_service.get_test_plc_config().await {
-        Ok(config) => config,
+    // 获取被测 PLC 配置（目前仍与测试 PLC 同一个配置）
+    let test_plc_config = match app_state
+        .test_plc_config_service
+        .get_test_plc_config()
+        .await
+    {
+        Ok(cfg) => cfg,
         Err(e) => {
-            error!("❌ [AI_MANUAL_TEST] 获取测试PLC配置失败: {}", e);
-            return Err(format!("获取测试PLC配置失败: {}", e));
+            error!("❌ [AI_MANUAL_TEST] 获取PLC配置失败: {}", e);
+            return Err(format!("获取PLC配置失败: {}", e));
         }
     };
 
-    // 使用被测PLC的IP地址创建Modbus PLC服务
-    // 在实际环境中，被测PLC和测试PLC可能是不同的设备
-    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
-        ip_address: test_plc_config.ip_address.clone(), // 暂时使用相同IP
+    // --- 新版全局 PLC 服务 ---
+    let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
+    let connection_id = "manual_target_plc".to_string();
+
+    use std::collections::HashMap;
+    let plc_config = PlcConnectionConfig {
+        id: connection_id.clone(),
+        name: "ManualTargetPLC".to_string(),
+        protocol: PlcProtocol::ModbusTcp,
+        host: test_plc_config.ip_address.clone(),
         port: 502,
-        slave_id: 1,
-        byte_order: crate::models::ByteOrder::default(),
-        connection_timeout_ms: 5000,
+        timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        byte_order: crate::models::ByteOrder::default().to_string(),
         zero_based_address: false,
+        retry_count: 0,
+        retry_interval_ms: 500,
+        protocol_params: HashMap::new(),
     };
 
-    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
-
-    // 连接到PLC
-    match plc_service.connect().await {
-        Ok(_) => {
-            info!("✅ [AI_MANUAL_TEST] 被测PLC连接成功: {}", test_plc_config.ip_address);
-        }
-        Err(e) => {
-            error!("❌ [AI_MANUAL_TEST] 被测PLC连接失败: {}", e);
-            return Err(format!("被测PLC连接失败: {}", e));
-        }
+    // 建立 / 复用连接
+    if let Err(e) = plc_service.connect(&plc_config).await {
+        error!("❌ [AI_MANUAL_TEST] PLC连接失败: {}", e);
+        return Err(format!("PLC连接失败: {}", e));
     }
 
-    // 执行PLC写入操作
-    match plc_service.write_bool_impl(&fixed_address, value).await {
+    // 写入布尔值
+    match plc_service
+        .write_bool_by_id(&connection_id, &fixed_address, value)
+        .await
+    {
         Ok(_) => {
-            info!("✅ [AI_MANUAL_TEST] 被测PLC写入成功: [{}] = {}", fixed_address, value);
+            info!(
+                "✅ [AI_MANUAL_TEST] 被测PLC写入成功: [{}] = {}",
+                fixed_address, value
+            );
             Ok(())
         }
         Err(e) => {
-            error!("❌ [AI_MANUAL_TEST] 被测PLC写入失败: [{}] = {}, 错误: {}",
-                   fixed_address, value, e);
+            error!(
+                "❌ [AI_MANUAL_TEST] 被测PLC写入失败: [{}] = {}, 错误: {}",
+                fixed_address, value, e
+            );
             Err(format!("PLC写入失败: {}", e))
         }
     }
 }
-
 /// 规范化 Modbus 地址：不足 5 位时在左侧补零至 5 位
 fn normalize_modbus_address(address: &str) -> String {
     // 仅保留数字字符
@@ -742,13 +769,15 @@ async fn write_bool_to_test_plc(
     address: &str,
     value: bool,
 ) -> Result<(), String> {
-    // 对地址执行规范化
     let fixed_address = normalize_modbus_address(address);
-
     info!("📝 [DI_MANUAL_TEST] 写入测试PLC [{}]: {}", fixed_address, value);
 
     // 获取测试 PLC 配置
-    let test_plc_config = match app_state.test_plc_config_service.get_test_plc_config().await {
+    let test_plc_config = match app_state
+        .test_plc_config_service
+        .get_test_plc_config()
+        .await
+    {
         Ok(cfg) => cfg,
         Err(e) => {
             error!("❌ [DI_MANUAL_TEST] 获取测试PLC配置失败: {}", e);
@@ -756,34 +785,48 @@ async fn write_bool_to_test_plc(
         }
     };
 
-    // 创建 Modbus 服务
-    let modbus_config = crate::infrastructure::plc::modbus_plc_service::ModbusConfig {
-        ip_address: test_plc_config.ip_address.clone(),
+    // --- 新版全局 PLC 服务 ---
+    let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
+    let connection_id = "manual_test_plc_bool".to_string();
+
+    use std::collections::HashMap;
+    let plc_config = PlcConnectionConfig {
+        id: connection_id.clone(),
+        name: "ManualTestPLC_BOOL".to_string(),
+        protocol: PlcProtocol::ModbusTcp,
+        host: test_plc_config.ip_address.clone(),
         port: 502,
-        slave_id: 1,
-        byte_order: crate::models::ByteOrder::default(),
-        connection_timeout_ms: 5000,
+        timeout_ms: 5000,
         read_timeout_ms: 3000,
         write_timeout_ms: 3000,
+        byte_order: crate::models::ByteOrder::default().to_string(),
         zero_based_address: false,
+        retry_count: 0,
+        retry_interval_ms: 500,
+        protocol_params: HashMap::new(),
     };
 
-    let mut plc_service = crate::infrastructure::plc::modbus_plc_service::ModbusPlcService::new(modbus_config);
-
-    // 连接
-    if let Err(e) = plc_service.connect().await {
-        error!("❌ [DI_MANUAL_TEST] 测试PLC连接失败: {}", e);
-        return Err(format!("测试PLC连接失败: {}", e));
+    if let Err(e) = plc_service.connect(&plc_config).await {
+        error!("❌ [DI_MANUAL_TEST] PLC连接失败: {}", e);
+        return Err(format!("PLC连接失败: {}", e));
     }
 
-    // 写入
-    match plc_service.write_bool_impl(&fixed_address, value).await {
+    match plc_service
+        .write_bool_by_id(&connection_id, &fixed_address, value)
+        .await
+    {
         Ok(_) => {
-            info!("✅ [DI_MANUAL_TEST] 测试PLC写入成功: [{}] = {}", fixed_address, value);
+            info!(
+                "✅ [DI_MANUAL_TEST] 测试PLC写入成功: [{}] = {}",
+                fixed_address, value
+            );
             Ok(())
         }
         Err(e) => {
-            error!("❌ [DI_MANUAL_TEST] 测试PLC写入失败: [{}] = {}, 错误: {}", fixed_address, value, e);
+            error!(
+                "❌ [DI_MANUAL_TEST] 测试PLC写入失败: [{}] = {}, 错误: {}",
+                fixed_address, value, e
+            );
             Err(format!("PLC写入失败: {}", e))
         }
     }
