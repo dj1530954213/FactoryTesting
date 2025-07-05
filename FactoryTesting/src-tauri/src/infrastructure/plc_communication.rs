@@ -351,19 +351,22 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
 
         let connection = self.pool.get_or_create_connection(config).await?;
 
-        // 保存默认句柄
+        // 保存/更新连接句柄映射
         {
-            // 向后兼容：更新单一默认句柄
-            let mut guard = self.default_handle.lock().await;
-            *guard = Some(connection.handle.clone());
-
-            // 更新多连接句柄映射
+            // 1. 更新多连接句柄映射（始终保持最新）
             let mut map = self.default_handles.lock().await;
             map.insert(config.id.clone(), connection.handle.clone());
 
-            // 记录最后成功连接的配置，便于后续日志输出
-            let mut cfg_guard = self.last_default_config.lock().await;
-            *cfg_guard = Some(config.clone());
+            // 2. 仅当当前还没有默认句柄时，才设置向后兼容的 default_handle，
+            //    避免后续新的连接（如手动测试用连接）覆盖业务逻辑正在使用的默认连接。
+            let mut guard = self.default_handle.lock().await;
+            if guard.is_none() {
+                *guard = Some(connection.handle.clone());
+
+                // 同步记录最后一次默认连接配置，便于日志输出
+                let mut cfg_guard = self.last_default_config.lock().await;
+                *cfg_guard = Some(config.clone());
+            }
         }
 
         Ok(connection.handle.clone())

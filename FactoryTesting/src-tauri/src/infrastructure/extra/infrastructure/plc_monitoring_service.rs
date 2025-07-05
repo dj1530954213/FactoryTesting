@@ -112,6 +112,7 @@ impl PlcMonitoringService {
         let addresses = request.monitoring_addresses.clone();
         let module_type = request.module_type.clone();
         let address_key_map = request.address_key_map.clone();
+        let opt_connection_id = request.connection_id.clone();
         
         // 启动监控任务
         let task_handle = tokio::spawn(async move {
@@ -136,6 +137,7 @@ impl PlcMonitoringService {
                             &addresses,
                             &module_type,
                             address_key_map.as_ref(),
+                            opt_connection_id.as_deref(),
                         ).await {
                             error_count += 1;
 
@@ -194,6 +196,7 @@ impl PlcMonitoringService {
         addresses: &[String],
         module_type: &crate::models::enums::ModuleType,
         address_key_map: Option<&std::collections::HashMap<String, String>>,
+        connection_id: Option<&str>,
     ) -> AppResult<()> {
         let mut values = HashMap::new();
         
@@ -212,11 +215,20 @@ impl PlcMonitoringService {
             };
             // log::debug!("🔧 [PLC_MONITORING] 读取地址: {} -> 键名: {}", address, value_key);
 
+            // 根据模块类型选择 PLC 连接 ID
+            let connection_id = if let Some(cid) = connection_id { cid } else { match module_type {
+                crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::DI |
+                crate::models::enums::ModuleType::DINone | crate::models::enums::ModuleType::AINone => "target_plc",
+                crate::models::enums::ModuleType::DO | crate::models::enums::ModuleType::AO |
+                crate::models::enums::ModuleType::DONone | crate::models::enums::ModuleType::AONone => "manual_test_plc",
+                crate::models::enums::ModuleType::Communication | crate::models::enums::ModuleType::Other(_) => "manual_test_plc",
+            } };
+
             match module_type {
                 crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AO |
                 crate::models::enums::ModuleType::AINone | crate::models::enums::ModuleType::AONone => {
                     // 读取浮点数值
-                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_float32(&plc_service, address).await {
+                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_float32_by_id(&plc_service, connection_id, address).await {
                         Ok(value) => {
                             // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             if let Some(number) = serde_json::Number::from_f64(value as f64) {
@@ -232,7 +244,7 @@ impl PlcMonitoringService {
                 crate::models::enums::ModuleType::DI | crate::models::enums::ModuleType::DO |
                 crate::models::enums::ModuleType::DINone | crate::models::enums::ModuleType::DONone => {
                     // 读取布尔值
-                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_bool(&plc_service, address).await {
+                    match crate::domain::services::plc_comm_extension::PlcServiceLegacyExt::read_bool_by_id(&plc_service, connection_id, address).await {
                         Ok(value) => {
                             // log::debug!("✅ [PLC_MONITORING] 读取成功: {} = {}", address, value);
                             values.insert(value_key, serde_json::Value::Bool(value));

@@ -91,14 +91,29 @@ pub async fn get_manual_test_status_cmd(
 /// 开始PLC监控命令
 #[tauri::command]
 pub async fn start_plc_monitoring_cmd(
-    request: StartPlcMonitoringRequest,
+    mut request: StartPlcMonitoringRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<StartPlcMonitoringResponse, String> {
+    // 根据模块类型补充 connection_id
+    if request.connection_id.is_none() {
+        let conn_id = match request.module_type {
+            crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::DI |
+            crate::models::enums::ModuleType::DINone | crate::models::enums::ModuleType::AINone => app_state.target_connection_id.clone(),
+            _ => app_state.test_rig_connection_id.clone(),
+        };
+        request.connection_id = Some(conn_id);
+    }
+
     info!("🔧 [MANUAL_TEST_CMD] 开始PLC监控: {:?}", request);
 
     match app_state.plc_monitoring_service.start_monitoring(request).await {
         Ok(response) => {
-            info!("✅ [MANUAL_TEST_CMD] PLC监控启动成功");
+            // 获取当前默认PLC连接地址（IP:PORT），便于排查使用了哪台PLC
+            if let Some(addr) = global_plc_service().last_default_address().await {
+                info!("✅ [MANUAL_TEST_CMD] PLC监控启动成功: {}", addr);
+            } else {
+                info!("✅ [MANUAL_TEST_CMD] PLC监控启动成功 (当前无活动PLC连接)");
+            }
             Ok(response)
         }
         Err(e) => {
@@ -567,6 +582,7 @@ async fn write_to_test_plc(
 
     // --- 新版全局 PLC 服务 ---
     let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
+    // 手动测试写操作始终使用测试PLC连接
     let connection_id = "manual_test_plc".to_string();
 
     // 连接配置
@@ -640,7 +656,7 @@ async fn write_bool_to_target_plc(
 
     // --- 新版全局 PLC 服务 ---
     let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
-    let connection_id = "manual_target_plc".to_string();
+    let connection_id = "target_plc".to_string();
 
     use std::collections::HashMap;
     let plc_config = PlcConnectionConfig {

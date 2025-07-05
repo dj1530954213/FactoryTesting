@@ -99,13 +99,13 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
 
         if let Some(mgr) = crate::domain::services::plc_communication_service::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
-                log::info!("PLC {}({}) 读[{}] 请求开始", ep, connection_id, address);
+                //log::info!("PLC {}({}) 读[{}] 请求开始", ep, connection_id, address);
             }
         }
         let value = svc.read_f32(&handle, address).await?;
         if let Some(mgr) = crate::domain::services::plc_communication_service::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
-                log::info!("PLC {}({}) 读[{}]={}", ep, connection_id, address, value);
+                //log::info!("PLC {}({}) 读[{}]={}", ep, connection_id, address, value);
             }
         }
         Ok(value)
@@ -133,13 +133,13 @@ impl PlcServiceLegacyExt for std::sync::Arc<dyn IPlcCommunicationService + Send 
 
         if let Some(mgr) = crate::domain::services::plc_communication_service::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
-                log::info!("PLC {} 读Bool[{}] 请求开始", ep, address);
+                //log::info!("PLC {} 读Bool[{}] 请求开始", ep, address);
             }
         }
         let value = svc.read_bool(&handle, address).await?;
         if let Some(mgr) = crate::domain::services::plc_communication_service::get_global_plc_manager() {
             if let Some(ep) = mgr.endpoint_by_id(connection_id).await {
-                log::info!("PLC {} 读Bool[{}]={}", ep, address, value);
+                //log::info!("PLC {} 读Bool[{}]={}", ep, address, value);
             }
         }
         Ok(value)

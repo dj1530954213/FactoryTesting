@@ -121,6 +121,9 @@ pub struct StartPlcMonitoringRequest {
     /// 地址到值键名的映射，可选
     #[serde(rename = "addressKeyMap", skip_serializing_if = "Option::is_none")]
     pub address_key_map: Option<std::collections::HashMap<String, String>>,
+    /// 本次监控使用的 PLC 连接 ID（区分 target_plc / manual_test_plc）
+    #[serde(rename = "connectionId", skip_serializing_if = "Option::is_none", default)]
+    pub connection_id: Option<String>,
 }
 
 /// PLC监控响应

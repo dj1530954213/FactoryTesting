@@ -259,50 +259,6 @@ impl ServiceContainer for AppServiceContainer {
     }
 }
 
-/* MockServiceContainer and related code removed to eliminate mocks
-// MockServiceContainer removed
-    mock_suite: crate::domain::services::mocks::MockServiceSuite,
-}
-
-// impl MockServiceContainer removed
-    pub fn new() -> Result<Self, AppError> {
-        let mock_suite = crate::domain::services::mocks::MockFactory::create_full_mock_suite(None);
-        Ok(Self { mock_suite })
-    }
-
-    pub fn with_config(config: crate::domain::services::mocks::MockConfig) -> Result<Self, AppError> {
-        let mock_suite = crate::domain::services::mocks::MockFactory::create_full_mock_suite(Some(config));
-        Ok(Self { mock_suite })
-    }
-}
-
-// impl ServiceContainer for MockServiceContainer removed
-    fn get_test_orchestration_service(&self) -> Arc<dyn ITestOrchestrationService> {
-        Arc::new(self.mock_suite.test_orchestration.clone())
-    }
-
-    fn get_channel_state_manager(&self) -> Arc<dyn IChannelStateManager> {
-        Arc::new(self.mock_suite.channel_state_manager.clone())
-    }
-
-    fn get_test_execution_engine(&self) -> Arc<dyn ITestExecutionEngine> {
-        Arc::new(self.mock_suite.test_execution_engine.clone())
-    }
-
-    fn get_plc_communication_service(&self) -> Arc<dyn IPlcCommunicationService> {
-        // 在Mock容器中也使用真实的Modbus PLC服务
-        crate::infrastructure::plc_communication::global_plc_service()
-    }
-
-    fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
-        Arc::new(self.mock_suite.batch_allocation.clone())
-    }
-
-    fn get_event_publisher(&self) -> Arc<dyn IEventPublisher> {
-        Arc::new(self.mock_suite.event_publisher.clone())
-    }
-
-    */
 
 /// 容器工厂
 pub struct ContainerFactory;
