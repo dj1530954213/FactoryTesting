@@ -522,27 +522,42 @@ async fn get_instance_and_definition(
     Ok((instance, definition))
 }
 
-/// 获取测试PLC通道地址
+/// 获取测试PLC通道通信地址（直接查询数据库）
 async fn get_test_plc_address(
     app_state: &State<'_, crate::tauri_commands::AppState>,
     instance: &crate::models::ChannelTestInstance,
 ) -> Result<String, String> {
-    // 通过测试PLC通道标签获取通信地址
-    match &instance.test_plc_channel_tag {
-        Some(channel_id) => {
-            // 解析测试PLC通道标签（可能包含字母/下划线等），仅提取数字部分作为序号
-            let digits: String = channel_id.chars().filter(|c| c.is_ascii_digit()).collect();
-            if digits.is_empty() {
-                return Err("测试PLC通道标签不包含数字，无法转换为地址".to_string());
-            }
-            let index: u32 = digits.parse().unwrap_or(1);
-            // 以保持寄存器 40xxx 形式返回；真实场景可改为从配置表查询
-            Ok(format!("40{:03}", index))
-        }
+    use crate::models::test_plc_config::GetTestPlcChannelsRequest;
+
+    let tag = match &instance.test_plc_channel_tag {
+        Some(t) => t.clone(),
         None => {
             error!("❌ [AI_MANUAL_TEST] 测试实例未分配测试PLC通道: {}", instance.instance_id);
-            Err("测试实例未分配测试PLC通道".to_string())
+            return Err("测试实例未分配测试PLC通道".to_string());
         }
+    };
+
+    // 查询数据库获取所有启用的通道配置
+    let channels = match app_state
+        .test_plc_config_service
+        .get_test_plc_channels(GetTestPlcChannelsRequest {
+            channel_type_filter: None,
+            enabled_only: Some(true),
+        })
+        .await
+    {
+        Ok(cs) => cs,
+        Err(e) => {
+            error!("❌ [AI_MANUAL_TEST] 加载测试PLC通道配置失败: {}", e);
+            return Err(format!("加载测试PLC通道配置失败: {}", e));
+        }
+    };
+
+    if let Some(cfg) = channels.iter().find(|c| c.channel_address == tag) {
+        Ok(cfg.communication_address.clone())
+    } else {
+        error!("❌ [AI_MANUAL_TEST] 通道标签未找到对应配置: {}", tag);
+        Err("未找到测试PLC通道通信地址".to_string())
     }
 }
 
@@ -582,8 +597,8 @@ async fn write_to_test_plc(
 
     // --- 新版全局 PLC 服务 ---
     let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
-    // 手动测试写操作始终使用测试PLC连接
-    let connection_id = "manual_test_plc".to_string();
+    // 使用自动测试阶段已建立的测试PLC连接ID
+    let connection_id = app_state.test_rig_connection_id.clone();
 
     // 连接配置
     use std::collections::HashMap;
@@ -603,10 +618,18 @@ async fn write_to_test_plc(
         protocol_params: HashMap::new(),
     };
 
-    // 建立连接（已存在则复用）
-    if let Err(e) = plc_service.connect(&plc_config).await {
-        error!("❌ [AI_MANUAL_TEST] 测试PLC连接失败: {}", e);
-        return Err(format!("测试PLC连接失败: {}", e));
+    // 必须已存在连接
+    match plc_service.default_handle_by_id(&connection_id).await {
+        Some(h) => {
+            if !plc_service.is_connected(&h).await.unwrap_or(false) {
+                error!("❌ [AI_MANUAL_TEST] 测试PLC连接已断开: {}", connection_id);
+                return Err("测试PLC连接已断开".to_string());
+            }
+        }
+        None => {
+            error!("❌ [AI_MANUAL_TEST] 未找到测试PLC连接: {}", connection_id);
+            return Err("测试PLC未连接".to_string());
+        }
     }
 
     // 写入百分比
@@ -656,7 +679,8 @@ async fn write_bool_to_target_plc(
 
     // --- 新版全局 PLC 服务 ---
     let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = global_plc_service();
-    let connection_id = "target_plc".to_string();
+    // 使用自动测试阶段已建立的被测PLC连接ID
+    let connection_id = app_state.target_connection_id.clone();
 
     use std::collections::HashMap;
     let plc_config = PlcConnectionConfig {
@@ -675,10 +699,18 @@ async fn write_bool_to_target_plc(
         protocol_params: HashMap::new(),
     };
 
-    // 建立 / 复用连接
-    if let Err(e) = plc_service.connect(&plc_config).await {
-        error!("❌ [AI_MANUAL_TEST] PLC连接失败: {}", e);
-        return Err(format!("PLC连接失败: {}", e));
+    // 检查连接是否存在且在线
+    match plc_service.default_handle_by_id(&connection_id).await {
+        Some(h) => {
+            if !plc_service.is_connected(&h).await.unwrap_or(false) {
+                error!("❌ [AI_MANUAL_TEST] 被测PLC连接已断开: {}", connection_id);
+                return Err("被测PLC连接已断开".to_string());
+            }
+        }
+        None => {
+            error!("❌ [AI_MANUAL_TEST] 未找到被测PLC连接: {}", connection_id);
+            return Err("被测PLC未连接".to_string());
+        }
     }
 
     // 写入布尔值
