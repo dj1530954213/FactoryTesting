@@ -63,6 +63,7 @@ impl SqliteOrmPersistenceService {
                 config.storage_root_dir.join(DEFAULT_DB_FILE)
             });
 
+        info!("🗄️ [PERSIST] 数据库文件路径: {:?}", determined_db_file_path);
         let db_url = if determined_db_file_path.to_str() == Some(":memory:") {
             "sqlite::memory:".to_string()
         } else {
