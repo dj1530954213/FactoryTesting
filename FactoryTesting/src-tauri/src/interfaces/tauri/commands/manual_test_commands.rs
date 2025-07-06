@@ -108,6 +108,38 @@ pub async fn start_plc_monitoring_cmd(
         request.connection_id = Some(conn_id);
     }
 
+    // ===== 兜底：若前端未提供监控地址，则从实例中获取测试PLC通信地址 =====
+    if request.monitoring_addresses.is_empty() {
+        match app_state.persistence_service.load_test_instance(&request.instance_id).await {
+            Ok(Some(inst)) => {
+                if let Some(addr) = inst.test_plc_communication_address {
+                    request.monitoring_addresses.push(addr.clone());
+                    // 若仍未提供 address_key_map，自动根据模块类型生成
+                    if request.address_key_map.is_none() {
+                        use crate::models::enums::ModuleType;
+                        let key = match request.module_type {
+                            ModuleType::AO | ModuleType::AONone => "currentOutput",
+                            ModuleType::DI | ModuleType::DO | ModuleType::DINone | ModuleType::DONone => "currentState",
+                            _ => "currentValue",
+                        };
+                        let mut map = std::collections::HashMap::new();
+                        map.insert(addr.clone(), key.to_string());
+                        request.address_key_map = Some(map);
+                    }
+                    info!("🔧 [MANUAL_TEST_CMD] 监控地址为空，已从实例填充: {}", addr);
+                } else {
+                    warn!("⚠️ [MANUAL_TEST_CMD] 实例缺少 test_plc_communication_address，无法填充监控地址");
+                }
+            }
+            Ok(None) => {
+                warn!("⚠️ [MANUAL_TEST_CMD] 未找到测试实例: {}", request.instance_id);
+            }
+            Err(e) => {
+                error!("❌ [MANUAL_TEST_CMD] 加载测试实例失败: {}", e);
+            }
+        }
+    }
+
     info!("🔧 [MANUAL_TEST_CMD] 开始PLC监控: {:?}", request);
 
     match app_state.plc_monitoring_service.start_monitoring(request).await {

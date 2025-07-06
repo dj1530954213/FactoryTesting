@@ -302,10 +302,14 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
     const addresses: string[] = [];
     const moduleType = this.definition.module_type as ModuleType;
 
-    // 使用真实的Modbus通信地址（如40001）
-    const baseAddress = this.definition.plc_communication_address;
+    // 优先使用实例分配的测试PLC通信地址（TestPlcChannelConfig.communication_address）
+    let baseAddress = this.instance?.test_plc_communication_address;
     if (!baseAddress) {
-      console.warn('⚠️ [MANUAL_TEST_MODAL] 通道定义缺少PLC通信地址:', this.definition.tag);
+      // 回退到通道定义自身的 PLC 通信地址
+      baseAddress = this.definition.plc_communication_address;
+    }
+    if (!baseAddress) {
+      console.warn('⚠️ [MANUAL_TEST_MODAL] 实例和定义均缺少PLC通信地址:', this.definition.tag);
       return [];
     }
 

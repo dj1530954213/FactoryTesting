@@ -399,8 +399,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
         // 解析Modbus地址
         let (register_type, offset) = parse_modbus_address_ex(address, connection.zero_based_address)?;
 
-        log::info!("🔍 [PLC_READ_BOOL] 开始读取布尔值: PLC={}({}:{}), 地址={}, 类型={:?}, 偏移={}",
-                   plc_name, plc_host, plc_port, address, register_type, offset);
+        //log::info!("🔍 [PLC_READ_BOOL] 开始读取布尔值: PLC={}({}:{}), 地址={}, 类型={:?}, 偏移={}",
+                   //plc_name, plc_host, plc_port, address, register_type, offset);
 
         let mut context_guard = connection.context.lock().await;
         let context = context_guard.as_mut()
@@ -415,8 +415,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
                 match context.read_coils(offset, 1).await {
                     Ok(Ok(values)) => {
                         let value = values.first().copied().unwrap_or(false);
-                        log::info!("✅ [PLC_READ_BOOL] 读取线圈成功: PLC={}, 地址={}, 值={}",
-                                  plc_name, address, value);
+                        //log::info!("✅ [PLC_READ_BOOL] 读取线圈成功: PLC={}, 地址={}, 值={}",
+                                  //plc_name, address, value);
                         value
                     },
                     Ok(Err(exception)) => {
@@ -435,8 +435,8 @@ impl IPlcCommunicationService for ModbusTcpPlcService {
                 match context.read_discrete_inputs(offset, 1).await {
                     Ok(Ok(values)) => {
                         let value = values.first().copied().unwrap_or(false);
-                        log::info!("✅ [PLC_READ_BOOL] 读取离散输入成功: PLC={}, 地址={}, 值={}",
-                                  plc_name, address, value);
+                        //log::info!("✅ [PLC_READ_BOOL] 读取离散输入成功: PLC={}, 地址={}, 值={}",
+                                  //plc_name, address, value);
                         value
                     },
                     Ok(Err(exception)) => {
