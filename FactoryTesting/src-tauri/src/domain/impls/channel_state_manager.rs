@@ -370,7 +370,63 @@ impl IChannelStateManager for ChannelStateManager {
             error!("❌ [APPLY_OUTCOME] 这不应该发生：仍然找不到子测试项: {:?}", outcome.sub_test_item);
         }
 
-        // 🔧 处理硬点测试结果 - 存储百分比数据和硬点读数
+        // ===== AO 百分比测试结果统一处理 =====
+        {
+            use crate::models::enums::SubTestItem::*;
+            if matches!(
+                outcome.sub_test_item,
+                Output0Percent | Output25Percent | Output50Percent | Output75Percent | Output100Percent | HardPoint,
+            ) {
+                // 1. 先写入 outcome 中显式提供的百分比结果
+                let percent_pairs = [
+                    ("test_result_0_percent", outcome.test_result_0_percent),
+                    ("test_result_25_percent", outcome.test_result_25_percent),
+                    ("test_result_50_percent", outcome.test_result_50_percent),
+                    ("test_result_75_percent", outcome.test_result_75_percent),
+                    ("test_result_100_percent", outcome.test_result_100_percent),
+                ];
+
+                let mut any_written = false;
+                for (key, value_opt) in percent_pairs {
+                    if let Some(v) = value_opt {
+                        instance
+                            .transient_data
+                            .insert(key.to_string(), serde_json::json!(v));
+                        any_written = true;
+                    }
+                }
+
+                // 2. 如仍未写入且 readings 足够，尝试从 readings 推断
+                if !any_written {
+                    if let Some(readings) = &outcome.readings {
+                        if readings.len() >= 5 {
+                            instance.transient_data.insert(
+                                "test_result_0_percent".into(),
+                                serde_json::json!(readings[0].actual_reading_eng.map(|v| v as f64)),
+                            );
+                            instance.transient_data.insert(
+                                "test_result_25_percent".into(),
+                                serde_json::json!(readings[1].actual_reading_eng.map(|v| v as f64)),
+                            );
+                            instance.transient_data.insert(
+                                "test_result_50_percent".into(),
+                                serde_json::json!(readings[2].actual_reading_eng.map(|v| v as f64)),
+                            );
+                            instance.transient_data.insert(
+                                "test_result_75_percent".into(),
+                                serde_json::json!(readings[3].actual_reading_eng.map(|v| v as f64)),
+                            );
+                            instance.transient_data.insert(
+                                "test_result_100_percent".into(),
+                                serde_json::json!(readings[4].actual_reading_eng.map(|v| v as f64)),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 🔧 处理硬点测试结果 - 存储硬点读数/数字量步骤
         if outcome.sub_test_item == SubTestItem::HardPoint {
             // 存储硬点读数到实例中（AI/AO点位）
             if let Some(readings) = &outcome.readings {
@@ -382,49 +438,6 @@ impl IChannelStateManager for ChannelStateManager {
             if let Some(digital_steps) = &outcome.digital_steps {
                 instance.digital_test_steps = Some(digital_steps.clone());
                 trace!("🔍 [APPLY_OUTCOME] 已存储数字量测试步骤数据");
-            }
-
-            // 🔧 处理百分比测试结果 - 优先使用outcome中的直接数据，但总是尝试从readings中提取
-            let mut percentage_data_stored = false;
-
-            if outcome.test_result_0_percent.is_some() {
-                // 直接从outcome中提取百分比测试结果，存储到临时数据中
-                instance.transient_data.insert("test_result_0_percent".to_string(),
-                    serde_json::json!(outcome.test_result_0_percent));
-                instance.transient_data.insert("test_result_25_percent".to_string(),
-                    serde_json::json!(outcome.test_result_25_percent));
-                instance.transient_data.insert("test_result_50_percent".to_string(),
-                    serde_json::json!(outcome.test_result_50_percent));
-                instance.transient_data.insert("test_result_75_percent".to_string(),
-                    serde_json::json!(outcome.test_result_75_percent));
-                instance.transient_data.insert("test_result_100_percent".to_string(),
-                    serde_json::json!(outcome.test_result_100_percent));
-
-                // 🔧 移除 [APPLY_OUTCOME] 日志
-                percentage_data_stored = true;
-            }
-
-            // 🔧 总是尝试从readings中提取数据（作为备选或补充）
-            if let Some(readings) = &outcome.readings {
-                if readings.len() >= 5 && !percentage_data_stored {
-                    instance.transient_data.insert("test_result_0_percent".to_string(),
-                        serde_json::json!(readings[0].actual_reading_eng.map(|v| v as f64)));
-                    instance.transient_data.insert("test_result_25_percent".to_string(),
-                        serde_json::json!(readings[1].actual_reading_eng.map(|v| v as f64)));
-                    instance.transient_data.insert("test_result_50_percent".to_string(),
-                        serde_json::json!(readings[2].actual_reading_eng.map(|v| v as f64)));
-                    instance.transient_data.insert("test_result_75_percent".to_string(),
-                        serde_json::json!(readings[3].actual_reading_eng.map(|v| v as f64)));
-                    instance.transient_data.insert("test_result_100_percent".to_string(),
-                        serde_json::json!(readings[4].actual_reading_eng.map(|v| v as f64)));
-
-                    // 🔧 移除 [APPLY_OUTCOME] 日志
-                    percentage_data_stored = true;
-                }
-            }
-
-            if !percentage_data_stored {
-                // 🔧 移除 [APPLY_OUTCOME] 日志
             }
         }
 
