@@ -4,6 +4,12 @@ use log::{info, error, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use rand::Rng;
+use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
+use crate::domain::services::plc_communication_service::IPlcCommunicationService;
+
+// ==================== 常量 ====================
+/// AO 手动采集允许的百分比偏差
+const AO_TOLERANCE_PERCENT: f64 = 5.0;
 
 use crate::models::structs::{
     StartManualTestRequest,
@@ -19,8 +25,6 @@ use crate::models::structs::{
 // 暂时使用字符串代替，后续需要定义正确的枚举
 use crate::application::services::ITestCoordinationService;
 use crate::infrastructure::IPlcMonitoringService;
-use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
-use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
 use crate::infrastructure::plc_communication::global_plc_service;
 //use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
@@ -487,6 +491,85 @@ pub async fn complete_manual_test_subitem_cmd(
 }
 
 // ==================== 辅助函数 ====================
+
+/// 将采集百分比映射到 SubTestItem
+fn percent_to_sub_test(percent: u8) -> crate::models::enums::SubTestItem {
+    use crate::models::enums::SubTestItem::*;
+    match percent {
+        0 => Output0Percent,
+        25 => Output25Percent,
+        50 => Output50Percent,
+        75 => Output75Percent,
+        100 => Output100Percent,
+        _ => HardPoint, // 不应发生
+    }
+}
+
+/// AO 手动采集命令
+#[tauri::command]
+pub async fn capture_ao_point_cmd(
+    instance_id: String,
+    checkpoint_percent: u8, // 0 / 25 / 50 / 75 / 100
+    app_state: State<'_, crate::tauri_commands::AppState>,
+) -> Result<serde_json::Value, String> {
+    if ![0u8, 25, 50, 75, 100].contains(&checkpoint_percent) {
+        return Err("不支持的采集点百分比".to_string());
+    }
+
+    // 获取实例与定义
+    let (instance, definition) = get_instance_and_definition(&app_state, &instance_id).await?;
+
+    // 获取测试PLC AI 地址
+    let test_plc_address = get_test_plc_address(&app_state, &instance).await?;
+
+    // 量程
+    let range_low = definition.range_low_limit.unwrap_or(0.0) as f64;
+    let range_high = definition.range_high_limit.unwrap_or(100.0) as f64;
+    if range_high <= range_low {
+        return Err("无效的量程范围".into());
+    }
+
+    let expected_value = range_low + (range_high - range_low) * checkpoint_percent as f64 / 100.0;
+
+    // 读取当前值
+    let plc_service_arc = crate::infrastructure::plc_communication::global_plc_service();
+    let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = plc_service_arc;
+    let conn_id = &app_state.test_rig_connection_id;
+    let actual_value = plc_service
+        .read_float32_by_id(conn_id, &test_plc_address)
+        .await
+        .map_err(|e| format!("读取测试PLC失败: {}", e))? as f64;
+
+    // 偏差
+    let deviation = ((actual_value - expected_value) / (range_high - range_low) * 100.0).abs();
+    if deviation > AO_TOLERANCE_PERCENT {
+        return Err(format!(
+            "偏差 {:.2}% 超过允许值 {:.1}% (当前值 {:.3}, 期望 {:.3})",
+            deviation, AO_TOLERANCE_PERCENT, actual_value, expected_value
+        ));
+    }
+
+    // 写入 RawTestOutcome
+    let mut outcome = crate::models::RawTestOutcome::success(
+        instance_id.clone(),
+        percent_to_sub_test(checkpoint_percent),
+    );
+    outcome.raw_value_read = Some(format!("{:.3}", actual_value));
+    outcome.eng_value_calculated = Some(format!("{:.3}", actual_value));
+    outcome.message = Some(format!("AO 手动采集 {}%", checkpoint_percent));
+
+    app_state
+        .channel_state_manager
+        .update_test_result(outcome)
+        .await
+        .map_err(|e| format!("保存测试结果失败: {}", e))?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "actual_value": actual_value,
+        "deviation_percent": deviation
+    }))
+}
 
 /// 获取测试实例和通道定义
 async fn get_instance_and_definition(

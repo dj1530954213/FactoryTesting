@@ -155,6 +155,27 @@ impl TestExecutionEngine {
             }
         }
 
+        // 针对 DO/AO 点位，在自动测试阶段直接判定硬点测试通过，避免真正下发PLC操作，
+        // 同时保留 RawTestOutcome 供前端状态机与报告使用。
+        if matches!(definition.module_type, ModuleType::AO | ModuleType::AONone | ModuleType::DO | ModuleType::DONone) {
+            let mut auto_pass_outcome = RawTestOutcome::success(
+                instance.instance_id.clone(),
+                SubTestItem::HardPoint,
+            );
+            auto_pass_outcome.message = Some("自动测试阶段默认通过".to_string());
+            if let Err(e) = result_sender.send(auto_pass_outcome).await {
+                warn!("发送自动通过结果失败: {}", e);
+            }
+            {
+                let mut tasks = self.active_tasks.write().await;
+                if let Some(task) = tasks.get_mut(&task_id) {
+                    task.status = TaskStatus::Completed;
+                }
+            }
+            info!("✅ 自动跳过 DO/AO 硬点测试: {}", definition.tag);
+            return;
+        }
+
         // 确定测试步骤
         let executors = self.determine_test_steps(&definition);
 

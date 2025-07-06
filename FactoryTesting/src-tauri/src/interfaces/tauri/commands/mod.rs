@@ -52,5 +52,6 @@ pub use manual_test_commands::{
     update_manual_test_subitem_cmd,
     get_manual_test_status_cmd,
     start_plc_monitoring_cmd,
-    stop_plc_monitoring_cmd
+    stop_plc_monitoring_cmd,
+    capture_ao_point_cmd
 };

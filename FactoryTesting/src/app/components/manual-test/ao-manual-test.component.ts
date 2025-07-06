@@ -9,6 +9,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzStatisticModule } from 'ng-zorro-antd/statistic';
+import { invoke } from '@tauri-apps/api/core';
 import { Subscription } from 'rxjs';
 
 import { ChannelTestInstance, ChannelPointDefinition } from '../../models';
@@ -51,6 +52,22 @@ import {
             nzSuffix="工程单位"
             [nzValueStyle]="{ color: '#1890ff' }">
           </nz-statistic>
+        </div>
+      </nz-card>
+
+      <nz-divider></nz-divider>
+
+      <!-- AO 采集按钮 -->
+      <nz-card nzTitle="采集输出百分比测试" nzSize="small" class="capture-card">
+        <div class="capture-buttons">
+          <button *ngFor="let pct of percentPoints"
+                  nz-button
+                  nzType="default"
+                  nzSize="small"
+                  [disabled]="captureCompleted[pct]"
+                  (click)="captureAoPoint(pct)">
+            {{ pct }}%
+          </button>
         </div>
       </nz-card>
 
@@ -170,8 +187,14 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   // 订阅管理
   private subscriptions = new Subscription();
 
+  // AO 采集相关
+  percentPoints: number[] = [0, 25, 50, 75, 100];
+  captureCompleted: Record<number, boolean> = {0:false,25:false,50:false,75:false,100:false};
+  captureResults: Record<number, { value: number; deviation: number }> = {};
+
   // 枚举引用（用于模板）
   ManualTestSubItem = ManualTestSubItem;
+
 
   constructor(
     private manualTestService: ManualTestService,
@@ -288,6 +311,27 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   /**
    * 取消测试
    */
+  /**
+   * 点击采集按钮
+   */
+  async captureAoPoint(percent: number): Promise<void> {
+    if (!this.instance) return;
+    try {
+      const resp = await invoke<any>('capture_ao_point_cmd', {
+        instanceId: this.instance.instance_id,
+        checkpointPercent: percent
+      });
+      this.captureCompleted[percent] = true;
+      this.captureResults[percent] = {
+        value: resp.actual_value,
+        deviation: resp.deviation_percent
+      };
+      this.message.success(`采集 ${percent}% 成功，偏差 ${resp.deviation_percent.toFixed(2)}%`);
+    } catch (err: any) {
+      this.message.error(`采集 ${percent}% 失败: ${err}`);
+    }
+  }
+
   cancelTest(): void {
     this.modal.confirm({
       nzTitle: '确认取消',

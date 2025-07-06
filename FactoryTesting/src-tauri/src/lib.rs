@@ -38,6 +38,7 @@ use commands::manual_test_commands::{
     // AI手动测试专用命令
     generate_random_display_value_cmd, ai_show_value_test_cmd, ai_alarm_test_cmd,
     ai_maintenance_test_cmd, ai_reset_to_display_value_cmd, complete_manual_test_subitem_cmd,
+    capture_ao_point_cmd,
     // DI手动测试命令
     di_signal_test_cmd
 };
@@ -213,6 +214,7 @@ pub fn run() {
                 ai_maintenance_test_cmd,
                 ai_reset_to_display_value_cmd,
                 complete_manual_test_subitem_cmd,
+                capture_ao_point_cmd,
                 di_signal_test_cmd,
                 // 测试PLC配置命令
                 get_test_plc_channels_cmd,
