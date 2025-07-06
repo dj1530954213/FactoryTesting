@@ -63,11 +63,29 @@ import {
           <button *ngFor="let pct of percentPoints"
                   nz-button
                   nzType="default"
-                  nzSize="small"
                   [disabled]="captureCompleted[pct]"
-                  (click)="captureAoPoint(pct)">
-            {{ pct }}%
+                  [nzLoading]="isCapturing && currentCapturingPercent === pct"
+                  (click)="captureAoPoint(pct)"
+                  [title]="getButtonTooltip(pct)">
+            <span class="button-text">{{ pct }}%</span>
+            <span *ngIf="captureResults[pct]" class="deviation-text">
+              偏差: {{ captureResults[pct].deviation.toFixed(1) }}%
+            </span>
           </button>
+        </div>
+
+        <!-- 采集结果汇总 -->
+        <div *ngIf="hasAnyResults()" class="capture-summary">
+          <nz-divider nzText="采集结果汇总" nzOrientation="left"></nz-divider>
+          <div class="summary-grid">
+            <div *ngFor="let pct of percentPoints" class="summary-item" [class.completed]="captureCompleted[pct]">
+              <span class="summary-label">{{ pct }}%:</span>
+              <span *ngIf="captureResults[pct]" class="summary-value">
+                {{ captureResults[pct].value.toFixed(2) }} ({{ captureResults[pct].deviation > 0 ? '+' : '' }}{{ captureResults[pct].deviation.toFixed(1) }}%)
+              </span>
+              <span *ngIf="!captureResults[pct]" class="summary-pending">待采集</span>
+            </div>
+          </div>
         </div>
       </nz-card>
 
@@ -191,6 +209,8 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   percentPoints: number[] = [0, 25, 50, 75, 100];
   captureCompleted: Record<number, boolean> = {0:false,25:false,50:false,75:false,100:false};
   captureResults: Record<number, { value: number; deviation: number }> = {};
+  isCapturing: boolean = false;
+  currentCapturingPercent: number | null = null;
 
   // 枚举引用（用于模板）
   ManualTestSubItem = ManualTestSubItem;
@@ -316,6 +336,10 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
    */
   async captureAoPoint(percent: number): Promise<void> {
     if (!this.instance) return;
+
+    this.isCapturing = true;
+    this.currentCapturingPercent = percent;
+
     try {
       const resp = await invoke<any>('capture_ao_point_cmd', {
         instanceId: this.instance.instance_id,
@@ -329,7 +353,28 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
       this.message.success(`采集 ${percent}% 成功，偏差 ${resp.deviation_percent.toFixed(2)}%`);
     } catch (err: any) {
       this.message.error(`采集 ${percent}% 失败: ${err}`);
+    } finally {
+      this.isCapturing = false;
+      this.currentCapturingPercent = null;
     }
+  }
+
+  /**
+   * 获取按钮提示文本
+   */
+  getButtonTooltip(percent: number): string {
+    if (this.captureCompleted[percent]) {
+      const result = this.captureResults[percent];
+      return `已采集 - 实际值: ${result.value.toFixed(2)}, 偏差: ${result.deviation.toFixed(1)}%`;
+    }
+    return `点击采集 ${percent}% 输出点`;
+  }
+
+  /**
+   * 检查是否有任何采集结果
+   */
+  hasAnyResults(): boolean {
+    return Object.keys(this.captureResults).length > 0;
   }
 
   cancelTest(): void {
