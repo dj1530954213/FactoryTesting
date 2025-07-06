@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use chrono::Local;
+use chrono::{Local, Utc};
 use rust_xlsxwriter::{Workbook, Format, FormatAlign, FormatBorder, Color};
 
 use crate::models::{ChannelPointDefinition, ModuleType, ChannelTestInstance};
 use crate::utils::error::{AppResult, AppError};
 use crate::infrastructure::IPersistenceService;
 use crate::domain::services::IChannelStateManager;
+use crate::models::enums::SubTestItem;
 
 /// 颜色常量（柔和不刺眼）
 fn color_for_module(module_type: &ModuleType) -> Color {
@@ -26,6 +27,199 @@ pub struct ExcelExportService {
 }
 
 impl ExcelExportService {
+    /// 导出测试结果表（全部批次，无过滤）
+    /// `target_path` 可以是目录或完整文件路径；为空时写入临时目录。
+    /// 返回生成的文件完整路径
+    pub async fn export_test_results(&self, target_path: Option<PathBuf>) -> AppResult<String> {
+        // 1. 加载所需数据
+        let definitions = self.persistence_service.load_all_channel_definitions().await?;
+        if definitions.is_empty() {
+            return Err(AppError::ValidationError { message: "暂无通道定义，无法导出测试结果".into() });
+        }
+        let def_map: std::collections::HashMap<String, &ChannelPointDefinition> =
+            definitions.iter().map(|d| (d.id.clone(), d)).collect();
+
+        let instances = self.persistence_service.load_all_test_instances().await?;
+        if instances.is_empty() {
+            return Err(AppError::ValidationError { message: "暂无测试实例数据，无法导出测试结果".into() });
+        }
+
+        // 为了避免一条条去数据库查询 outcome，先尝试批量 by batch；若无对应接口，则逐个 fetch
+        let mut outcome_cache: std::collections::HashMap<String, Vec<crate::models::structs::RawTestOutcome>> = std::collections::HashMap::new();
+        for inst in &instances {
+            if !outcome_cache.contains_key(&inst.instance_id) {
+                let list = self
+                    .persistence_service
+                    .load_test_outcomes_by_instance(&inst.instance_id)
+                    .await
+                    .unwrap_or_default();
+                outcome_cache.insert(inst.instance_id.clone(), list);
+            }
+        }
+
+        // 2. 准备输出文件路径
+        let station_name = definitions[0].station_name.clone();
+        let timestamp = Local::now().format("%Y%m%d_%H%M").to_string();
+        let filename = format!("{}_{}_测试结果.xlsx", station_name, timestamp);
+        let file_path: PathBuf = if let Some(p) = target_path.clone() {
+            let is_dir_path = p.is_dir() || p.extension().is_none();
+            if is_dir_path { p.join(&filename) } else { p }
+        } else { std::env::temp_dir().join(&filename) };
+        if let Some(parent) = file_path.parent() { std::fs::create_dir_all(parent).ok(); }
+
+        // 3. 创建工作簿和工作表
+        let mut workbook = Workbook::new();
+        let mut sheet = workbook.add_worksheet();
+
+        // 4. 样式
+        let header_fmt = Format::new().set_bold().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+        let default_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+
+        // 5. 表头
+        let headers = vec![
+            "测试ID", "测试批次", "变量名称", "点表类型", "数据类型", "测试PLC通道位号", "被测PLC通道位号", 
+            "行程最小值", "行程最大值", "0%对比值", "25%对比值", "50%对比值", "75%对比值", "100%对比值", 
+            "低低报反馈状态", "低报反馈状态", "高报反馈状态", "高高报反馈状态", "维护功能检测", 
+            "开始测试时间", "最终测试时间", "测试时长", "通道硬点测试结果", "测试结果"
+        ];
+        for (col, title) in headers.iter().enumerate() {
+            sheet.write_with_format(0, col as u16, *title, &header_fmt)?;
+        }
+
+        // 6. 写数据行
+        let mut row = 1u32;
+        for (idx, inst) in instances.iter().enumerate() {
+            let def = match def_map.get(&inst.definition_id) {
+                Some(d) => *d,
+                None => continue, // 没找到定义，跳过
+            };
+            let outcomes = outcome_cache.get(&inst.instance_id).cloned().unwrap_or_default();
+
+            // 提取通用列
+            let test_id = def.sequence_number.unwrap_or((idx + 1) as u32);
+            let point_type = format!("{:?}", def.module_type); // 点表类型暂用模块类型
+            let data_type = format!("{:?}", def.data_type);
+            let test_plc_tag = inst.test_plc_channel_tag.clone().unwrap_or_else(|| "-".into());
+            let measured_tag = def.tag.clone();
+            let range_min = def.range_low_limit.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+            let range_max = def.range_high_limit.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+
+            // 百分比对比值
+            let mut pct_vals = vec!["-".to_string(); 5];
+            // 硬点测试结果 & 报警反馈等
+            let mut hardpoint_result = "-".to_string();
+            let mut maint_result = "-".to_string();
+            let mut alarm_vals = vec!["-".to_string(); 4];
+
+            for oc in &outcomes {
+                use crate::models::enums::SubTestItem;
+                match oc.sub_test_item {
+                    SubTestItem::HardPoint => {
+                        hardpoint_result = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    // 维护功能检测可能映射为 Maintenance 或 MaintenanceFunction
+                    SubTestItem::Maintenance | SubTestItem::MaintenanceFunction => {
+                        maint_result = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    // 百分比结果可能记录在单独的 OutputX% 或 TrendCheck 等子项中，统一提取
+                    _ => {}
+                }
+
+                // 若当前 outcome 含有百分比字段，统一覆盖（只要非 None 即写入）
+                if let Some(v) = oc.test_result_0_percent { pct_vals[0] = v.to_string(); }
+                if let Some(v) = oc.test_result_25_percent { pct_vals[1] = v.to_string(); }
+                if let Some(v) = oc.test_result_50_percent { pct_vals[2] = v.to_string(); }
+                if let Some(v) = oc.test_result_75_percent { pct_vals[3] = v.to_string(); }
+                if let Some(v) = oc.test_result_100_percent { pct_vals[4] = v.to_string(); }
+
+                match oc.sub_test_item {
+                    SubTestItem::LowLowAlarm => {
+                        alarm_vals[0] = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    SubTestItem::LowAlarm => {
+                        alarm_vals[1] = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    SubTestItem::HighAlarm => {
+                        alarm_vals[2] = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    SubTestItem::HighHighAlarm => {
+                        alarm_vals[3] = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    _ => {}
+                }
+            }
+
+            // 如果维护功能检测仍为 "-"，尝试从实例的 sub_test_results 中获取
+            if maint_result == "-" {
+                if let Some(res) = inst.sub_test_results.get(&SubTestItem::Maintenance).or_else(|| inst.sub_test_results.get(&SubTestItem::MaintenanceFunction)) {
+                    use crate::models::enums::SubTestStatus;
+                    maint_result = match res.status {
+                        SubTestStatus::Passed => "PASS".into(),
+                        SubTestStatus::Failed => "FAIL".into(),
+                        _ => "-".into(),
+                    };
+                }
+            }
+
+            // 开始/结束/时长
+            let start_time = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
+            let end_time = inst.final_test_time.unwrap_or_else(|| outcomes.last().map(|o| o.end_time).unwrap_or(start_time));
+            let duration = end_time.signed_duration_since(start_time);
+            let total_minutes = duration.num_minutes();
+            let hours = total_minutes / 60;
+            let minutes = total_minutes % 60;
+            let duration_ms = duration.num_milliseconds(); // 保留原毫秒以防后续使用
+            let duration_fmt = format!("{}小时{}分钟", hours, minutes);
+
+            // 整体测试结果
+            let overall = match inst.overall_status {
+                crate::models::enums::OverallTestStatus::TestCompletedPassed => "PASS",
+                crate::models::enums::OverallTestStatus::TestCompletedFailed => "FAIL",
+                crate::models::enums::OverallTestStatus::Skipped => "-",
+                _ => "-",
+            };
+
+            // 写入单元格
+            let values: Vec<String> = vec![
+                test_id.to_string(),
+                inst.test_batch_name.clone(),
+                def.variable_name.clone(),
+                point_type,
+                data_type,
+                test_plc_tag,
+                measured_tag,
+                range_min,
+                range_max,
+            ]
+            .into_iter()
+            .chain(pct_vals.into_iter())
+            .chain(alarm_vals.into_iter())
+            .chain(vec![maint_result])
+            .chain(vec![
+                start_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                end_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                duration_fmt,
+                hardpoint_result,
+                overall.into(),
+            ])
+            .collect();
+
+            for (col, val) in values.iter().enumerate() {
+                sheet.write_string_with_format(row, col as u16, val, &default_fmt)?;
+            }
+            row += 1;
+        }
+
+        // 自动列宽
+        for col_index in 0..headers.len() {
+            sheet.set_column_width(col_index as u16, 18)?;
+        }
+
+        // 保存
+        workbook.save(&file_path)?;
+        log::info!("📤 [EXPORT] 测试结果 Excel 已保存到 {}", file_path.to_string_lossy());
+        Ok(file_path.to_string_lossy().to_string())
+    }
     pub fn new(
         persistence_service: Arc<dyn IPersistenceService>,
         channel_state_manager: Arc<dyn IChannelStateManager>,

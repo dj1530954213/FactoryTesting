@@ -8,6 +8,9 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { TauriApiService } from '../../services/tauri-api.service';
+import { firstValueFrom } from 'rxjs';
+
 
 @Component({
   selector: 'app-result-export',
@@ -114,15 +117,24 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 })
 export class ResultExportComponent implements OnInit {
 
-  constructor(private message: NzMessageService) {}
+  constructor(private message: NzMessageService,
+              private tauriApi: TauriApiService) {}
 
   ngOnInit(): void {
     // 初始化组件
   }
 
-  exportExcel(): void {
-    this.message.info('正在导出Excel文件...');
-    // TODO: 实现Excel导出功能
+  async exportExcel(): Promise<void> {
+    try {
+      this.message.loading('正在导出测试结果...', { nzDuration: 0 });
+      const filePath = await firstValueFrom(this.tauriApi.exportTestResults(null));
+      this.message.remove();
+      this.message.success('导出成功: ' + filePath);
+
+    } catch (err) {
+      this.message.remove();
+      this.message.error('导出失败: ' + err);
+    }
   }
 
   exportPdf(): void {

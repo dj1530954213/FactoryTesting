@@ -882,6 +882,39 @@ pub async fn save_app_settings_cmd(
         })
 }
 
+/// 导出测试结果表
+#[derive(Deserialize)]
+pub struct ExportTestResultsArgs {
+    pub target_path: Option<String>,
+}
+
+#[tauri::command]
+pub async fn export_test_results_cmd(
+    state: State<'_, AppState>,
+    target_path: Option<String>,
+    args: Option<ExportTestResultsArgs>,
+) -> Result<String, String> {
+    let real_path_opt = args.and_then(|a| a.target_path).or(target_path.clone());
+    log::info!("📤 [CMD] 收到导出测试结果请求, target_path={:?}", real_path_opt);
+
+    let service = crate::infrastructure::excel_export_service::ExcelExportService::new(
+        state.persistence_service.clone(),
+        state.channel_state_manager.clone(),
+    );
+
+    let path_buf = real_path_opt.map(PathBuf::from);
+    match service.export_test_results(path_buf).await {
+        Ok(result_path) => {
+            log::info!("✅ [CMD] 测试结果导出成功: {}", result_path);
+            Ok(result_path)
+        },
+        Err(e) => {
+            log::error!("❌ [CMD] 测试结果导出失败: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
 /// 导出通道分配表
 #[derive(Deserialize)]
 pub struct ExportChannelAllocationArgs {
