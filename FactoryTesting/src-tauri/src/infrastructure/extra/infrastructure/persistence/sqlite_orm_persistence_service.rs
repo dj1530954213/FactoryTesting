@@ -28,7 +28,7 @@ use crate::infrastructure::persistence::persistence_service::{
     IntegrityCheckResult // 导入 IntegrityCheckResult
 };
 use crate::utils::error::{AppError, AppResult};
-use log::{info, warn, error, debug};
+use log::{info, warn, error, debug, trace};
 use uuid::Uuid;
 
 // 定义常量
@@ -442,11 +442,17 @@ impl PersistenceService for SqliteOrmPersistenceService {
 
     // --- RawTestOutcome ---
     async fn save_test_outcome(&self, outcome: &RawTestOutcome) -> AppResult<()> {
+        trace!("🛢️ [PERSIST] 准备插入 RawTestOutcome, instance_id={}, sub_test_item={:?}", outcome.channel_instance_id, outcome.sub_test_item);
+
         let active_model: entities::raw_test_outcome::ActiveModel = outcome.into();
-        entities::raw_test_outcome::Entity::insert(active_model)
+        let insert_result = entities::raw_test_outcome::Entity::insert(active_model)
             .exec(self.db_conn.as_ref())
             .await
-            .map_err(|e| AppError::persistence_error(format!("保存测试结果失败: {}", e)))?;
+            .map_err(|e| {
+                error!("❌ [PERSIST] 插入 RawTestOutcome 失败: {}", e);
+                AppError::persistence_error(format!("保存测试结果失败: {}", e))
+            })?;
+        trace!("✅ [PERSIST] RawTestOutcome 插入成功");
         Ok(())
     }
 
@@ -682,8 +688,12 @@ impl PersistenceService for SqliteOrmPersistenceService {
         Err(AppError::not_implemented_error("query_batch_info"))
     }
 
-    async fn save_test_outcomes(&self, _outcomes: &[RawTestOutcome]) -> AppResult<()> {
-        Err(AppError::not_implemented_error("save_test_outcomes (bulk)"))
+    async fn save_test_outcomes(&self, outcomes: &[RawTestOutcome]) -> AppResult<()> {
+        trace!("🛢️ [PERSIST] 批量保存 {} 条 RawTestOutcome", outcomes.len());
+        for outcome in outcomes {
+            self.save_test_outcome(outcome).await?;
+        }
+        Ok(())
     }
 
     async fn execute_transaction(&self, _operations: Vec<crate::domain::services::persistence_service::TransactionOperation>) -> AppResult<crate::domain::services::persistence_service::TransactionResult> {

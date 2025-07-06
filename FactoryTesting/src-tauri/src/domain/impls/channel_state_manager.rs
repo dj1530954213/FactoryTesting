@@ -587,6 +587,13 @@ impl IChannelStateManager for ChannelStateManager {
 
     /// 更新测试结果
     async fn update_test_result(&self, outcome: RawTestOutcome) -> AppResult<()> {
+        // 先持久化 RawTestOutcome 记录，便于排错
+        info!("🔧 [STATE_MANAGER] persistence_service type: {}", std::any::type_name::<dyn crate::domain::services::persistence_service::IPersistenceService>());
+        if let Err(e) = self.persistence_service.save_test_outcomes(&[outcome.clone()]).await {
+            error!("❌ [STATE_MANAGER] save_test_outcomes 失败: {}", e);
+        } else {
+            trace!("💾 [STATE_MANAGER] RawTestOutcome 已保存到数据库");
+        }
         let instance_id = outcome.channel_instance_id.clone();
         // 完全移除状态管理器的冗余日志
         trace!("🔍 [STATE_MANAGER] 尝试更新测试结果: {} -> {:?}", instance_id, outcome.success);

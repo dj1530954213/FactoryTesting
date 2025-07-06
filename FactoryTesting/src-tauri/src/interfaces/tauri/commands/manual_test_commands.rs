@@ -512,6 +512,7 @@ pub async fn capture_ao_point_cmd(
     checkpoint_percent: u8, // 0 / 25 / 50 / 75 / 100
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<serde_json::Value, String> {
+    info!("📥 [AO_CMD] 收到采集请求: instance={} percent={}", instance_id, checkpoint_percent);
     if ![0u8, 25, 50, 75, 100].contains(&checkpoint_percent) {
         return Err("不支持的采集点百分比".to_string());
     }
@@ -535,6 +536,7 @@ pub async fn capture_ao_point_cmd(
     let plc_service_arc = crate::infrastructure::plc_communication::global_plc_service();
     let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = plc_service_arc;
     let conn_id = &app_state.test_rig_connection_id;
+    info!("🔌 [AO_CMD] 读取 PLC 地址 {}", test_plc_address);
     let actual_value = plc_service
         .read_float32_by_id(conn_id, &test_plc_address)
         .await
@@ -557,7 +559,18 @@ pub async fn capture_ao_point_cmd(
     outcome.raw_value_read = Some(format!("{:.3}", actual_value));
     outcome.eng_value_calculated = Some(format!("{:.3}", actual_value));
     outcome.message = Some(format!("AO 手动采集 {}%", checkpoint_percent));
+    // 百分比结果写入对应字段
+    info!("📊 [AO_CMD] 偏差 {:.2}% , 保存 RawTestOutcome", deviation);
+    match checkpoint_percent {
+        0 => outcome.test_result_0_percent = Some(actual_value),
+        25 => outcome.test_result_25_percent = Some(actual_value),
+        50 => outcome.test_result_50_percent = Some(actual_value),
+        75 => outcome.test_result_75_percent = Some(actual_value),
+        100 => outcome.test_result_100_percent = Some(actual_value),
+        _ => {}
+    }
 
+    info!("💾 [AO_CMD] 调用 ChannelStateManager 更新结果");
     app_state
         .channel_state_manager
         .update_test_result(outcome)
