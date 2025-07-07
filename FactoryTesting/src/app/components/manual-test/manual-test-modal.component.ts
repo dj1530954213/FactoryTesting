@@ -443,6 +443,9 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
    * 清理资源
    */
   private cleanup(): void {
+    // 重置手动测试服务状态，确保下次可重新启动
+    this.manualTestService.cancelCurrentTest();
+
     // 停止PLC监控
     this.plcMonitoringService.stopMonitoring().catch(error => {
       console.error('停止PLC监控失败:', error);

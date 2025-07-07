@@ -24,6 +24,10 @@ export const routes: Routes = [
     loadComponent: () => import('./components/test-area/test-area.component').then(m => m.TestAreaComponent)
   },
   {
+    path: 'host-function-check',
+    loadComponent: () => import('./components/host-function-check/host-function-check.component').then(m => m.HostFunctionCheckComponent)
+  },
+  {
     path: 'result-export',
     loadComponent: () => import('./components/result-export/result-export.component').then(m => m.ResultExportComponent)
   },

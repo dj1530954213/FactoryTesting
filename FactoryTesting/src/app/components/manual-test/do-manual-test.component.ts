@@ -131,13 +131,37 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
     private modal: NzModalService
   ) {}
 
+  // 防止重复触发完成事件
+  private completedEmitted = false;
+  // 状态初始化标志
+  private statusInitialized = false;
+  private previousCompleted = false;
+
   ngOnInit(): void {
-    // 订阅PLC监控数据
+    // 订阅PLC监控数据，保持界面刷新
     this.subscriptions.add(
-      this.plcMonitoringService.currentMonitoringData$.subscribe(data => {
-        // PLC数据更新时，界面会自动刷新
+      this.plcMonitoringService.currentMonitoringData$.subscribe(() => {})
+    );
+
+    // 订阅手动测试状态变化，自动检测是否完成
+    this.subscriptions.add(
+      this.manualTestService.currentTestStatus$.subscribe(status => {
+        if (!status) {
+          return; // 等待有效状态
+        }
+        const allCompleted = this.isAllCompleted();
+        if (!this.statusInitialized) {
+          this.statusInitialized = true;
+          this.previousCompleted = allCompleted;
+          return;
+        }
+        if (!this.completedEmitted && !this.previousCompleted && allCompleted) {
+          this.finishTest();
+        }
+        this.previousCompleted = allCompleted;
       })
     );
+
   }
 
   ngOnDestroy(): void {
@@ -240,5 +264,14 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
    */
   isAllCompleted(): boolean {
     return this.manualTestService.areAllSubItemsCompleted(this.testConfig.applicableSubItems);
+  }
+
+  /**
+   * 完成测试
+   */
+  private finishTest(): void {
+    // 仅通知外部，由 ManualTestModal 统一取消测试并关闭窗口
+    this.testCompleted.emit();
+    this.completedEmitted = true;
   }
 }

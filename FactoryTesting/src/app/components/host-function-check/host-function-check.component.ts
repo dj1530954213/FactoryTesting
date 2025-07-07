@@ -1,0 +1,345 @@
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { NzCardModule } from 'ng-zorro-antd/card';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzStepsModule } from 'ng-zorro-antd/steps';
+import { NzResultModule } from 'ng-zorro-antd/result';
+import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzDividerModule } from 'ng-zorro-antd/divider';
+import { NzSpaceModule } from 'ng-zorro-antd/space';
+import { NzTagModule } from 'ng-zorro-antd/tag';
+import { NzProgressModule } from 'ng-zorro-antd/progress';
+import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
+import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
+import { NzListModule } from 'ng-zorro-antd/list';
+
+export interface FunctionCheckItem {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string[];
+  status: 'pending' | 'checking' | 'passed' | 'failed';
+  icon: string;
+  color: string;
+  checkTime?: Date;
+  notes?: string;
+}
+
+@Component({
+  selector: 'app-host-function-check',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    NzCardModule,
+    NzButtonModule,
+    NzIconModule,
+    NzStepsModule,
+    NzResultModule,
+    NzAlertModule,
+    NzDividerModule,
+    NzSpaceModule,
+    NzTagModule,
+    NzProgressModule,
+    NzModalModule,
+    NzDescriptionsModule,
+    NzListModule
+  ],
+  templateUrl: './host-function-check.component.html',
+  styleUrls: ['./host-function-check.component.css']
+})
+export class HostFunctionCheckComponent implements OnInit, OnDestroy {
+
+  // 功能检查项目列表
+  checkItems: FunctionCheckItem[] = [
+    {
+      id: 'history-trend',
+      name: '历史趋势功能',
+      description: '检查历史数据趋势图显示是否正常',
+      instructions: [
+        '1. 打开历史趋势界面',
+        '2. 选择任意测试点位',
+        '3. 设置时间范围（建议选择最近1小时）',
+        '4. 检查趋势曲线是否正常显示',
+        '5. 验证数据缩放、平移功能是否正常',
+        '6. 检查数据导出功能是否可用'
+      ],
+      status: 'pending',
+      icon: 'line-chart',
+      color: 'blue'
+    },
+    {
+      id: 'realtime-trend',
+      name: '实时趋势功能',
+      description: '检查实时数据趋势图更新是否正常',
+      instructions: [
+        '1. 打开实时趋势界面',
+        '2. 选择正在测试的点位',
+        '3. 观察趋势曲线是否实时更新',
+        '4. 检查数据刷新频率是否合理',
+        '5. 验证暂停/恢复功能是否正常',
+        '6. 测试多点位同时显示功能'
+      ],
+      status: 'pending',
+      icon: 'stock',
+      color: 'green'
+    },
+    {
+      id: 'report-function',
+      name: '报表功能',
+      description: '检查测试报表生成和导出功能',
+      instructions: [
+        '1. 进入报表生成界面',
+        '2. 选择测试批次和时间范围',
+        '3. 生成测试报表',
+        '4. 检查报表内容完整性',
+        '5. 验证PDF/Excel导出功能',
+        '6. 确认报表格式符合要求'
+      ],
+      status: 'pending',
+      icon: 'file-text',
+      color: 'orange'
+    },
+    {
+      id: 'alarm-function',
+      name: '报警级别与声音',
+      description: '检查报警系统的级别设置和声音提示',
+      instructions: [
+        '1. 触发一个测试报警（可通过设置异常值）',
+        '2. 检查报警级别显示是否正确',
+        '3. 验证报警声音是否正常播放',
+        '4. 测试不同级别报警的声音区别',
+        '5. 检查报警确认功能',
+        '6. 验证报警历史记录功能'
+      ],
+      status: 'pending',
+      icon: 'sound',
+      color: 'red'
+    },
+    {
+      id: 'operation-log',
+      name: '操作日志记录',
+      description: '检查系统操作日志记录功能',
+      instructions: [
+        '1. 执行几个系统操作（如导入数据、开始测试）',
+        '2. 打开操作日志界面',
+        '3. 检查操作记录是否完整',
+        '4. 验证日志时间戳准确性',
+        '5. 测试日志搜索和筛选功能',
+        '6. 检查日志导出功能'
+      ],
+      status: 'pending',
+      icon: 'file-search',
+      color: 'purple'
+    }
+  ];
+
+  currentCheckIndex = 0;
+  isCheckingInProgress = false;
+  overallProgress = 0;
+
+  constructor(
+    private message: NzMessageService,
+    private modal: NzModalService
+  ) {}
+
+  ngOnInit(): void {
+    this.updateProgress();
+  }
+
+  ngOnDestroy(): void {
+    // 清理资源
+  }
+
+  /**
+   * 开始检查指定项目
+   */
+  startCheck(item: FunctionCheckItem): void {
+    this.currentCheckIndex = this.checkItems.findIndex(i => i.id === item.id);
+    item.status = 'checking';
+    this.isCheckingInProgress = true;
+    
+    this.message.info(`开始检查: ${item.name}`);
+    
+    // 显示检查指导模态框
+    this.showCheckInstructions(item);
+  }
+
+  /**
+   * 显示检查指导模态框
+   */
+  showCheckInstructions(item: FunctionCheckItem): void {
+    this.modal.create({
+      nzTitle: `${item.name} - 检查指导`,
+      nzContent: `
+        <div class="check-instructions">
+          <p><strong>功能描述：</strong>${item.description}</p>
+          <div class="instructions-list">
+            <h4>检查步骤：</h4>
+            <ol>
+              ${item.instructions.map(instruction => `<li>${instruction}</li>`).join('')}
+            </ol>
+          </div>
+          <div class="check-tips">
+            <p><strong>注意事项：</strong></p>
+            <ul>
+              <li>请按照步骤逐一检查</li>
+              <li>如发现异常，请记录具体问题</li>
+              <li>检查完成后选择相应的结果</li>
+            </ul>
+          </div>
+        </div>
+      `,
+      nzWidth: 600,
+      nzFooter: [
+        {
+          label: '检查通过',
+          type: 'primary',
+          onClick: () => this.completeCheck(item, 'passed')
+        },
+        {
+          label: '检查失败',
+          type: 'default',
+          danger: true,
+          onClick: () => this.completeCheck(item, 'failed')
+        },
+        {
+          label: '取消检查',
+          type: 'default',
+          onClick: () => this.cancelCheck(item)
+        }
+      ]
+    });
+  }
+
+  /**
+   * 完成检查
+   */
+  completeCheck(item: FunctionCheckItem, result: 'passed' | 'failed'): void {
+    item.status = result;
+    item.checkTime = new Date();
+    this.isCheckingInProgress = false;
+    
+    this.updateProgress();
+    
+    if (result === 'passed') {
+      this.message.success(`${item.name} 检查通过`);
+    } else {
+      this.message.error(`${item.name} 检查失败`);
+    }
+    
+    this.modal.closeAll();
+  }
+
+  /**
+   * 取消检查
+   */
+  cancelCheck(item: FunctionCheckItem): void {
+    item.status = 'pending';
+    this.isCheckingInProgress = false;
+    this.modal.closeAll();
+  }
+
+  /**
+   * 重置检查项目
+   */
+  resetCheck(item: FunctionCheckItem): void {
+    item.status = 'pending';
+    item.checkTime = undefined;
+    item.notes = undefined;
+    this.updateProgress();
+    this.message.info(`已重置 ${item.name} 的检查状态`);
+  }
+
+  /**
+   * 重置所有检查
+   */
+  resetAllChecks(): void {
+    this.modal.confirm({
+      nzTitle: '确认重置',
+      nzContent: '确定要重置所有检查项目吗？',
+      nzOnOk: () => {
+        this.checkItems.forEach(item => {
+          item.status = 'pending';
+          item.checkTime = undefined;
+          item.notes = undefined;
+        });
+        this.updateProgress();
+        this.message.success('已重置所有检查项目');
+      }
+    });
+  }
+
+  /**
+   * 更新整体进度
+   */
+  updateProgress(): void {
+    const completedItems = this.checkItems.filter(item => 
+      item.status === 'passed' || item.status === 'failed'
+    ).length;
+    this.overallProgress = Math.round((completedItems / this.checkItems.length) * 100);
+  }
+
+  /**
+   * 获取状态标签颜色
+   */
+  getStatusColor(status: string): string {
+    switch (status) {
+      case 'passed': return 'success';
+      case 'failed': return 'error';
+      case 'checking': return 'processing';
+      default: return 'default';
+    }
+  }
+
+  /**
+   * 获取状态文本
+   */
+  getStatusText(status: string): string {
+    switch (status) {
+      case 'passed': return '通过';
+      case 'failed': return '失败';
+      case 'checking': return '检查中';
+      default: return '待检查';
+    }
+  }
+
+  /**
+   * 获取通过的检查项数量
+   */
+  getPassedCount(): number {
+    return this.checkItems.filter(item => item.status === 'passed').length;
+  }
+
+  /**
+   * 获取失败的检查项数量
+   */
+  getFailedCount(): number {
+    return this.checkItems.filter(item => item.status === 'failed').length;
+  }
+
+  /**
+   * 检查是否所有项目都已完成
+   */
+  isAllCompleted(): boolean {
+    return this.checkItems.every(item => 
+      item.status === 'passed' || item.status === 'failed'
+    );
+  }
+
+  /**
+   * 生成检查报告
+   */
+  generateReport(): void {
+    if (!this.isAllCompleted()) {
+      this.message.warning('请完成所有检查项目后再生成报告');
+      return;
+    }
+
+    // 这里可以调用后端API生成报告
+    this.message.success('检查报告生成功能开发中...');
+  }
+}

@@ -165,27 +165,9 @@ import {
 
       <nz-divider></nz-divider>
 
-      <!-- 测试进度和操作 -->
+      <!-- 测试进度 -->
       <div class="test-progress-section">
-        <div class="progress-info">
-          <span>测试进度: {{ getCompletedCount() }} / {{ getTotalCount() }}</span>
-          <div class="progress-actions">
-            <button 
-              nz-button 
-              nzType="primary"
-              [disabled]="!isAllCompleted()"
-              (click)="finishTest()">
-              <i nz-icon nzType="check-circle"></i>
-              完成测试
-            </button>
-            <button 
-              nz-button 
-              (click)="cancelTest()">
-              <i nz-icon nzType="close"></i>
-              取消测试
-            </button>
-          </div>
-        </div>
+        <span>测试进度: {{ getCompletedCount() }} / {{ getTotalCount() }}</span>
       </div>
 
     </div>
@@ -223,11 +205,35 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
     private modal: NzModalService
   ) {}
 
+  // 已触发完成事件标志，避免重复执行
+  private completedEmitted = false;
+  private statusInitialized = false;
+  private previousCompleted = false;
+
   ngOnInit(): void {
-    // 订阅PLC监控数据
+    // PLC 监控刷新
     this.subscriptions.add(
-      this.plcMonitoringService.currentMonitoringData$.subscribe(data => {
-        // PLC数据更新时，界面会自动刷新
+      this.plcMonitoringService.currentMonitoringData$.subscribe(() => {})
+    );
+
+    // 监听测试状态：仅在仍处于 ManualTest 阶段且全部子项完成时触发 finishTest()
+    this.subscriptions.add(
+      this.manualTestService.currentTestStatus$.subscribe(status => {
+        if (!status) {
+          return; // 等待有效状态
+        }
+        const allCompleted = this.isAllCompleted();
+        if (!this.statusInitialized) {
+          // 第一次获得有效状态，记录基线
+          this.statusInitialized = true;
+          this.previousCompleted = allCompleted;
+          return;
+        }
+        // 仅在状态从未完成 -> 已完成 的瞬间触发 finishTest
+        if (!this.completedEmitted && !this.previousCompleted && allCompleted) {
+          this.finishTest();
+        }
+        this.previousCompleted = allCompleted;
       })
     );
   }
@@ -324,8 +330,11 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   /**
    * 完成测试
    */
+  // 当用户点击 “完成测试” 或程序检测到测试完成时调用
   finishTest(): void {
+    // 只发出完成事件供外部（ManualTestModal）关闭
     this.testCompleted.emit();
+    this.completedEmitted = true;
   }
 
   /**
