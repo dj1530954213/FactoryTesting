@@ -66,7 +66,7 @@ import { DoManualTestComponent } from './do-manual-test.component';
                 </div>
                 <div class="info-item">
                   <label>变量描述:</label>
-                  <span>{{ definition?.description || 'N/A' }}</span>
+                  <span>{{ definition?.variable_description || definition?.description || 'N/A' }}</span>
                 </div>
                 <div class="info-item">
                   <label>模块类型:</label>

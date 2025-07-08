@@ -55,6 +55,8 @@ export interface ChannelPointDefinition {
   tag: string;
   variable_name: string;
   description: string;
+  /** 与后端结构保持一致的可选别名 */
+  variable_description?: string;
   station_name: string;
   module_name: string;
   module_type: ModuleType;
@@ -74,6 +76,11 @@ export interface ChannelPointDefinition {
   sl_set_point_plc_address?: string;
   sh_set_point_plc_address?: string;
   shh_set_point_plc_address?: string;
+  // 报警设定固定值（导入表格中的设定值）
+  sll_set_value?: number;
+  sl_set_value?: number;
+  sh_set_value?: number;
+  shh_set_value?: number;
   created_at: string;
   updated_at: string;
 }

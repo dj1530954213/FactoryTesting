@@ -900,6 +900,16 @@ pub fn parse_modbus_address_ex(address: &str, zero_based: bool) -> AppResult<(Mo
         ));
     }
 
+    // 如果地址长度不足5位，默认认为省略了首位'0'，按线圈(Coils)处理
+    if address.len() < 5 {
+        let offset = address.parse::<u16>()
+            .map_err(|_| AppError::validation_error(
+                format!("无效的线圈地址: {}", address)
+            ))?;
+        let protocol_offset = if zero_based { offset } else { if offset > 0 { offset - 1 } else { 0 } };
+        return Ok((ModbusRegisterType::Coil, protocol_offset));
+    }
+
     let first_char = address.chars().next().unwrap();
     let offset_str = &address[1..];
 

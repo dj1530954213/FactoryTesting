@@ -516,6 +516,9 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 获取SLL设定值
    */
   getSllSetPoint(): string {
+    if (this.definition && this.definition.sll_set_value !== undefined && this.definition.sll_set_value !== null) {
+      return this.definition.sll_set_value.toFixed(3);
+    }
     return this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI) || '读取中...';
   }
 
@@ -523,6 +526,9 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 获取SL设定值
    */
   getSlSetPoint(): string {
+    if (this.definition && this.definition.sl_set_value !== undefined && this.definition.sl_set_value !== null) {
+      return this.definition.sl_set_value.toFixed(3);
+    }
     return this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI) || '读取中...';
   }
 
@@ -530,6 +536,9 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 获取SH设定值
    */
   getShSetPoint(): string {
+    if (this.definition && this.definition.sh_set_value !== undefined && this.definition.sh_set_value !== null) {
+      return this.definition.sh_set_value.toFixed(3);
+    }
     return this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI) || '读取中...';
   }
 
@@ -537,6 +546,9 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
    * 获取SHH设定值
    */
   getShhSetPoint(): string {
+    if (this.definition && this.definition.shh_set_value !== undefined && this.definition.shh_set_value !== null) {
+      return this.definition.shh_set_value.toFixed(3);
+    }
     return this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI) || '读取中...';
   }
 

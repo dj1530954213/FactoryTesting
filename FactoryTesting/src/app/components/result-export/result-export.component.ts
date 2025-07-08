@@ -10,6 +10,8 @@ import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { TauriApiService } from '../../services/tauri-api.service';
 import { firstValueFrom } from 'rxjs';
+// Tauri 对话框 save API
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 
 @Component({
@@ -125,16 +127,36 @@ export class ResultExportComponent implements OnInit {
   }
 
   async exportExcel(): Promise<void> {
-    try {
-      this.message.loading('正在导出测试结果...', { nzDuration: 0 });
-      const filePath = await firstValueFrom(this.tauriApi.exportTestResults(null));
-      this.message.remove();
-      this.message.success('导出成功: ' + filePath);
+    // 先让用户选择导出位置
+    const selectedPath = await this.openSaveDialog();
+    if (!selectedPath || selectedPath.trim().length === 0) {
+      // 用户取消或未输入文件名
+      return;
+    }
 
+    const msgRef = this.message.loading('正在导出测试结果...', { nzDuration: 0 });
+    try {
+      const filePath = await firstValueFrom(this.tauriApi.exportTestResults(selectedPath));
+      msgRef.messageId && this.message.remove(msgRef.messageId);
+      this.message.success('导出成功: ' + filePath);
     } catch (err) {
-      this.message.remove();
+      msgRef.messageId && this.message.remove(msgRef.messageId);
       this.message.error('导出失败: ' + err);
     }
+  }
+
+  /**
+   * 打开保存对话框，获取用户指定的导出路径
+   */
+  private async openSaveDialog(): Promise<string | null> {
+    const defaultName = `test_results_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'')}.xlsx`;
+    return await saveDialog({
+      title: '请选择导出位置',
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Excel', extensions: ['xlsx'] }
+      ]
+    });
   }
 
   exportPdf(): void {
