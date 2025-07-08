@@ -78,8 +78,6 @@ impl ExcelImporter {
     /// # 返回
     /// * `AppResult<Vec<ChannelPointDefinition>>` - 解析的通道定义列表
     pub async fn parse_excel_file(file_path: &str) -> AppResult<Vec<ChannelPointDefinition>> {
-
-
         // 检查文件是否存在
         if !Path::new(file_path).exists() {
             return Err(AppError::validation_error(format!("文件不存在: {}", file_path)));

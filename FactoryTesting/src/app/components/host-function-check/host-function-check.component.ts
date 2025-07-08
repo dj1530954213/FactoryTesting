@@ -1,4 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { BatchSelectionService } from '../../services/batch-selection.service';
+import { filter, Subscription } from 'rxjs';
+import { TauriApiService } from '../../services/tauri-api.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -15,6 +18,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzDescriptionsModule } from 'ng-zorro-antd/descriptions';
 import { NzListModule } from 'ng-zorro-antd/list';
+import { NzEmptyModule } from 'ng-zorro-antd/empty';
 
 export interface FunctionCheckItem {
   id: string;
@@ -46,12 +50,15 @@ export interface FunctionCheckItem {
     NzProgressModule,
     NzModalModule,
     NzDescriptionsModule,
-    NzListModule
+    NzListModule,
+    NzEmptyModule
   ],
   templateUrl: './host-function-check.component.html',
   styleUrls: ['./host-function-check.component.css']
 })
 export class HostFunctionCheckComponent implements OnInit, OnDestroy {
+
+  private batchSub?: Subscription;
 
   // 功能检查项目列表
   checkItems: FunctionCheckItem[] = [
@@ -141,16 +148,71 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
   isCheckingInProgress = false;
   overallProgress = 0;
 
+  stationName = '';  
+  // 是否已成功加载到后端状态
+  hasStatusData = false;
+  importTime = '';
+
+  /** 后端 function_key -> 前端 card id 映射 */
+  private readonly functionKeyMap: Record<string, string> = {
+    HISTORICAL_TREND: 'history-trend',
+    REALTIME_TREND: 'realtime-trend',
+    REPORT: 'report-function',
+    ALARM_LEVEL_SOUND: 'alarm-function',
+    OPERATION_LOG: 'operation-log'
+  };
+
   constructor(
     private message: NzMessageService,
-    private modal: NzModalService
+    private modal: NzModalService,
+    private api: TauriApiService,
+    private batchService: BatchSelectionService
   ) {}
 
   ngOnInit(): void {
-    this.updateProgress();
+    // 订阅当前批次
+    this.batchSub = this.batchService.selectedBatch$
+      .pipe(filter(b => !!b))
+      .subscribe((batch: any) => {
+        if (!batch) { return; }
+        this.stationName = batch.station_name ?? '';
+        this.importTime = batch.creation_time ?? batch.last_updated_time ?? '';
+        // 若批次包含 import_time 字段（兼容后端返回）则优先使用
+        // @ts-ignore
+        if (batch.import_time) { this.importTime = (batch as any).import_time; }
+        this.loadStatuses();
+      });
+  }
+    // 加载已有功能测试状态
+  private loadStatuses(): void {
+    this.hasStatusData = false;
+    if (!this.stationName || !this.importTime) { return; }
+    this.api.getGlobalFunctionTests(this.stationName, this.importTime).subscribe({
+      next: (records: any[]) => {
+        if (!records || records.length === 0) {
+          // 未获取到任何状态，保持提示用户导入数据
+          this.hasStatusData = false;
+          this.updateProgress();
+          return;
+        }
+        this.hasStatusData = true;
+        records.forEach(rec => {
+          const id = this.functionKeyMap[ (rec.function_key || '').toUpperCase() ];
+          if (!id) { return; }
+          const item = this.checkItems.find(i => i.id === id);
+          if (item) {
+            item.status = rec.status === 'TestCompletedPassed' ? 'passed' : rec.status === 'TestCompletedFailed' ? 'failed' : 'pending';
+            if (rec.start_time) { item.checkTime = new Date(rec.start_time); }
+          }
+        });
+        this.updateProgress();
+      },
+      error: err => console.error('[GFT] 加载失败', err)
+    });
   }
 
   ngOnDestroy(): void {
+    this.batchSub?.unsubscribe();
     // 清理资源
   }
 
@@ -219,6 +281,24 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
    * 完成检查
    */
   completeCheck(item: FunctionCheckItem, result: 'passed' | 'failed'): void {
+    if (!this.stationName || !this.importTime) {
+      console.warn('[GFT] 批次信息缺失，忽略更新');
+      return;
+    }
+    if (!this.importTime) {
+      this.importTime = new Date().toISOString();
+    }
+    // 更新后端状态
+    this.api.updateGlobalFunctionTest({
+      station_name: this.stationName,
+      import_time: this.importTime,
+      function_key: this.mapIdToKey(item.id),
+      status: result === 'passed' ? 'TestCompletedPassed' : 'TestCompletedFailed',
+      start_time: item.checkTime ? item.checkTime.toISOString() : new Date().toISOString(),
+      end_time: new Date().toISOString()
+    }).subscribe({
+      error: err => console.error('[GFT] 更新状态失败', err)
+    });
     item.status = result;
     item.checkTime = new Date();
     this.isCheckingInProgress = false;
@@ -258,11 +338,22 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
    * 重置所有检查
    */
   resetAllChecks(): void {
+    if (!this.stationName || !this.importTime) {
+      console.warn('[GFT] 批次信息缺失，忽略重置');
+      return;
+    }
+    if (!this.importTime) {
+      this.importTime = new Date().toISOString();
+    }
+    this.api.resetGlobalFunctionTests(this.stationName, this.importTime).subscribe({
+      error: err => console.error('[GFT] 重置状态失败', err)
+    });
     this.modal.confirm({
       nzTitle: '确认重置',
       nzContent: '确定要重置所有检查项目吗？',
       nzOnOk: () => {
-        this.checkItems.forEach(item => {
+        this.hasStatusData = false;
+    this.checkItems.forEach(item => {
           item.status = 'pending';
           item.checkTime = undefined;
           item.notes = undefined;
@@ -271,6 +362,20 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
         this.message.success('已重置所有检查项目');
       }
     });
+  }
+
+  /**
+   * 将组件id映射为后端 GlobalFunctionKey
+   */
+  private mapIdToKey(id: string): string {
+    switch (id) {
+      case 'history-trend': return 'HistoricalTrend';
+      case 'realtime-trend': return 'RealTimeTrend';
+      case 'report-function': return 'Report';
+      case 'alarm-function': return 'AlarmLevelSound';
+      case 'operation-log': return 'OperationLog';
+      default: return id;
+    }
   }
 
   /**

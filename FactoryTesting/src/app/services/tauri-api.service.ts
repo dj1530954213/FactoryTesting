@@ -45,6 +45,20 @@ export class TauriApiService {
   }
 
   // ============================================================================
+  // 全局功能测试项相关命令
+  // ============================================================================
+
+  /**
+   * 获取指定站场+导入时间的 5 条全局功能测试状态
+   */
+  getGlobalFunctionTests(stationName: string, importTime: string) {
+    return from(invoke<any[]>('get_global_function_tests_cmd', {
+      station_name: stationName,
+      import_time: importTime
+    }));
+  }
+
+  // ============================================================================
   // 测试协调相关命令
   // ============================================================================
 
@@ -532,8 +546,27 @@ export class TauriApiService {
   }
 
   // ============================================================================
-  // 报告生成相关方法
+  // 全局功能测试状态相关方法
   // ============================================================================
+
+
+
+  /** 更新某个功能测试状态 */
+  updateGlobalFunctionTest(request: {
+    station_name: string;
+    import_time: string;
+    function_key: string;
+    status: string;
+    start_time?: string;
+    end_time?: string;
+  }): Observable<any> {
+    return from(invoke('update_global_function_test_cmd', { request }));
+  }
+
+  /** 重置某站场的全部功能测试状态 */
+  resetGlobalFunctionTests(stationName: string, importTime: string): Observable<any> {
+    return from(invoke('reset_global_function_tests_cmd', { station_name: stationName, import_time: importTime }));
+  }
 
   generatePdfReport(request: any): Observable<any> {
     return from(invoke('generate_pdf_report', { request }));

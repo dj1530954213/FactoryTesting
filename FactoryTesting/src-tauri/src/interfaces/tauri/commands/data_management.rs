@@ -460,6 +460,8 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 1. 解析Excel文件
+
+    // 1. 解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
         Ok(defs) => defs,
         Err(e) => {
@@ -467,6 +469,42 @@ pub async fn import_excel_and_prepare_batch_cmd(
             return Err(format!("Excel文件解析失败: {}", e));
         }
     };
+
+    // === 为新站场初始化全局功能测试状态 ===
+    {
+        use std::collections::HashSet;
+        use crate::models::structs::{GlobalFunctionTestStatus, GlobalFunctionKey, default_id};
+        use crate::models::enums::OverallTestStatus;
+        let mut stations: HashSet<String> = HashSet::new();
+        for def in &definitions {
+            stations.insert(def.station_name.clone());
+        }
+        let import_time = chrono::Utc::now().to_rfc3339();
+        for station in stations {
+            let existing = match state.persistence_service.load_global_function_test_statuses_by_station_time(&station, &import_time).await {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("查询站场 {} 全局功能测试状态失败: {}", station, e);
+                    Vec::new()
+                }
+            };
+            if existing.is_empty() {
+                                    // 先调用确保批次默认记录存在（幂等）
+                    if let Err(e) = state.persistence_service.ensure_global_function_tests(&station, &import_time).await {
+                        error!("初始化全局功能测试状态失败: {}", e);
+                    }
+
+                // `ensure_global_function_tests` 已确保数据库存在 5 条默认记录，这里仅同步到内存缓存
+                if let Ok(list) = state
+                    .persistence_service
+                    .load_global_function_test_statuses_by_station_time(&station, &import_time)
+                    .await {
+                    let mut guard = state.global_function_tests.lock().await;
+                    guard.extend(list);
+                }
+            }
+        }
+    }
 
     if definitions.is_empty() {
         error!("❌ [IMPORT_EXCEL] Excel文件中没有找到有效的通道定义");
@@ -1149,6 +1187,15 @@ pub async fn clear_session_data(
 
     info!("开始清理{}个批次的数据", session_batch_ids.len());
 
+    // 额外：重置全局功能测试状态
+    if let Err(e) = state.persistence_service.reset_global_function_test_statuses().await {
+        error!("重置全局功能测试状态失败: {}", e);
+    } else {
+        // 清空缓存
+        let mut guard = state.global_function_tests.lock().await;
+        guard.clear();
+    }
+
     let persistence_service = &state.persistence_service;
     let mut cleaned_count = 0;
     let mut errors = Vec::new();
@@ -1625,6 +1672,17 @@ pub async fn delete_batch_cmd(
         }
     }
 
+    // === 额外：删除关联的全局功能测试状态 ===
+    if let Some(station) = &batch_info.station_name {
+        if let Err(e) = persistence_service.reset_global_function_test_statuses_by_station(station).await {
+            error!("删除全局功能测试状态失败: {}", e);
+        } else {
+            // 同步清理缓存
+            let mut guard = state.global_function_tests.lock().await;
+            guard.retain(|s| &s.station_name != station);
+        }
+    }
+
     // 5. 从会话跟踪中移除该批次
     {
         let mut session_batch_ids_guard = state.session_batch_ids.lock().await;
@@ -2003,10 +2061,21 @@ pub async fn restore_session_cmd(
     session_key: Option<String>,
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
-    // 1. 清空 ChannelStateManager 缓存
+    // 1. 同步加载全局功能测试状态
+    match state.persistence_service.load_all_global_function_test_statuses().await {
+        Ok(list) => {
+            let mut guard = state.global_function_tests.lock().await;
+            *guard = list;
+        }
+        Err(e) => {
+            error!("加载全局功能测试状态失败: {}", e);
+        }
+    }
+
+    // 2. 清空 ChannelStateManager 缓存
     state.channel_state_manager.clear_caches().await;
 
-    // 2. 恢复所有批次（先全部加载到缓存，便于后续使用）
+    // 3. 恢复所有批次（先全部加载到缓存，便于后续使用）
     let all_batches = match state.channel_state_manager.restore_all_batches().await {
         Ok(list) => list,
         Err(e) => {
@@ -2015,7 +2084,7 @@ pub async fn restore_session_cmd(
         }
     };
 
-    // === 3. 根据 session_key 选择需要恢复的批次 ===
+    // === 4. 根据 session_key 选择需要恢复的批次 ===
     // 组织到秒级 creation_time 作为会话分组
     let mut session_map: std::collections::HashMap<String, Vec<TestBatchInfo>> = std::collections::HashMap::new();
     for b in &all_batches {

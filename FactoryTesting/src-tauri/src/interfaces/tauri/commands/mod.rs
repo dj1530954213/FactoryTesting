@@ -5,6 +5,7 @@
 pub mod data_management;
 pub mod manual_testing;
 pub mod manual_test_commands;
+pub mod global_function_test_commands;
 pub mod test_plc_config;
 
 // 重新导出命令
@@ -54,4 +55,10 @@ pub use manual_test_commands::{
     start_plc_monitoring_cmd,
     stop_plc_monitoring_cmd,
     capture_ao_point_cmd
+};
+
+pub use global_function_test_commands::{
+    get_global_function_tests_cmd,
+    update_global_function_test_cmd,
+    reset_global_function_tests_cmd,
 };

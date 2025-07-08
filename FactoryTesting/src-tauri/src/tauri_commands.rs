@@ -28,6 +28,7 @@ use crate::infrastructure::plc_communication::IPlcCommunicationService;
 use crate::application::services::channel_allocation_service::{IChannelAllocationService, ChannelAllocationService};
 use crate::utils::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
+use crate::models::structs::{GlobalFunctionTestStatus, GlobalFunctionKey, default_id};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -55,6 +56,9 @@ pub struct AppState {
     pub target_connection_id: String,
     pub plc_connection_manager: Arc<PlcConnectionManager>,
     pub plc_monitoring_service: Arc<dyn crate::infrastructure::IPlcMonitoringService>,
+
+    // 全局功能测试状态缓存
+    pub global_function_tests: Arc<Mutex<Vec<GlobalFunctionTestStatus>>>,
 
     // 会话管理：跟踪当前会话中创建的批次
     pub session_batch_ids: Arc<Mutex<HashSet<String>>>,
@@ -108,6 +112,14 @@ impl AppState {
         }
 
         let persistence_service: Arc<dyn IPersistenceService> = Arc::new(sqlite_persistence_service);
+
+        // 加载全部全局功能测试状态
+        let mut gft_statuses = persistence_service.load_all_global_function_test_statuses().await.unwrap_or_default();
+        // 清理 station_name 为空的旧记录，避免干扰
+        if gft_statuses.iter().any(|s| s.station_name.is_empty()) {
+            log::info!("[INIT] 清理 station_name 为空的全局功能测试记录");
+            gft_statuses.retain(|s| !s.station_name.is_empty());
+        }
 
         // 创建应用配置服务
         let app_settings_config = AppSettingsConfig::default();
@@ -276,6 +288,7 @@ impl AppState {
             // 会话管理：跟踪当前会话中创建的批次
             session_batch_ids: Arc::new(Mutex::new(HashSet::new())),
             session_start_time: Utc::now(),
+            global_function_tests: Arc::new(Mutex::new(gft_statuses)),
         })
     }
 }

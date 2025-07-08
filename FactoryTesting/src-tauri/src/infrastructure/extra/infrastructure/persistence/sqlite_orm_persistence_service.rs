@@ -12,7 +12,7 @@ use std::time::Duration;
 // use sea_orm::sqlx::SqliteConnection; // 通过 sea_orm::sqlx 引用
 // use sea_orm::sqlx::Executor; // 如果 Executor 未被使用，可以注释或移除以避免警告
 
-use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome};
+use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome, GlobalFunctionTestStatus};
 use crate::models::entities; // 导入实体模块
 use crate::domain::services::{BaseService, PersistenceService};
 // 导入 ExtendedPersistenceService 和相关结构体
@@ -45,6 +45,26 @@ pub struct SqliteOrmPersistenceService {
 }
 
 impl SqliteOrmPersistenceService {
+    /// 删除 station_name 为空的全局功能测试状态脏数据
+    pub async fn delete_blank_station_global_function_tests(&self) -> AppResult<u64> {
+        use entities::global_function_test_status;
+        use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, Condition};
+
+        let cond = Condition::any()
+            .add(global_function_test_status::Column::StationName.is_null())
+            .add(global_function_test_status::Column::StationName.eq(""));
+
+        let result = global_function_test_status::Entity::delete_many()
+            .filter(cond)
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("删除空 station_name 全局功能测试记录失败: {}", e)))?;
+        let affected = result.rows_affected;
+        if affected > 0 {
+            info!("[PERSIST] 已删除 {} 条空 station_name 的全局功能测试记录", affected);
+        }
+        Ok(affected)
+    }
     /// 创建新的 SqliteOrmPersistenceService 实例
     ///
     /// # Arguments
@@ -126,6 +146,7 @@ impl SqliteOrmPersistenceService {
     async fn setup_schema(db: &DatabaseConnection) -> AppResult<()> {
         // 使用 ConnectionTrait::execute 和 DatabaseBackend::build 创建表
         let backend = db.get_database_backend();
+        use sea_orm::sea_query::Index;
         let schema = Schema::new(backend);
 
         let stmt_channel_point_definitions = schema.create_table_from_entity(entities::channel_point_definition::Entity).if_not_exists().to_owned();
@@ -156,6 +177,94 @@ impl SqliteOrmPersistenceService {
         let stmt_channel_mapping_configs = schema.create_table_from_entity(entities::channel_mapping_config::Entity).if_not_exists().to_owned();
         db.execute(backend.build(&stmt_channel_mapping_configs))
             .await.map_err(|e| AppError::persistence_error(format!("创建 channel_mapping_configs 表失败: {}", e)))?;
+
+        // 全局功能测试状态表
+        let stmt_global_function_tests = schema.create_table_from_entity(entities::global_function_test_status::Entity).if_not_exists().to_owned();
+        db.execute(backend.build(&stmt_global_function_tests))
+            .await.map_err(|e| AppError::persistence_error(format!("创建 global_function_test_statuses 表失败: {}", e)))?;
+
+        // 确保 global_function_test_statuses 表包含 station_name 列 (向后兼容旧版本)
+    {
+        use sea_orm::{Statement, TryGetable, QueryTrait, ConnectionTrait};
+        let col_rows = db
+            .query_all(Statement::from_sql_and_values(backend, "PRAGMA table_info(global_function_test_statuses)", vec![]))
+            .await
+            .map_err(|e| AppError::persistence_error(e.to_string()))?;
+        let mut has_station = false;
+        let mut has_import_time = false;
+        for row in col_rows {
+            let name: String = row.try_get("", "name").unwrap_or_default();
+            match name.as_str() {
+                "station_name" => { has_station = true; },
+                "import_time" => { has_import_time = true; },
+                _ => {}
+            }
+        }
+
+        if !has_station {
+            let alter_sql = "ALTER TABLE global_function_test_statuses ADD COLUMN station_name TEXT NOT NULL DEFAULT ''";
+            if let Err(e) = db.execute_unprepared(alter_sql).await {
+                log::error!("添加 station_name 列失败: {}", e);
+            } else {
+                log::info!("已向 global_function_test_statuses 表添加 station_name 列");
+            }
+        }
+
+        if !has_import_time {
+             let alter_sql = "ALTER TABLE global_function_test_statuses ADD COLUMN import_time TEXT NOT NULL DEFAULT ''";
+             if let Err(e) = db.execute_unprepared(alter_sql).await {
+                 log::error!("添加 import_time 列失败: {}", e);
+             } else {
+                 log::info!("已向 global_function_test_statuses 表添加 import_time 列");
+             }
+         }
+     }
+
+     // 检查并删除旧的 station_name+function_key 唯一索引（不含 import_time）
+     {
+         use sea_orm::{Statement, TryGetable, QueryTrait, ConnectionTrait};
+         let idx_rows = db
+             .query_all(Statement::from_sql_and_values(backend, "PRAGMA index_list('global_function_test_statuses')", vec![]))
+             .await
+             .unwrap_or_default();
+         for row in idx_rows {
+             let idx_name: String = row.try_get("", "name").unwrap_or_default();
+             let is_unique: i64 = row.try_get("", "unique").unwrap_or(0);
+             if is_unique == 1 {
+                 let info_rows = db
+                     .query_all(Statement::from_sql_and_values(backend, &format!("PRAGMA index_info('{}')", idx_name), vec![]))
+                     .await
+                     .unwrap_or_default();
+                 let mut cols: Vec<String> = Vec::new();
+                 for info in info_rows {
+                     let col_name: String = info.try_get("", "name").unwrap_or_default();
+                     cols.push(col_name);
+                 }
+                 if cols == ["station_name", "function_key"] {
+                     let drop_sql = format!("DROP INDEX IF EXISTS {}", idx_name);
+                     if let Err(e) = db.execute_unprepared(&drop_sql).await {
+                         log::error!("删除旧索引 {} 失败: {}", idx_name, e);
+                     } else {
+                         log::info!("已删除旧唯一索引 {}", idx_name);
+                     }
+                 }
+             }
+         }
+     }
+
+     // 为 station_name + import_time + function_key 创建唯一索引
+        let idx_stmt = Index::create()
+            .name("idx_gfts_station_time_function")
+            .table(entities::global_function_test_status::Entity)
+            .col(entities::global_function_test_status::Column::StationName)
+            .col(entities::global_function_test_status::Column::ImportTime)
+            .col(entities::global_function_test_status::Column::FunctionKey)
+            .if_not_exists()
+            .unique()
+            .to_owned();
+        db.execute(backend.build(&idx_stmt))
+            .await
+            .map_err(|e| AppError::persistence_error(format!("创建 global_function_test_statuses 索引失败: {}", e)))?;
 
         log::info!("数据库表结构设置完成或已存在。");
         Ok(())
@@ -212,6 +321,10 @@ impl BaseService for SqliteOrmPersistenceService {
 
 #[async_trait]
 impl PersistenceService for SqliteOrmPersistenceService {
+    async fn delete_blank_station_global_function_tests(&self) -> AppResult<()> {
+        let _ = self.delete_blank_station_global_function_tests().await?;
+        Ok(())
+    }
     // --- ChannelPointDefinition ---
     async fn save_channel_definition(&self, definition: &ChannelPointDefinition) -> AppResult<()> {
         // 验证UUID格式
@@ -261,6 +374,15 @@ impl PersistenceService for SqliteOrmPersistenceService {
                 })?;
         }
 
+        Ok(())
+    }
+
+    /// 批量保存通道点位定义
+    async fn save_channel_definitions(&self, definitions: &[ChannelPointDefinition]) -> AppResult<()> {
+        if definitions.is_empty() { return Ok(()); }
+        for def in definitions {
+            self.save_channel_definition(def).await?;
+        }
         Ok(())
     }
 
@@ -667,10 +789,156 @@ impl PersistenceService for SqliteOrmPersistenceService {
         }
     }
 
-    // ===== 兼容性占位方法：待后续完整实现 =====
+    // ===== 全局功能测试状态 =====
+    async fn save_global_function_test_status(&self, status: &GlobalFunctionTestStatus) -> AppResult<()> {
+        if status.import_time.trim().is_empty() {
+            return Err(AppError::validation_error("import_time 不能为空，请确保前端正确传递导入时间"));
+        }
+        log::info!("[PERSIST] save_global_function_test_status station='{}' key={:?} status={:?}", status.station_name, status.function_key, status.status);
+        use sea_orm::{ActiveModelTrait, Set};
+        // 通过 function_key 查找是否已存在
+        let existing = entities::global_function_test_status::Entity::find()
+            .filter(entities::global_function_test_status::Column::StationName.eq(status.station_name.clone()))
+            .filter(entities::global_function_test_status::Column::ImportTime.eq(status.import_time.clone()))
+            .filter(entities::global_function_test_status::Column::FunctionKey.eq(status.function_key.to_string()))
+            .one(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("查询 GlobalFunctionTestStatus 失败: {}", e)))?;
 
-    async fn save_channel_definitions(&self, _definitions: &[ChannelPointDefinition]) -> AppResult<()> {
-        Err(AppError::not_implemented_error("save_channel_definitions (bulk)"))
+        if let Some(model) = existing {
+        log::debug!("[PERSIST] existing record found, performing UPDATE");
+            // 更新
+            let mut am: entities::global_function_test_status::ActiveModel = model.clone().into();
+            am.import_time = Set(status.import_time.clone());
+            am.start_time = Set(status.start_time.clone());
+            am.end_time = Set(status.end_time.clone());
+            am.status = Set(status.status.to_string());
+            am.update(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("更新 GlobalFunctionTestStatus 失败: {}", e)))?;
+        } else {
+            // 未找到精确匹配记录，尝试回退匹配旧数据（import_time 为空或 NULL）
+            let legacy_existing = entities::global_function_test_status::Entity::find()
+                .filter(entities::global_function_test_status::Column::StationName.eq(status.station_name.clone()))
+                .filter(entities::global_function_test_status::Column::FunctionKey.eq(status.function_key.to_string()))
+                .filter(
+                    entities::global_function_test_status::Column::ImportTime
+                        .eq("")
+                        .or(entities::global_function_test_status::Column::ImportTime.is_null()),
+                )
+                .one(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("查询 legacy GlobalFunctionTestStatus 失败: {}", e)))?;
+
+            if let Some(model) = legacy_existing {
+                log::info!("[PERSIST] legacy record found, updating and migrating import_time");
+                let mut am: entities::global_function_test_status::ActiveModel = model.into();
+                am.import_time = Set(status.import_time.clone());
+                am.start_time = Set(status.start_time.clone());
+                am.end_time = Set(status.end_time.clone());
+                am.status = Set(status.status.to_string());
+                am.update(self.db_conn.as_ref())
+                    .await
+                    .map_err(|e| AppError::persistence_error(format!("更新 legacy GlobalFunctionTestStatus 失败: {}", e)))?;
+            } else {
+                // 仍未找到，则执行插入
+                let am: entities::global_function_test_status::ActiveModel = status.into();
+                entities::global_function_test_status::Entity::insert(am)
+                    .exec(self.db_conn.as_ref())
+                    .await
+                    .map_err(|e| AppError::persistence_error(format!("插入 GlobalFunctionTestStatus 失败: {}", e)))?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn load_all_global_function_test_statuses(&self) -> AppResult<Vec<GlobalFunctionTestStatus>> {
+        let models = entities::global_function_test_status::Entity::find()
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载 GlobalFunctionTestStatus 失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+
+    async fn reset_global_function_test_statuses(&self) -> AppResult<()> {
+        entities::global_function_test_status::Entity::delete_many()
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("重置 GlobalFunctionTestStatus 失败: {}", e)))?;
+        Ok(())
+    }
+
+    async fn load_global_function_test_statuses_by_station(&self, station_name: &str) -> AppResult<Vec<GlobalFunctionTestStatus>> {
+        let models = entities::global_function_test_status::Entity::find()
+            .filter(entities::global_function_test_status::Column::StationName.eq(station_name))
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载 GlobalFunctionTestStatus by station 失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+
+    async fn load_global_function_test_statuses_by_station_time(&self, station_name: &str, import_time: &str) -> AppResult<Vec<GlobalFunctionTestStatus>> {
+        let models = entities::global_function_test_status::Entity::find()
+            .filter(entities::global_function_test_status::Column::StationName.eq(station_name))
+            .filter(entities::global_function_test_status::Column::ImportTime.eq(import_time))
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("加载 GlobalFunctionTestStatus by station+time 失败: {}", e)))?;
+        Ok(models.iter().map(|m| m.into()).collect())
+    }
+
+    async fn ensure_global_function_tests(&self, station_name: &str, import_time: &str) -> AppResult<()> {
+        if import_time.trim().is_empty() {
+            return Err(AppError::validation_error("import_time 不能为空"));
+        }
+        use crate::models::{GlobalFunctionKey, GlobalFunctionTestStatus};
+        use sea_orm::ActiveModelTrait;
+        // 查询是否已有记录
+        let existing = entities::global_function_test_status::Entity::find()
+            .filter(entities::global_function_test_status::Column::StationName.eq(station_name))
+            .filter(entities::global_function_test_status::Column::ImportTime.eq(import_time))
+            .all(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("查询 GlobalFunctionTestStatus 失败: {}", e)))?;
+        if !existing.is_empty() {
+            return Ok(());
+        }
+        // 批量生成 5 条默认记录
+        let mut default_items = Vec::new();
+        for key in [
+            GlobalFunctionKey::HistoricalTrend,
+            GlobalFunctionKey::RealTimeTrend,
+            GlobalFunctionKey::Report,
+            GlobalFunctionKey::AlarmLevelSound,
+            GlobalFunctionKey::OperationLog,
+        ] {
+            default_items.push(GlobalFunctionTestStatus {
+                station_name: station_name.to_string(),
+                id: crate::models::structs::default_id(),
+                function_key: key,
+                import_time: import_time.to_string(),
+                start_time: None,
+                end_time: None,
+                status: crate::models::enums::OverallTestStatus::NotTested,
+            });
+        }
+        for item in default_items {
+            let am: entities::global_function_test_status::ActiveModel = (&item).into();
+            entities::global_function_test_status::Entity::insert(am)
+                .exec(self.db_conn.as_ref())
+                .await
+                .map_err(|e| AppError::persistence_error(format!("插入默认 GlobalFunctionTestStatus 失败: {}", e)))?;
+        }
+        Ok(())
+    }
+
+    async fn reset_global_function_test_statuses_by_station(&self, station_name: &str) -> AppResult<()> {
+        entities::global_function_test_status::Entity::delete_many()
+            .filter(entities::global_function_test_status::Column::StationName.eq(station_name))
+            .exec(self.db_conn.as_ref())
+            .await
+            .map_err(|e| AppError::persistence_error(format!("按站场重置 GlobalFunctionTestStatus 失败: {}", e)))?;
+        Ok(())
     }
 
     async fn query_channel_definitions(&self, _criteria: &crate::domain::services::persistence_service::QueryCriteria) -> AppResult<Vec<ChannelPointDefinition>> {

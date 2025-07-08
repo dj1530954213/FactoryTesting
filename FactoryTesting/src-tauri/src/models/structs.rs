@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use super::enums::{
     ModuleType, OverallTestStatus, PointDataType, SubTestItem, SubTestStatus
@@ -366,7 +368,100 @@ impl Default for ChannelPointDefinition {
     }
 }
 
-/// 子测试执行结果结构体
+//// 全局功能测试项键
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GlobalFunctionKey {
+    HistoricalTrend,
+    RealTimeTrend,
+    Report,
+    AlarmLevelSound,
+    OperationLog,
+}
+
+impl Display for GlobalFunctionKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            GlobalFunctionKey::HistoricalTrend => "HistoricalTrend",
+            GlobalFunctionKey::RealTimeTrend => "RealTimeTrend",
+            GlobalFunctionKey::Report => "Report",
+            GlobalFunctionKey::AlarmLevelSound => "AlarmLevelSound",
+            GlobalFunctionKey::OperationLog => "OperationLog",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for GlobalFunctionKey {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "HistoricalTrend" => Ok(GlobalFunctionKey::HistoricalTrend),
+            "RealTimeTrend" => Ok(GlobalFunctionKey::RealTimeTrend),
+            "Report" => Ok(GlobalFunctionKey::Report),
+            "AlarmLevelSound" => Ok(GlobalFunctionKey::AlarmLevelSound),
+            "OperationLog" => Ok(GlobalFunctionKey::OperationLog),
+            _ => Err(format!("Invalid GlobalFunctionKey: {}", s)),
+        }
+    }
+}
+
+/// 全局功能测试状态结构体
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GlobalFunctionTestStatus {
+    pub station_name: String,
+    pub id: String,
+    pub function_key: GlobalFunctionKey,
+    /// 点表导入时间（UTC ISO8601）
+    pub import_time: String,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub status: OverallTestStatus,
+}
+
+impl Default for GlobalFunctionTestStatus {
+    fn default() -> Self {
+        Self {
+            station_name: String::new(),
+            id: default_id(),
+            function_key: GlobalFunctionKey::HistoricalTrend,
+            import_time: String::new(),
+            start_time: None,
+            end_time: None,
+            status: OverallTestStatus::NotTested,
+        }
+    }
+}
+
+impl From<&crate::models::entities::global_function_test_status::Model> for GlobalFunctionTestStatus {
+    fn from(model: &crate::models::entities::global_function_test_status::Model) -> Self {
+        Self {
+            id: model.id.clone(),
+            station_name: model.station_name.clone(),
+            function_key: GlobalFunctionKey::from_str(&model.function_key).unwrap_or(GlobalFunctionKey::HistoricalTrend),
+            import_time: model.import_time.clone(),
+            start_time: model.start_time.clone(),
+            end_time: model.end_time.clone(),
+            status: OverallTestStatus::from_str(&model.status).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<&GlobalFunctionTestStatus> for crate::models::entities::global_function_test_status::ActiveModel {
+    fn from(status: &GlobalFunctionTestStatus) -> Self {
+        use crate::models::entities::global_function_test_status; // alias
+        global_function_test_status::ActiveModel {
+            id: sea_orm::Set(status.id.clone()),
+            station_name: sea_orm::Set(status.station_name.clone()),
+            function_key: sea_orm::Set(status.function_key.to_string()),
+            import_time: sea_orm::Set(status.import_time.clone()),
+            start_time: sea_orm::Set(status.start_time.clone()),
+            end_time: sea_orm::Set(status.end_time.clone()),
+            status: sea_orm::Set(status.status.to_string()),
+        }
+    }
+}
+
+// 子测试执行结果结构体
 /// 表示单个子测试项的执行结果
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SubTestExecutionResult {

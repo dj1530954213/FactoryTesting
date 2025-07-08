@@ -42,6 +42,12 @@ use commands::manual_test_commands::{
     // DI手动测试命令
     di_signal_test_cmd
 };
+use commands::global_function_test_commands::{
+    get_global_function_tests_cmd,
+    update_global_function_test_cmd,
+    reset_global_function_tests_cmd,
+};
+
 use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd, test_temp_plc_connection_cmd,
@@ -216,6 +222,10 @@ pub fn run() {
                 complete_manual_test_subitem_cmd,
                 capture_ao_point_cmd,
                 di_signal_test_cmd,
+    // 全局功能测试命令
+    get_global_function_tests_cmd,
+    update_global_function_test_cmd,
+    reset_global_function_tests_cmd,
                 // 测试PLC配置命令
                 get_test_plc_channels_cmd,
                 save_test_plc_channel_cmd,

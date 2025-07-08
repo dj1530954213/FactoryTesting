@@ -1,62 +1,60 @@
-<div class="host-function-check-container">
-  <!-- 页面标题和总体进度 -->
-  <nz-card nzTitle="上位机功能检查" [nzExtra]="headerExtraTemplate" class="header-card">
-    <ng-template #headerExtraTemplate>
-      <nz-space>
-        <button *nzSpaceItem nz-button nzType="default" (click)="resetAllChecks()">
-          <span nz-icon nzType="reload" nzTheme="outline"></span>
-          重置所有
-        </button>
-        <button *nzSpaceItem nz-button nzType="primary" 
-                [disabled]="!isAllCompleted()" 
-                (click)="generateReport()">
-          <span nz-icon nzType="file-text" nzTheme="outline"></span>
-          生成报告
-        </button>
-      </nz-space>
-    </ng-template>
+<ng-container *ngIf="stationName && importTime && hasStatusData; else noBatchTmpl">
+  <div class="host-function-check-container">
+    <!-- 页面标题和总体进度 -->
+    <nz-card nzTitle="上位机功能检查" [nzExtra]="headerExtraTemplate" class="header-card">
 
-    <!-- 总体进度展示 -->
-    <div class="progress-overview">
-      <div class="progress-stats">
-        <nz-space nzSize="large">
-          <div *nzSpaceItem class="stat-item">
-            <div class="stat-number">{{ checkItems.length }}</div>
-            <div class="stat-label">检查项目</div>
-          </div>
-          <div *nzSpaceItem class="stat-item success">
-            <div class="stat-number">{{ getPassedCount() }}</div>
-            <div class="stat-label">检查通过</div>
-          </div>
-          <div *nzSpaceItem class="stat-item error">
-            <div class="stat-number">{{ getFailedCount() }}</div>
-            <div class="stat-label">检查失败</div>
-          </div>
-          <div *nzSpaceItem class="stat-item">
-            <div class="stat-number">{{ overallProgress }}%</div>
-            <div class="stat-label">完成进度</div>
-          </div>
+      <!-- 右上角按钮 -->
+      <ng-template #headerExtraTemplate>
+        <nz-space>
+          <button *nzSpaceItem nz-button nzType="default" (click)="resetAllChecks()">
+            <span nz-icon nzType="reload"></span> 重置所有
+          </button>
+          <button *nzSpaceItem nz-button nzType="primary"
+                  [disabled]="!isAllCompleted()" (click)="generateReport()">
+            <span nz-icon nzType="file-text"></span> 生成报告
+          </button>
         </nz-space>
-      </div>
-      
-      <div class="progress-bar">
-        <nz-progress 
-          [nzPercent]="overallProgress" 
-          nzStatus="active"
-          [nzStrokeColor]="overallProgress === 100 ? '#52c41a' : '#1890ff'">
-        </nz-progress>
-      </div>
-    </div>
+      </ng-template>
 
-    <!-- 整体状态提示 -->
-    <div class="status-alert" *ngIf="isAllCompleted()">
-      <nz-alert
-        [nzType]="getFailedCount() === 0 ? 'success' : 'warning'"
-        [nzMessage]="getFailedCount() === 0 ? '所有功能检查已完成，系统功能正常！' : '功能检查已完成，但存在' + getFailedCount() + '项失败，请检查相关功能。'"
-        nzShowIcon>
-      </nz-alert>
-    </div>
-  </nz-card>
+      <!-- 统计 & 进度条 -->
+      <div class="progress-overview">
+        <div class="progress-stats">
+          <nz-space nzSize="large">
+            <div *nzSpaceItem class="stat-item">
+              <div class="stat-number">{{ checkItems.length }}</div>
+              <div class="stat-label">检查项目</div>
+            </div>
+            <div *nzSpaceItem class="stat-item success">
+              <div class="stat-number">{{ getPassedCount() }}</div>
+              <div class="stat-label">检查通过</div>
+            </div>
+            <div *nzSpaceItem class="stat-item error">
+              <div class="stat-number">{{ getFailedCount() }}</div>
+              <div class="stat-label">检查失败</div>
+            </div>
+            <div *nzSpaceItem class="stat-item">
+              <div class="stat-number">{{ overallProgress }}%</div>
+              <div class="stat-label">完成进度</div>
+            </div>
+          </nz-space>
+        </div>
+
+        <div class="progress-bar">
+          <nz-progress [nzPercent]="overallProgress" nzStatus="active"
+                       [nzStrokeColor]="overallProgress === 100 ? '#52c41a' : '#1890ff'">
+          </nz-progress>
+        </div>
+      </div>
+
+      <!-- 完成提示 -->
+      <div class="status-alert" *ngIf="isAllCompleted()">
+        <nz-alert [nzType]="getFailedCount() === 0 ? 'success' : 'warning'"
+                  [nzMessage]="getFailedCount() === 0 ? '所有功能检查已完成，系统功能正常！'
+                               : '功能检查已完成，但存在' + getFailedCount() + '项失败，请检查相关功能。'"
+                  nzShowIcon>
+        </nz-alert>
+      </div>
+    </nz-card>
 
   <!-- 功能检查项目列表 -->
   <div class="check-items-container">
@@ -172,3 +170,7 @@
     </div>
   </nz-card>
 </div>
+</ng-container>
+<ng-template #noBatchTmpl>
+  <nz-empty nzDescription="请先导入点表批次后再进行功能检查"></nz-empty>
+</ng-template>

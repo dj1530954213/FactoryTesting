@@ -93,6 +93,10 @@ pub trait IPersistenceService: BaseService {
     /// # 返回
     /// * `Vec<ChannelTestInstance>` - 匹配的测试实例
     async fn query_test_instances(&self, criteria: &QueryCriteria) -> AppResult<Vec<ChannelTestInstance>>;
+
+    // ================== Global Function Test Status ==================
+    /// 删除 station_name 为空的全局功能测试状态脏数据
+    async fn delete_blank_station_global_function_tests(&self) -> AppResult<()>;
     
     /// 删除测试实例
     /// 
@@ -204,6 +208,35 @@ pub trait IPersistenceService: BaseService {
     /// # 返回
     /// * `CleanupResult` - 清理结果
     async fn cleanup_expired_data(&self, retention_policy: &RetentionPolicy) -> AppResult<CleanupResult>;
+
+    // ======== 全局功能测试项 ========
+    async fn save_global_function_test_status(&self, _status: &crate::models::GlobalFunctionTestStatus) -> AppResult<()> {
+        Err(AppError::not_implemented_error("save_global_function_test_status"))
+    }
+    async fn load_all_global_function_test_statuses(&self) -> AppResult<Vec<crate::models::GlobalFunctionTestStatus>> {
+        Err(AppError::not_implemented_error("load_all_global_function_test_statuses"))
+    }
+    async fn reset_global_function_test_statuses(&self) -> AppResult<()> {
+        Err(AppError::not_implemented_error("reset_global_function_test_statuses"))
+    }
+
+    /// 按站场加载全局功能测试状态
+    async fn load_global_function_test_statuses_by_station(&self, _station_name: &str) -> AppResult<Vec<crate::models::GlobalFunctionTestStatus>> {
+        Err(AppError::not_implemented_error("load_global_function_test_statuses_by_station"))
+    }
+    /// 按站场+导入时间加载全局功能测试状态
+    async fn load_global_function_test_statuses_by_station_time(&self, _station_name: &str, _import_time: &str) -> AppResult<Vec<crate::models::GlobalFunctionTestStatus>> {
+        Err(AppError::not_implemented_error("load_global_function_test_statuses_by_station_time"))
+    }
+    /// 确保指定站场+导入时间存在 5 条默认全局功能测试状态
+    async fn ensure_global_function_tests(&self, _station_name: &str, _import_time: &str) -> AppResult<()> {
+        Err(AppError::not_implemented_error("ensure_global_function_tests"))
+    }
+
+    /// 按站场重置全局功能测试状态
+    async fn reset_global_function_test_statuses_by_station(&self, _station_name: &str) -> AppResult<()> {
+        Err(AppError::not_implemented_error("reset_global_function_test_statuses_by_station"))
+    }
 
     // ======== PLC 测试配置相关 ========
     /// 保存测试 PLC 通道配置
