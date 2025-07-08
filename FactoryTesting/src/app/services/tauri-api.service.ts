@@ -51,11 +51,21 @@ export class TauriApiService {
   /**
    * 获取指定站场+导入时间的 5 条全局功能测试状态
    */
+  /**
+   * 调用后端命令获取全局功能测试状态
+   */
   getGlobalFunctionTests(stationName: string, importTime: string) {
-    return from(invoke<any[]>('get_global_function_tests_cmd', {
+    console.log('[API] getGlobalFunctionTests →', stationName, importTime);
+
+    const payload = {
+      stationName: stationName,
+      importTime: importTime,
+      // 兼容旧版后端参数名
       station_name: stationName,
       import_time: importTime
-    }));
+    } as any;
+    console.log('[API] invoke get_global_function_tests_cmd payload', payload);
+    return from(invoke<any[]>('get_global_function_tests_cmd', payload));
   }
 
   // ============================================================================

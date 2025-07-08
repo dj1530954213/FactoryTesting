@@ -512,13 +512,23 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 2. 立即执行批次分配 - 这是关键步骤
-    let allocation_result = match execute_batch_allocation(&definitions, &args, &state).await {
+    let mut allocation_result = match execute_batch_allocation(&definitions, &args, &state).await {
         Ok(result) => result,
         Err(e) => {
             error!("❌ [IMPORT_EXCEL] 批次分配失败: {}", e);
             return Err(format!("批次分配失败: {}", e));
         }
     };
+
+    // === 回填站场名称（功能检查用） ===
+    if let Some(first_def) = definitions.first() {
+        let primary_station = first_def.station_name.clone();
+        for b in allocation_result.batches.iter_mut() {
+            if b.station_name.is_none() || b.station_name.as_ref().unwrap().is_empty() {
+                b.station_name = Some(primary_station.clone());
+            }
+        }
+    }
 
     // 3. 将分配结果存储到状态管理器
     match store_allocation_to_state_manager(&allocation_result, &state).await {

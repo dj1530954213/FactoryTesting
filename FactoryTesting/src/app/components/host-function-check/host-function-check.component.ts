@@ -154,12 +154,19 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
   importTime = '';
 
   /** 后端 function_key -> 前端 card id 映射 */
+  /**
+   * 后端 function_key 可能为 SNAKE_CASE 或 CamelCase，均做映射
+   */
   private readonly functionKeyMap: Record<string, string> = {
     HISTORICAL_TREND: 'history-trend',
+    HISTORICALTREND: 'history-trend',
     REALTIME_TREND: 'realtime-trend',
+    REALTIMETREND: 'realtime-trend',
     REPORT: 'report-function',
     ALARM_LEVEL_SOUND: 'alarm-function',
-    OPERATION_LOG: 'operation-log'
+    ALARMLEVELSOUND: 'alarm-function',
+    OPERATION_LOG: 'operation-log',
+    OPERATIONLOG: 'operation-log'
   };
 
   constructor(
@@ -186,9 +193,12 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
     // 加载已有功能测试状态
   private loadStatuses(): void {
     this.hasStatusData = false;
-    if (!this.stationName || !this.importTime) { return; }
-    this.api.getGlobalFunctionTests(this.stationName, this.importTime).subscribe({
+    if (!this.stationName) { return; }
+    // 传空字符串让后端自动回退到最新 import_time
+    console.log('[GFT] loadStatuses 调用', this.stationName);
+    this.api.getGlobalFunctionTests(this.stationName, '').subscribe({
       next: (records: any[]) => {
+        console.log('[GFT] 接收到状态记录', records);
         if (!records || records.length === 0) {
           // 未获取到任何状态，保持提示用户导入数据
           this.hasStatusData = false;
@@ -196,6 +206,11 @@ export class HostFunctionCheckComponent implements OnInit, OnDestroy {
           return;
         }
         this.hasStatusData = true;
+        // 若当前 importTime 为空或与返回记录不一致，则以返回记录为准，确保后续 update 时命中
+        if (records.length > 0 && records[0].import_time && this.importTime !== records[0].import_time) {
+          this.importTime = records[0].import_time;
+          console.log('[GFT] 同步 importTime 为最新批次', this.importTime);
+        }
         records.forEach(rec => {
           const id = this.functionKeyMap[ (rec.function_key || '').toUpperCase() ];
           if (!id) { return; }
