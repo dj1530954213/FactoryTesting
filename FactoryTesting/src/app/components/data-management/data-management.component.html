@@ -119,7 +119,7 @@
         <div class="batch-summary" *ngIf="importResult.batchInfo" style="margin-top: 24px;">
           <nz-descriptions nzTitle="批次信息" [nzColumn]="2" nzBordered>
             <nz-descriptions-item nzTitle="批次ID">{{ importResult.batchInfo.batch_id }}</nz-descriptions-item>
-            <nz-descriptions-item nzTitle="批次数量">{{ batchCount }}</nz-descriptions-item>
+            <!-- <nz-descriptions-item nzTitle="批次数量">{{ batchCount }}</nz-descriptions-item> -->
             <nz-descriptions-item nzTitle="创建时间">{{ formatDateTime(importResult.batchInfo.creation_time) }}</nz-descriptions-item>
             <nz-descriptions-item nzTitle="AI点位数" *ngIf="channelCounts">{{ channelCounts.AI || 0 }}</nz-descriptions-item>
             <nz-descriptions-item nzTitle="AO点位数" *ngIf="channelCounts">{{ channelCounts.AO || 0 }}</nz-descriptions-item>

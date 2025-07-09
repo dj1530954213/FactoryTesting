@@ -811,12 +811,85 @@ impl ITestCoordinationService for TestCoordinationService {
     }
 
     /// 获取批次测试进度
+    ///
+    /// 如果批次仍在 `active_batches` 中，则直接读取内存中的实时进度；
+    /// 如果批次已被清理（例如测试完成后调用 `cleanup_completed_batch`），
+    /// 则退回到持久化层从数据库计算进度，确保前端在任何阶段都能获取到批次统计数字。
     async fn get_batch_progress(&self, batch_id: &str) -> AppResult<Vec<TestProgressUpdate>> {
-        let batches = self.active_batches.lock().await;
-        let batch_info = batches.get(batch_id)
-            .ok_or_else(|| AppError::not_found_error("批次", batch_id))?;
+        // 1. 首先尝试从活跃批次缓存获取实时进度
+        {
+            let batches = self.active_batches.lock().await;
+            if let Some(batch_info) = batches.get(batch_id) {
+                return Ok(batch_info.get_progress());
+            }
+        }
 
-        Ok(batch_info.get_progress())
+        // 2. 批次不在缓存中，尝试从持久化层加载数据并计算进度
+        let instances = self
+            .persistence_service
+            .load_test_instances_by_batch(batch_id)
+            .await?;
+
+        // 若数据库中也找不到实例，则视为批次不存在
+        if instances.is_empty() {
+            return Err(AppError::not_found_error("批次", batch_id));
+        }
+
+        // 加载该批次所有测试结果；如果失败或不存在则返回空向量
+        let outcomes = match self
+            .persistence_service
+            .load_test_outcomes_by_batch(batch_id)
+            .await
+        {
+            Ok(list) => list,
+            Err(e) => {
+                log::warn!("[TestCoordination] 读取批次 {} 测试结果失败: {}，将返回无结果的进度数据", batch_id, e);
+                Vec::new()
+            }
+        };
+
+        let mut progress = Vec::with_capacity(instances.len());
+
+        for instance in &instances {
+            // 过滤该实例对应的测试结果
+            let mut instance_results: Vec<_> = outcomes
+                .iter()
+                .filter(|r| r.channel_instance_id == instance.instance_id)
+                .cloned()
+                .collect();
+
+            // 按时间排序以便获取最新结果（数据库查询结果未必有序）
+            instance_results.sort_by_key(|r| r.end_time);
+
+            let completed_sub_tests = instance_results.len();
+
+            let latest_result = instance_results.last().cloned();
+
+            let overall_status = if let Some(ref res) = latest_result {
+                if res.success {
+                    OverallTestStatus::TestCompletedPassed
+                } else {
+                    OverallTestStatus::TestCompletedFailed
+                }
+            } else {
+                OverallTestStatus::NotTested
+            };
+
+            progress.push(TestProgressUpdate {
+                batch_id: batch_id.to_string(),
+                instance_id: instance.instance_id.clone(),
+                // 使用 DefinitionId 简单生成点位标签；若需要更友好名称，可在前端自行映射
+                point_tag: format!("Point_{}", instance.definition_id),
+                overall_status,
+                completed_sub_tests,
+                // 无法确定总子测试数量，暂使用已完成数量填充；前端目前未使用该字段
+                total_sub_tests: completed_sub_tests,
+                latest_result,
+                timestamp: Utc::now(),
+            });
+        }
+
+        Ok(progress)
     }
 
     /// 获取批次测试结果

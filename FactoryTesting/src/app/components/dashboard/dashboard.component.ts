@@ -394,7 +394,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   navigateToReports() {
-    this.router.navigate(['/reports']);
+    // 跳转到结果导出界面
+    this.router.navigate(['/result-export']);
   }
 
   onBatchSelected() {
@@ -464,7 +465,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   updateTestProgress() {
-    // TODO: 从后端获取实际测试进度
+    // 动态刷新每个批次的统计信息，避免首页数字始终为0
+  if (!this.recentBatches || this.recentBatches.length === 0) {
+    return;
+  }
+
+  // 并行拉取所有批次的进度信息
+  this.recentBatches.forEach(batch => {
+    if (!batch.batch_id) { return; }
+    this.tauriApi.getBatchProgress(batch.batch_id).subscribe({
+      next: progressList => {
+        // tested = 已返回的进度条数量
+        const testedCount = progressList.length;
+        let passed = 0;
+        let failed = 0;
+        progressList.forEach(p => {
+          // 根据 latest_result 或子测试统计判断成功失败
+          if (p.latest_result && p.latest_result.success) {
+            passed += 1;
+          } else if (p.latest_result && p.latest_result.success === false) {
+            failed += 1;
+          }
+        });
+
+        // 更新批次对象字段，模板立即刷新
+        (batch as any).tested_points = testedCount;
+        (batch as any).passed_points = passed;
+        (batch as any).failed_points = failed;
+      },
+      error: err => {
+        console.warn('获取批次进度失败:', batch.batch_id, err);
+      }
+    });
+  });
   }
 
   getTestButtonText(): string {

@@ -832,18 +832,38 @@ export class DataManagementComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  // 获取批次数量
+  // 获取批次数量（兼容多种返回格式）
   get batchCount(): number {
-    // 0) 后端直接返回的批次数组长度
-    const batchesLen = this.importResult?.allocationResult?.batches?.length;
-    if (batchesLen && batchesLen > 0) return batchesLen;
-
-    // 1) 新旧字段 total_batches / totalBatches
-    let n = this.importResult?.allocationResult?.total_batches;
-    if (!n) {
-      n = this.importResult?.allocationResult?.totalBatches;
+    // 0) 直接统计字段，兼容 snake / camel 命名（通常最准确）
+    const ar: any = this.importResult?.allocationResult || {};
+    const firstCandidates = [
+      ar.total_batches,
+      ar.totalBatches,
+      ar.batch_count,
+      ar.batchCount
+    ];
+    for (const v of firstCandidates) {
+      if (typeof v === 'number' && v > 0) {
+        return v;
+      }
     }
-    if (n && n > 0) return n;
-    return 1; // 默认单批次
+
+    // 1) 批次数组长度（次优）
+    const len = ar.batches?.length;
+    if (typeof len === 'number' && len > 0) {
+      return len;
+    }
+
+    // 2) 尝试批次信息中的字段
+    const bi: any = this.importResult?.batchInfo || {};
+    const biCandidates = [bi.total_batches, bi.totalBatches, bi.batch_count, bi.batchCount];
+    for (const v of biCandidates) {
+      if (typeof v === 'number' && v > 0) {
+        return v;
+      }
+    }
+
+    // 3) 未获取到有效批次数量时返回 0，避免误导
+    return 0;
   }
-} 
+}

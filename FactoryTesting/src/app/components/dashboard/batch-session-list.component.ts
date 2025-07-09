@@ -167,36 +167,9 @@ interface ImportSessionGroup {
                   </div>
                 </div>
 
-                <!-- 测试进度区域 -->
-                <div class="progress-section">
-                  <div class="progress-header">
-                    <span class="progress-label">
-                      <span nz-icon nzType="pie-chart" nzTheme="outline"></span>
-                      测试进度
-                    </span>
-                    <span class="progress-percent">
-                      {{ getProgressPercent(batch) }}%
-                    </span>
-                  </div>
-                  <nz-progress
-                    nzSize="small"
-                    [nzPercent]="getProgressPercent(batch)"
-                    [nzStrokeColor]="getProgressColor(batch)"
-                    [nzShowInfo]="false"
-                    [nzStrokeLinecap]="'round'"
-                    class="progress-bar">
-                  </nz-progress>
-                </div>
+                <!-- 测试进度区域（已隐藏） -->
 
-                <!-- 通过率标签 -->
-                <div class="success-rate-section">
-                  <nz-tag 
-                    [nzColor]="getSuccessRateColor(batch)" 
-                    class="success-rate-tag">
-                    <span nz-icon nzType="check-circle" nzTheme="outline"></span>
-                    通过率: {{ getSuccessRate(batch) }}%
-                  </nz-tag>
-                </div>
+                <!-- 通过率标签（已隐藏） -->
               </nz-card>
             </div>
           </div>

@@ -20,22 +20,22 @@ namespace FatFullVersion.Services
 
         static Dictionary<string,string> RangerTabel = new Dictionary<string,string>
         {
-            { "AO1_1_RANGE", "5601" },
-            { "AO1_2_RANGE", "5603" },
-            { "AO1_3_RANGE", "5605" },
-            { "AO1_4_RANGE", "5607" },
-            { "AO1_5_RANGE", "5609" },
-            { "AO1_6_RANGE", "5611" },
-            { "AO1_7_RANGE", "5613" },
-            { "AO1_8_RANGE", "5615" },
-            { "AO2_1_RANGE", "5617" },
-            { "AO2_2_RANGE", "5619" },
-            { "AO2_3_RANGE", "5621" },
-            { "AO2_4_RANGE", "5623" },
-            { "AO2_5_RANGE", "5625" },
-            { "AO2_6_RANGE", "5627" },
-            { "AO2_7_RANGE", "5629" },
-            { "AO2_8_RANGE", "5631" }
+            { "AO1_1_RANGE", "45601" },
+            { "AO1_2_RANGE", "45603" },
+            { "AO1_3_RANGE", "45605" },
+            { "AO1_4_RANGE", "45607" },
+            { "AO1_5_RANGE", "45609" },
+            { "AO1_6_RANGE", "45611" },
+            { "AO1_7_RANGE", "45613" },
+            { "AO1_8_RANGE", "45615" },
+            { "AO2_1_RANGE", "45617" },
+            { "AO2_2_RANGE", "45619" },
+            { "AO2_3_RANGE", "45621" },
+            { "AO2_4_RANGE", "45623" },
+            { "AO2_5_RANGE", "45625" },
+            { "AO2_6_RANGE", "45627" },
+            { "AO2_7_RANGE", "45629" },
+            { "AO2_8_RANGE", "45631" }
         };
 
         public Dictionary<string, float> SetChannelRangeValue(IEnumerable<ChannelMapping> Instances,string batchName)
