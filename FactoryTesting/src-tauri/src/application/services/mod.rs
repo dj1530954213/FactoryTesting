@@ -9,11 +9,14 @@ pub mod report_generation_service;
 pub mod data_import_service;
 pub mod batch_allocation_service;
 pub mod channel_allocation_service;
+pub mod range_setting_service;
 
 // 重新导出主要的服务
 pub use data_import_service::{DataImportService, ImportResult};
 pub use batch_allocation_service::{BatchAllocationService, AllocationResult, AllocationStrategy};
 pub use channel_allocation_service::{ChannelAllocationService, IChannelAllocationService, BatchAllocationResult, AllocationSummary, ValidationResult};
+
+pub use range_setting_service::{IChannelRangeSettingService, ChannelRangeSettingService};
 
 // 重新导出常用类型
 pub use test_coordination_service::{

@@ -54,6 +54,13 @@ use commands::test_plc_config::{
     test_address_read_cmd, get_channel_mappings_cmd, generate_channel_mappings_cmd, 
     initialize_default_test_plc_channels_cmd, restore_default_test_plc_channels_cmd
 };
+use std::sync::Arc;
+use crate::interfaces::tauri::commands::channel_range_setting::apply_channel_range_setting_cmd;
+use crate::application::services::range_setting_service::{ChannelRangeSettingService, IChannelRangeSettingService};
+use crate::domain::services::plc_communication_service::IPlcCommunicationService;
+use crate::domain::services::IRangeRegisterRepository;
+use crate::domain::services::range_value_calculator::{IRangeValueCalculator, DefaultRangeValueCalculator};
+use crate::infrastructure::range_register_repository::RangeRegisterRepository;
 
 /// 应用程序主要运行函数
 ///
@@ -126,10 +133,41 @@ pub fn run() {
             }
         };
 
+        // 创建量程设定服务
+        let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+
+        // 尝试获取目标 PLC 连接句柄（先按 ID，再获取默认）
+        let plc_handle_opt = match plc_service
+            .default_handle_by_id(&app_state.target_connection_id)
+            .await
+        {
+            Some(h) => Some(h),
+            None => plc_service.default_handle().await,
+        };
+
+        let plc_service_dyn: Arc<dyn IPlcCommunicationService> = plc_service.clone();
+        let db_conn = app_state.persistence_service.get_database_connection();
+        let range_repo: Arc<dyn IRangeRegisterRepository> = Arc::new(RangeRegisterRepository::new(db_conn));
+        let calculator: Arc<dyn IRangeValueCalculator> = Arc::new(DefaultRangeValueCalculator);
+
+        let range_setting_service: Arc<dyn IChannelRangeSettingService> = if let Some(handle) = plc_handle_opt {
+            Arc::new(ChannelRangeSettingService::new(
+                plc_service_dyn,
+                handle,
+                range_repo,
+                calculator,
+            ))
+        } else {
+            log::warn!("未找到PLC连接句柄，将使用空实现");
+            Arc::new(application::services::range_setting_service::NullRangeSettingService::default())
+        };
+
         // 启动 Tauri 应用
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
-            .manage(app_state)
+            .manage(app_state.clone())
+            .manage(range_setting_service.clone())
+            .manage(app_state.persistence_service.clone())
             .setup(|app| {
                 // 在应用启动后设置AppHandle到事件发布器
                 let app_handle = app.handle();
@@ -239,6 +277,7 @@ pub fn run() {
                 generate_channel_mappings_cmd,
                 initialize_default_test_plc_channels_cmd,
                 restore_default_test_plc_channels_cmd,
+                 apply_channel_range_setting_cmd,
                 // 导出通道分配
                 tauri_commands::export_channel_allocation_cmd,
                 // 导出测试结果

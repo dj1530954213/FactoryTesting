@@ -1,4 +1,5 @@
 use sea_orm::{DatabaseConnection, Statement, ConnectionTrait};
+use sea_orm::ActiveValue::Set;
 use crate::error::AppError;
 
 /// 数据库迁移管理器
@@ -8,6 +9,85 @@ use crate::error::AppError;
 pub struct DatabaseMigration;
 
 impl DatabaseMigration {
+
+    /// 迁移并种子 range_registers 表（量程寄存器地址映射）
+    async fn migrate_range_registers(db: &DatabaseConnection) -> Result<(), AppError> {
+        use sea_orm::ActiveModelTrait;
+        use uuid::Uuid;
+        use chrono::Utc;
+        use crate::models::entities::range_register;
+
+        // 1. 如表不存在则创建
+        let exists = Self::check_table_exists(db, "range_registers").await?;
+        if !exists {
+            log::info!("创建 range_registers 表");
+            let sql = r#"
+                CREATE TABLE IF NOT EXISTS range_registers (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    channel_tag TEXT UNIQUE NOT NULL,
+                    register TEXT NOT NULL,
+                    remark TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            "#;
+            db.execute(Statement::from_string(sea_orm::DatabaseBackend::Sqlite, sql.to_string()))
+                .await
+                .map_err(|e| AppError::persistence_error(format!("创建range_registers表失败: {}", e)))?;
+        }
+
+        // 2. 判断是否已存在数据
+        let count_sql = "SELECT COUNT(*) as cnt FROM range_registers";
+        let rows = db
+            .query_all(Statement::from_string(sea_orm::DatabaseBackend::Sqlite, count_sql.to_string()))
+            .await
+            .map_err(|e| AppError::persistence_error(format!("统计range_registers失败: {}", e)))?;
+        let mut need_seed = true;
+        if let Some(row) = rows.first() {
+            if let Ok(cnt) = row.try_get::<i64>("", "cnt") {
+                need_seed = cnt == 0;
+            }
+        }
+        if !need_seed {
+            log::info!("range_registers 表已有数据，跳过默认种子");
+            return Ok(());
+        }
+
+        log::info!("向 range_registers 表插入默认寄存器映射...");
+        let defaults = vec![
+            ("AO1_1_RANGE", "45601"),
+            ("AO1_2_RANGE", "45603"),
+            ("AO1_3_RANGE", "45605"),
+            ("AO1_4_RANGE", "45607"),
+            ("AO1_5_RANGE", "45609"),
+            ("AO1_6_RANGE", "45611"),
+            ("AO1_7_RANGE", "45613"),
+            ("AO1_8_RANGE", "45615"),
+            ("AO2_1_RANGE", "45617"),
+            ("AO2_2_RANGE", "45619"),
+            ("AO2_3_RANGE", "45621"),
+            ("AO2_4_RANGE", "45623"),
+            ("AO2_5_RANGE", "45625"),
+            ("AO2_6_RANGE", "45627"),
+            ("AO2_7_RANGE", "45629"),
+            ("AO2_8_RANGE", "45631"),
+        ];
+        for (tag, reg) in defaults {
+            let am = range_register::ActiveModel {
+                id: Set(Uuid::new_v4().to_string()),
+                channel_tag: Set(tag.to_string()),
+                register: Set(reg.to_string()),
+                remark: Set(Some("默认映射".into())),
+                created_at: Set(Utc::now()),
+                updated_at: Set(Utc::now()),
+            };
+            if let Err(e) = am.insert(db).await {
+                log::warn!("插入默认寄存器映射 {} -> {} 失败: {}", tag, reg, e);
+            }
+        }
+        log::info!("默认寄存器映射插入完成");
+        Ok(())
+    }
     /// 执行所有必要的数据库迁移
     pub async fn migrate(db: &DatabaseConnection) -> Result<(), AppError> {
         log::info!("开始执行数据库迁移...");
@@ -21,6 +101,9 @@ impl DatabaseMigration {
         Self::migrate_raw_test_outcomes(db).await?;
         Self::migrate_allocation_records(db).await?;
         Self::create_missing_tables(db).await?;
+
+    // 新增：迁移并种子 range_registers 表
+    Self::migrate_range_registers(db).await?;
 
         // 补充：PLC连接配置表新增字节顺序与地址基数列
         Self::add_plc_connection_config_columns(db).await?;
@@ -717,6 +800,7 @@ impl DatabaseMigration {
         log::info!("检查并创建缺失的表...");
 
         // 这里可以添加其他需要创建的表
+    // （当前保留空实现）
         // 例如：测试配置表、PLC连接配置表等
 
         Ok(())

@@ -1,0 +1,23 @@
+    Checking app v0.1.0 (C:\Program Files\Git\code\FactoryTesting\FactoryTesting\src-tauri)
+error: mismatched closing delimiter: `}`
+   --> src\lib.rs:121:35
+    |
+121 |     tauri::async_runtime::block_on(async {
+    |                                   ^ unclosed delimiter
+...
+285 |     });
+    |     ^ mismatched closing delimiter
+
+error: unexpected closing delimiter: `)`
+   --> src\lib.rs:285:6
+    |
+121 |     tauri::async_runtime::block_on(async {
+    |                                          - this delimiter might not be properly closed...
+...
+161 |         };
+    |         - ...as it matches this but it has different indentation
+...
+285 |     });
+    |      ^ unexpected closing delimiter
+
+error: could not compile `app` (lib) due to 2 previous errors

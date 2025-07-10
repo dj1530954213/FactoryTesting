@@ -152,7 +152,15 @@ export class TauriApiService {
   /**
    * 连接PLC - 确认接线
    */
-  connectPlc(): Observable<{ success: boolean; message?: string }> {
+  /**
+   * 连接 PLC 并可选下发量程。
+   *
+   * 说明：
+   * Rust 侧的 `connect_plc_cmd` 返回 { success, message? }，
+   * 而 `apply_channel_range_setting_cmd` 仅返回 ()（Unit），在 JS 侧会被序列化为 `null`。
+   * 因此这里将量程下发的成功视为没有抛异常即可。
+   */
+  connectPlc(batchName?: string): Observable<{ success: boolean; message?: string }> {
     console.log('🔗 [TAURI_API] 调用连接PLC API');
     return from(invoke<{ success: boolean; message?: string }>('connect_plc_cmd')).pipe(
       tap(result => {
@@ -161,6 +169,25 @@ export class TauriApiService {
         } else {
           console.error('❌ [TAURI_API] PLC连接失败:', result.message);
         }
+      }),
+      switchMap(result => {
+        // 如果连接失败或未提供批次名，则直接返回结果
+        if (!result.success || !batchName) {
+          return from([result]);
+        }
+        // 成功连接且提供批次名，继续设置通道量程
+        console.log('📝 [TAURI_API] 开始下发通道量程，批次名:', batchName);
+        // 量程下发命令仅在成功时返回 null/undefined，失败时抛异常
+        return from(invoke<void>('apply_channel_range_setting_cmd', { batchName: String(batchName) })).pipe(
+          tap(() => {
+            console.log('✅ [TAURI_API] 通道量程下发成功');
+          }),
+          map(() => ({ success: true as const })),
+          catchError(error => {
+            console.error('❌ [TAURI_API] 通道量程下发命令调用失败:', error);
+            throw error;
+          })
+        );
       }),
       catchError(error => {
         console.error('❌ [TAURI_API] PLC连接API调用失败:', error);

@@ -717,19 +717,22 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log('🔗 [TEST_AREA] 开始确认接线，连接PLC');
+    console.log(`🔗 [TEST_AREA] 开始确认接线，连接PLC，批次: ${this.selectedBatch.batch_name}`);
     this.isConnecting = true;
 
     try {
-      // 调用后端API连接PLC
-      const result = await this.tauriApiService.connectPlc().toPromise();
+      // 调用后端API连接PLC，并在连接成功后自动下发量程
+      const batchName = this.selectedBatch.batch_name;
+      const result = await this.tauriApiService.connectPlc(batchName).toPromise();
 
       if (result && result.success) {
         this.isConnected = true;
-        this.message.success('PLC连接成功，接线确认完成');
-        console.log('✅ [TEST_AREA] PLC连接成功');
+        this.message.success('PLC连接成功，量程下发完成');
+        console.log('✅ [TEST_AREA] PLC连接+量程下发成功');
       } else {
-        throw new Error((result && result.message) || 'PLC连接失败');
+        // 可能是PLC连接失败，也可能是量程下发失败
+        const errMsg = (result && result.message) || 'PLC连接或量程下发失败';
+        throw new Error(errMsg);
       }
     } catch (error) {
       console.error('❌ [TEST_AREA] PLC连接失败:', error);

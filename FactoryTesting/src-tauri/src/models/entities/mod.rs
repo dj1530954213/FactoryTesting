@@ -13,5 +13,8 @@ pub mod channel_mapping_config;
 
 pub mod global_function_test_status;
 
+// 存放 PLC 量程寄存器
+pub mod range_register;
+
 // 后续会在这里添加其他实体模块的声明，例如：
 // pub mod raw_test_outcome; 

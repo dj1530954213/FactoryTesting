@@ -7,6 +7,7 @@ pub mod manual_testing;
 pub mod manual_test_commands;
 pub mod global_function_test_commands;
 pub mod test_plc_config;
+pub mod channel_range_setting;
 
 // 重新导出命令
 pub use data_management::{
@@ -56,6 +57,8 @@ pub use manual_test_commands::{
     stop_plc_monitoring_cmd,
     capture_ao_point_cmd
 };
+
+pub use channel_range_setting::apply_channel_range_setting_cmd;
 
 pub use global_function_test_commands::{
     get_global_function_tests_cmd,
