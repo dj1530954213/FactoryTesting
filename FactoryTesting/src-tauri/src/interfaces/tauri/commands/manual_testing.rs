@@ -2,7 +2,13 @@
 ///
 /// 包括手动子测试执行、通道读写、PLC连接和自动测试等功能
 
-use tauri::State;
+use tauri::{State, Manager};
+use std::sync::Arc;
+use crate::application::services::range_setting_service::{DynamicRangeSettingService, ChannelRangeSettingService, IChannelRangeSettingService};
+use crate::domain::services::IRangeRegisterRepository;
+use crate::infrastructure::range_register_repository::RangeRegisterRepository;
+use crate::domain::services::range_value_calculator::{DefaultRangeValueCalculator, IRangeValueCalculator};
+use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::models::{SubTestItem, PointDataType, RawTestOutcome};
@@ -179,6 +185,7 @@ pub struct PlcConnectionStatus {
 /// 连接PLC - 确认接线
 #[tauri::command]
 pub async fn connect_plc_cmd(
+    app: tauri::AppHandle, // 用于动态覆盖 manage 中的服务实例
     state: State<'_, AppState>
 ) -> Result<PlcConnectionResponse, String> {
     info!("🔗 开始连接PLC - 确认接线");
@@ -190,6 +197,27 @@ pub async fn connect_plc_cmd(
     match plc_connection_manager.start_connections().await {
         Ok(()) => {
             info!("✅ PLC连接管理器启动成功");
+            // 动态替换量程写入服务实现
+            {
+                // 一定存在，直接获取
+                let range_container = app.state::<Arc<DynamicRangeSettingService>>();
+                // 构建新的 ChannelRangeSettingService
+                let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+                if let Some(handle) = plc_service.default_handle().await {
+                    let db_conn = app_state.persistence_service.get_database_connection();
+                    let range_repo: Arc<dyn IRangeRegisterRepository> = Arc::new(RangeRegisterRepository::new(db_conn));
+                    let calculator: Arc<dyn IRangeValueCalculator> = Arc::new(DefaultRangeValueCalculator);
+                    let new_impl = Arc::new(ChannelRangeSettingService::new(
+                        plc_service,
+                        handle,
+                        range_repo,
+                        calculator,
+                    )) as Arc<dyn IChannelRangeSettingService>;
+                    range_container.replace(new_impl).await;
+                } else {
+                    warn!("[connect_plc_cmd] PLC连接已建立但未获取到默认句柄，无法替换量程服务");
+                }
+            }
 
             // 等待一段时间让连接建立
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -197,6 +225,36 @@ pub async fn connect_plc_cmd(
             // 检查连接状态
             let (test_plc_connected, target_plc_connected, test_plc_name, target_plc_name) =
                 plc_connection_manager.get_plc_status_summary().await;
+
+            // 若至少一个 PLC 已连接，尝试构建 ChannelRangeSettingService 并覆盖 manage
+            if let Some(default_handle) = crate::infrastructure::plc_communication::global_plc_service().default_handle().await {
+                use std::sync::Arc;
+                use crate::application::services::range_setting_service::{ChannelRangeSettingService, IChannelRangeSettingService};
+                use crate::domain::services::IRangeRegisterRepository;
+                use crate::domain::services::range_value_calculator::{IRangeValueCalculator, DefaultRangeValueCalculator};
+                use crate::infrastructure::range_register_repository::RangeRegisterRepository;
+                use crate::domain::services::plc_communication_service::IPlcCommunicationService;
+
+                let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+                let plc_service_dyn: Arc<dyn IPlcCommunicationService> = plc_service.clone();
+
+                // 创建依赖
+                let db_conn = state.persistence_service.get_database_connection();
+                let range_repo: Arc<dyn IRangeRegisterRepository> = Arc::new(RangeRegisterRepository::new(db_conn));
+                let calculator: Arc<dyn IRangeValueCalculator> = Arc::new(DefaultRangeValueCalculator);
+
+                let range_setting_service: Arc<dyn IChannelRangeSettingService> = Arc::new(
+                    ChannelRangeSettingService::new(
+                        plc_service_dyn,
+                        default_handle,
+                        range_repo,
+                        calculator,
+                    )
+                );
+                // 覆盖旧的 NullRangeSettingService
+                app.manage(range_setting_service);
+                log::info!("[connect_plc_cmd] 已注入新的 ChannelRangeSettingService");
+            }
 
             let overall_success = test_plc_connected && target_plc_connected;
             let message = if overall_success {

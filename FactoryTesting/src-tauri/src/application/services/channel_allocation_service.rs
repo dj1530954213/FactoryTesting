@@ -6,6 +6,7 @@ use crate::models::{
 use crate::models::test_plc_config::TestPlcChannelConfig;
 use crate::error::AppError;
 use chrono::Utc;
+use log::log;
 
 /// 测试PLC通道映射表
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -394,11 +395,12 @@ impl ChannelAllocationService {
 
         // 4. AO无源(被测) → AI有源(测试PLC)
         if batch_instances.len() < max_channels_per_batch {
+            
             let ao_powered_false_channels: Vec<_> = remaining_channels.iter()
                 .filter(|def| matches!(def.module_type, ModuleType::AO) && !self.is_powered_channel(def))
                 .filter(|def| !used_channel_ids.contains(&def.id))
                 .collect();
-
+            log::info!("存在AO点位供电类型填写为无源，无法分配,共计:{}个",batch_instances.len());
             let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
             let allocated_count = std::cmp::min(
                 std::cmp::min(ao_powered_false_channels.len(), test_channel_pools.ai_powered_true.len()),

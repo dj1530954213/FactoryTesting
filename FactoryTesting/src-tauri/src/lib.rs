@@ -56,7 +56,7 @@ use commands::test_plc_config::{
 };
 use std::sync::Arc;
 use crate::interfaces::tauri::commands::channel_range_setting::apply_channel_range_setting_cmd;
-use crate::application::services::range_setting_service::{ChannelRangeSettingService, IChannelRangeSettingService};
+use crate::application::services::range_setting_service::{ChannelRangeSettingService, IChannelRangeSettingService, DynamicRangeSettingService};
 use crate::domain::services::plc_communication_service::IPlcCommunicationService;
 use crate::domain::services::IRangeRegisterRepository;
 use crate::domain::services::range_value_calculator::{IRangeValueCalculator, DefaultRangeValueCalculator};
@@ -150,24 +150,30 @@ pub fn run() {
         let range_repo: Arc<dyn IRangeRegisterRepository> = Arc::new(RangeRegisterRepository::new(db_conn));
         let calculator: Arc<dyn IRangeValueCalculator> = Arc::new(DefaultRangeValueCalculator);
 
-        let range_setting_service: Arc<dyn IChannelRangeSettingService> = if let Some(handle) = plc_handle_opt {
-            Arc::new(ChannelRangeSettingService::new(
-                plc_service_dyn,
-                handle,
-                range_repo,
-                calculator,
-            ))
-        } else {
-            log::warn!("未找到PLC连接句柄，将使用空实现");
-            Arc::new(application::services::range_setting_service::NullRangeSettingService::default())
-        };
+        // 提前克隆持久化服务，供后续 .manage 使用
+        let persistence_service: Arc<dyn crate::domain::services::IPersistenceService> = app_state.persistence_service.clone();
+
+        let initial_impl: Arc<dyn IChannelRangeSettingService> = if let Some(handle) = plc_handle_opt {
+             Arc::new(ChannelRangeSettingService::new(
+                 plc_service_dyn,
+                 handle,
+                 range_repo,
+                 calculator,
+             ))
+         } else {
+             log::warn!("未找到PLC连接句柄，将使用空实现");
+             Arc::new(application::services::range_setting_service::NullRangeSettingService::default())
+         };
+
+         // 创建动态容器，后续可在运行时替换实现
+         let range_setting_service = Arc::new(application::services::range_setting_service::DynamicRangeSettingService::new(initial_impl));
 
         // 启动 Tauri 应用
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
-            .manage(app_state.clone())
+            .manage(app_state)
             .manage(range_setting_service.clone())
-            .manage(app_state.persistence_service.clone())
+            .manage(persistence_service)
             .setup(|app| {
                 // 在应用启动后设置AppHandle到事件发布器
                 let app_handle = app.handle();

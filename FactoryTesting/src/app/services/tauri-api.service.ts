@@ -160,7 +160,7 @@ export class TauriApiService {
    * 而 `apply_channel_range_setting_cmd` 仅返回 ()（Unit），在 JS 侧会被序列化为 `null`。
    * 因此这里将量程下发的成功视为没有抛异常即可。
    */
-  connectPlc(batchName?: string): Observable<{ success: boolean; message?: string }> {
+  connectPlc(batchId?: string): Observable<{ success: boolean; message?: string }> {
     console.log('🔗 [TAURI_API] 调用连接PLC API');
     return from(invoke<{ success: boolean; message?: string }>('connect_plc_cmd')).pipe(
       tap(result => {
@@ -172,13 +172,16 @@ export class TauriApiService {
       }),
       switchMap(result => {
         // 如果连接失败或未提供批次名，则直接返回结果
-        if (!result.success || !batchName) {
+        if (!result.success || !batchId) {
           return from([result]);
         }
         // 成功连接且提供批次名，继续设置通道量程
-        console.log('📝 [TAURI_API] 开始下发通道量程，批次名:', batchName);
+        console.log('📝 [TAURI_API] 开始下发通道量程，批次ID:', batchId);
         // 量程下发命令仅在成功时返回 null/undefined，失败时抛异常
-        return from(invoke<void>('apply_channel_range_setting_cmd', { batchName: String(batchName) })).pipe(
+        // 注意：Rust 侧命令参数为 snake_case 的 batch_name
+        const paramObj = { batchName: String(batchId) };
+        console.log('📤 [TAURI_API] 下发量程参数对象:', paramObj);
+        return from(invoke<void>('apply_channel_range_setting_cmd', paramObj)).pipe(
           tap(() => {
             console.log('✅ [TAURI_API] 通道量程下发成功');
           }),
