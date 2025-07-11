@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, sleep};
 use crate::domain::services::plc_communication_service::IPlcCommunicationService;
@@ -31,6 +31,8 @@ pub struct PlcConnection {
     pub last_heartbeat: Option<chrono::DateTime<chrono::Utc>>,
     pub error_message: Option<String>,
     pub reconnect_attempts: u32,
+    /// 连续心跳失败次数，用于判定是否需要重连
+    pub heart_failure_count: u32,
 }
 
 /// PLC连接管理器
@@ -123,6 +125,7 @@ impl PlcConnectionManager {
                 last_heartbeat: None,
                 error_message: None,
                 reconnect_attempts: 0,
+                heart_failure_count: 0,
             };
             
             connections.insert(config.id.clone(), connection);
@@ -197,6 +200,26 @@ impl PlcConnectionManager {
         (test_plc_connected, target_plc_connected, test_plc_name, target_plc_name)
     }
 
+    /// 等待首次所有可用PLC建立连接（至少一台 Connected 且有 context）
+    async fn wait_for_initial_connections(&self, max_wait: Duration) {
+        let start = Instant::now();
+        loop {
+            {
+                let connections = self.connections.read().await;
+                let ready = connections.values().any(|c| c.context.is_some());
+                if ready {
+                    info!("✅ 首次PLC连接已就绪，开始心跳检测");
+                    return;
+                }
+            }
+            if start.elapsed() >= max_wait {
+                warn!("⌛ 等待首次PLC连接超时，继续启动心跳检测");
+                return;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     /// 启动连接和心跳检测任务
     async fn start_connection_tasks(&self) {
         let connections = self.connections.clone();
@@ -233,9 +256,12 @@ impl PlcConnectionManager {
                 }
 
                 // 等待一段时间再检查
-                sleep(Duration::from_secs(5)).await;
+                sleep(Duration::from_secs(2)).await;
             }
         });
+
+        // 等待首次连接完成（最多3秒）
+        self.wait_for_initial_connections(Duration::from_secs(3)).await;
 
         // 启动心跳检测任务
         let connections_for_heartbeat_task = connections.clone();
@@ -344,6 +370,7 @@ impl PlcConnectionManager {
             let connections_read = connections.read().await;
             connections_read.keys().cloned().collect()
         };
+        //debug!("🔍 执行心跳检测任务，对 {} 个连接", connection_ids.len());
         
         for connection_id in connection_ids {
             let connections_clone = connections.clone();
@@ -359,14 +386,14 @@ impl PlcConnectionManager {
         connections: Arc<RwLock<HashMap<String, PlcConnection>>>,
         connection_id: String,
     ) {
-        let (context, config_name) = {
+        let (context, config_name, current_state) = {
             let connections_read = connections.read().await;
             if let Some(connection) = connections_read.get(&connection_id) {
-                if connection.state == PlcConnectionState::Connected {
-                    (connection.context.clone(), connection.config.name.clone())
-                } else {
-                    return;
-                }
+                (
+                    connection.context.clone(),
+                    connection.config.name.clone(),
+                    connection.state.clone(),
+                )
             } else {
                 return;
             }
@@ -374,6 +401,7 @@ impl PlcConnectionManager {
         
         if let Some(context_arc) = context {
             // 尝试读取线圈03001 (地址3000，因为Modbus地址从0开始)
+            //debug!("↪️ 发送心跳读线圈请求: {}", config_name);
             let heartbeat_result = {
                 let mut context_guard = context_arc.lock().await;
                 context_guard.read_coils(3000, 1).await
@@ -381,10 +409,17 @@ impl PlcConnectionManager {
 
             match heartbeat_result {
                 Ok(_) => {
+                    //debug!("✅ PLC心跳成功: {}", config_name);
                     let mut connections_write = connections.write().await;
                     if let Some(connection) = connections_write.get_mut(&connection_id) {
                         connection.last_heartbeat = Some(chrono::Utc::now());
                         connection.error_message = None;
+                        connection.heart_failure_count = 0;
+                        if connection.state != PlcConnectionState::Connected {
+                            debug!("🔄 状态修正: {} -> Connected", config_name);
+                            connection.state = PlcConnectionState::Connected;
+                            connection.reconnect_attempts = 0;
+                        }
                     }
                 }
                 Err(e) => {
@@ -392,10 +427,28 @@ impl PlcConnectionManager {
 
                     let mut connections_write = connections.write().await;
                     if let Some(connection) = connections_write.get_mut(&connection_id) {
-                        connection.state = PlcConnectionState::Reconnecting;
-                        connection.context = None;
                         connection.error_message = Some(format!("心跳失败: {}", e));
+                        connection.heart_failure_count += 1;
+                        if connection.heart_failure_count >= 3 {
+                            warn!("🔄 连续心跳失败达到阈值，切换为 Reconnecting: {}", config_name);
+                            connection.state = PlcConnectionState::Reconnecting;
+                            connection.context = None;
+                            connection.heart_failure_count = 0;
+                        }
                     }
+                }
+            }
+        } else {
+            // 无有效 context，无法执行心跳
+            warn!("⚠️ PLC心跳跳过: {} 无 Modbus context", config_name);
+            let mut connections_write = connections.write().await;
+            if let Some(connection) = connections_write.get_mut(&connection_id) {
+                connection.heart_failure_count += 1;
+                if connection.heart_failure_count >= 3 {
+                    warn!("🔄 连续缺失 context 达到阈值，切换为 Reconnecting: {}", config_name);
+                    connection.state = PlcConnectionState::Reconnecting;
+                    connection.error_message = Some("Modbus context lost".to_string());
+                    connection.heart_failure_count = 0;
                 }
             }
         }

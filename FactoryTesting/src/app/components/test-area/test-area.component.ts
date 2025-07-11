@@ -271,7 +271,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const subscription = this.batchSelectionService.selectedBatch$.subscribe(batch => {
       this.selectedBatch = batch;
       if (batch) {
-        // console.log('🎯 [TEST_AREA] 批次选择变化:', batch.batch_id);
+        // 批次切换时重置 PLC 连接状态，确保“确认接线”按钮可点击
+        this.isConnected = false;
+        this.isConnecting = false;
         this.loadBatchDetails();
       } else {
         this.batchDetails = null;

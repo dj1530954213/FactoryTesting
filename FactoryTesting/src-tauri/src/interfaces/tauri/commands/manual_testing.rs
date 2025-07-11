@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use crate::models::{SubTestItem, PointDataType, RawTestOutcome};
 use crate::tauri_commands::AppState;
 use log::{info, error, warn};
+use tokio::time::{sleep, Duration};
 
 /// 执行手动子测试的参数
 #[derive(Debug, Deserialize)]
@@ -197,6 +198,22 @@ pub async fn connect_plc_cmd(
     match plc_connection_manager.start_connections().await {
         Ok(()) => {
             info!("✅ PLC连接管理器启动成功");
+
+            // 等待PLC实际连上，最多3秒，每200ms检查一次
+            let mut waited_ms = 0;
+            let (mut test_plc_connected, mut target_plc_connected, mut test_plc_name, mut target_plc_name) = (false, false, None, None);
+            while waited_ms < 3000 {
+                let summary = plc_connection_manager.get_plc_status_summary().await;
+                test_plc_connected = summary.0;
+                target_plc_connected = summary.1;
+                test_plc_name = summary.2.clone();
+                target_plc_name = summary.3.clone();
+                if test_plc_connected && target_plc_connected {
+                    break;
+                }
+                sleep(Duration::from_millis(200)).await;
+                waited_ms += 200;
+            }
             // 动态替换量程写入服务实现
             {
                 // 一定存在，直接获取
