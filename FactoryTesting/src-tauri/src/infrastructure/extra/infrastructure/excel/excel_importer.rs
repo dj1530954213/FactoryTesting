@@ -199,7 +199,8 @@ impl ExcelImporter {
             return Err(AppError::validation_error(format!("第{}行数据列数不足，实际{}列", row_number, row.len())));
         }
 
-        // 通过 header_map 获取列索引
+        // 通过 header_map 获取列索引,这个闭包函数将列名称以及其列索引对应起来，因为我们传入了一个header_map
+        //我们就可以通过名字获取列号，就可以从行中获取到特定的单元格
         let idx = |key: &str| header_map.get(key).copied().unwrap();
 
         let variable_name = Self::get_string_value(&row[idx(COL_KEY_HMI_NAME)], row_number, COL_KEY_HMI_NAME)?;
