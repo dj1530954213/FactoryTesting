@@ -14,7 +14,8 @@ use std::time::Duration;
 
 use crate::models::{ChannelPointDefinition, TestBatchInfo, ChannelTestInstance, RawTestOutcome, GlobalFunctionTestStatus};
 use crate::models::entities; // 导入实体模块
-use crate::domain::services::{BaseService, PersistenceService};
+use crate::domain::services::{BaseService, IPersistenceService as PersistenceService};
+use std::any::Any;
 // 导入 ExtendedPersistenceService 和相关结构体
 use crate::infrastructure::persistence::persistence_service::{
     ExtendedPersistenceService,
@@ -37,6 +38,7 @@ const SQLITE_URL_PREFIX: &str = "sqlite://";
 const BACKUPS_DIR_NAME: &str = "_backups"; // 修改常量名并统一为 _backups
 
 /// 基于SeaORM和SQLite的持久化服务实现
+#[derive(Clone)]
 pub struct SqliteOrmPersistenceService {
     db_conn: Arc<DatabaseConnection>, // 使用Arc以便在多处共享连接
     db_file_path: PathBuf, // 存储数据库文件的实际路径
@@ -984,6 +986,10 @@ impl PersistenceService for SqliteOrmPersistenceService {
     async fn cleanup_expired_data(&self, _retention_policy: &crate::domain::services::persistence_service::RetentionPolicy) -> AppResult<crate::domain::services::persistence_service::CleanupResult> {
         Err(AppError::not_implemented_error("cleanup_expired_data"))
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[async_trait]
@@ -1041,6 +1047,12 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
     async fn query_test_instances(&self, _criteria: &QueryCriteria) -> AppResult<QueryResult<ChannelTestInstance>> {
         Err(AppError::not_implemented_error("query_test_instances not implemented for SqliteOrmPersistenceService".to_string()))
     }
+
+
+
+    
+
+
     async fn query_test_batches(&self, _criteria: &QueryCriteria) -> AppResult<QueryResult<TestBatchInfo>> {
         Err(AppError::not_implemented_error("query_test_batches not implemented for SqliteOrmPersistenceService".to_string()))
     }
@@ -1157,5 +1169,9 @@ impl ExtendedPersistenceService for SqliteOrmPersistenceService {
 
     fn get_database_connection(&self) -> sea_orm::DatabaseConnection {
         (*self.db_conn).clone()
+    }
+
+            fn as_persistence_service(&self) -> Arc<dyn PersistenceService> {
+        Arc::new(self.clone())
     }
 }

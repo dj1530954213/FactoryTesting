@@ -317,32 +317,32 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
 
     switch (moduleType) {
       case ModuleType.AI:
-        // AI点位监控当前值
-        addresses.push(baseAddress);
+        // AI点位的【当前值】必须监控其自身的通信地址
+        const currentValueAddress = this.definition.plc_communication_address;
+        if (currentValueAddress) {
+          addresses.push(currentValueAddress);
+          console.log('📊 [MANUAL_TEST_MODAL] AI点位【当前值】监控地址:', currentValueAddress);
+        } else {
+          console.error('❌ [MANUAL_TEST_MODAL] AI点位定义缺少 plc_communication_address');
+        }
 
-        // 添加AI点位的报警设定值地址
+        // AI点位的【报警设定值】监控其各自独立的地址
         const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address;
         if (sllAddr) {
           addresses.push(sllAddr);
-          console.log('📊 [MANUAL_TEST_MODAL] 添加SLL设定值地址:', this.definition.sll_set_point_communication_address);
         }
         const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address;
         if (slAddr) {
           addresses.push(slAddr);
-          console.log('📊 [MANUAL_TEST_MODAL] 添加SL设定值地址:', this.definition.sl_set_point_communication_address);
         }
         const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address;
         if (shAddr) {
           addresses.push(shAddr);
-          console.log('📊 [MANUAL_TEST_MODAL] 添加SH设定值地址:', this.definition.sh_set_point_communication_address);
         }
         const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address;
         if (shhAddr) {
           addresses.push(shhAddr);
-          console.log('📊 [MANUAL_TEST_MODAL] 添加SHH设定值地址:', this.definition.shh_set_point_communication_address);
         }
-
-        console.log('📊 [MANUAL_TEST_MODAL] AI点位监控地址列表:', addresses);
         break;
 
       case ModuleType.AO:

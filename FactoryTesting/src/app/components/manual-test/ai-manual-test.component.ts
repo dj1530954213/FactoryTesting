@@ -53,28 +53,28 @@ import { ModuleType } from '../../models';
         <div class="monitoring-grid">
           <nz-statistic 
             nzTitle="当前值" 
-            [nzValue]="getCurrentValue()" 
+            [nzValue]="realtimeCurrentValue" 
             nzSuffix="工程单位"
             [nzValueStyle]="{ color: '#1890ff' }">
           </nz-statistic>
           <nz-statistic 
             nzTitle="SLL设定值" 
-            [nzValue]="getSllSetPoint()" 
+            [nzValue]="realtimeSllSetPoint" 
             [nzValueStyle]="{ color: '#ff4d4f' }">
           </nz-statistic>
           <nz-statistic 
             nzTitle="SL设定值" 
-            [nzValue]="getSlSetPoint()" 
+            [nzValue]="realtimeSlSetPoint" 
             [nzValueStyle]="{ color: '#faad14' }">
           </nz-statistic>
           <nz-statistic 
             nzTitle="SH设定值" 
-            [nzValue]="getShSetPoint()" 
+            [nzValue]="realtimeShSetPoint" 
             [nzValueStyle]="{ color: '#faad14' }">
           </nz-statistic>
           <nz-statistic 
             nzTitle="SHH设定值" 
-            [nzValue]="getShhSetPoint()" 
+            [nzValue]="realtimeShhSetPoint" 
             [nzValueStyle]="{ color: '#ff4d4f' }">
           </nz-statistic>
         </div>
@@ -164,7 +164,7 @@ import { ModuleType } from '../../models';
               </nz-tag>
             </div>
             <div class="test-item-content">
-              <p>设定值: {{ getSllSetPoint() }}</p>
+              <p>设定值: {{ getStaticSllSetValue() }}</p>
               <p>请确认当数值低于设定值时触发低低报警</p>
 
               <!-- 报警测试操作 -->
@@ -222,7 +222,7 @@ import { ModuleType } from '../../models';
               </nz-tag>
             </div>
             <div class="test-item-content">
-              <p>设定值: {{ getSlSetPoint() }}</p>
+              <p>设定值: {{ getStaticSlSetValue() }}</p>
               <p>请确认当数值低于设定值时触发低报警</p>
 
               <!-- 报警测试操作 -->
@@ -280,7 +280,7 @@ import { ModuleType } from '../../models';
               </nz-tag>
             </div>
             <div class="test-item-content">
-              <p>设定值: {{ getShSetPoint() }}</p>
+              <p>设定值: {{ getStaticShSetValue() }}</p>
               <p>请确认当数值高于设定值时触发高报警</p>
 
               <!-- 报警测试操作 -->
@@ -338,7 +338,7 @@ import { ModuleType } from '../../models';
               </nz-tag>
             </div>
             <div class="test-item-content">
-              <p>设定值: {{ getShhSetPoint() }}</p>
+              <p>设定值: {{ getStaticShhSetValue() }}</p>
               <p>请确认当数值高于设定值时触发高高报警</p>
 
               <!-- 报警测试操作 -->
@@ -474,6 +474,13 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
   // 枚举引用（用于模板）
   ManualTestSubItem = ManualTestSubItem;
 
+  // 实时监控数据显示属性
+  realtimeCurrentValue: string = '读取中...';
+  realtimeSllSetPoint: string = '读取中...';
+  realtimeSlSetPoint: string = '读取中...';
+  realtimeShSetPoint: string = '读取中...';
+  realtimeShhSetPoint: string = '读取中...';
+
   // 显示值测试相关
   displayTestValue: number = 0;
   isDisplayValueTesting: boolean = false;
@@ -496,7 +503,20 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
     // 订阅PLC监控数据
     this.subscriptions.add(
       this.plcMonitoringService.currentMonitoringData$.subscribe(data => {
-        // PLC数据更新时，界面会自动刷新
+        if (data && data.values) {
+          this.realtimeCurrentValue = this.plcMonitoringService.getFormattedMonitoringValue('currentValue', ModuleType.AI);
+          this.realtimeSllSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI);
+          this.realtimeSlSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI);
+          this.realtimeShSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI);
+          this.realtimeShhSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI);
+        } else {
+          // 如果没有数据，则显示默认值
+          this.realtimeCurrentValue = '读取中...';
+          this.realtimeSllSetPoint = '读取中...';
+          this.realtimeSlSetPoint = '读取中...';
+          this.realtimeShSetPoint = '读取中...';
+          this.realtimeShhSetPoint = '读取中...';
+        }
       })
     );
   }
@@ -513,43 +533,71 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * 获取SLL设定值
+   * 获取SLL设定值（来自PLC实时监控）
    */
   getSllSetPoint(): string {
+    return this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI);
+  }
+
+  /**
+   * 获取SL设定值（来自PLC实时监控）
+   */
+  getSlSetPoint(): string {
+    return this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI);
+  }
+
+  /**
+   * 获取SH设定值（来自PLC实时监控）
+   */
+  getShSetPoint(): string {
+    return this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI);
+  }
+
+  /**
+   * 获取SHH设定值（来自PLC实时监控）
+   */
+  getShhSetPoint(): string {
+    return this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI);
+  }
+
+  /**
+   * 获取SLL静态设定值（来自点表）
+   */
+  getStaticSllSetValue(): string {
     if (this.definition && this.definition.sll_set_value !== undefined && this.definition.sll_set_value !== null) {
       return this.definition.sll_set_value.toFixed(3);
     }
-    return this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI) || '读取中...';
+    return '--';
   }
 
   /**
-   * 获取SL设定值
+   * 获取SL静态设定值（来自点表）
    */
-  getSlSetPoint(): string {
+  getStaticSlSetValue(): string {
     if (this.definition && this.definition.sl_set_value !== undefined && this.definition.sl_set_value !== null) {
       return this.definition.sl_set_value.toFixed(3);
     }
-    return this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI) || '读取中...';
+    return '--';
   }
 
   /**
-   * 获取SH设定值
+   * 获取SH静态设定值（来自点表）
    */
-  getShSetPoint(): string {
+  getStaticShSetValue(): string {
     if (this.definition && this.definition.sh_set_value !== undefined && this.definition.sh_set_value !== null) {
       return this.definition.sh_set_value.toFixed(3);
     }
-    return this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI) || '读取中...';
+    return '--';
   }
 
   /**
-   * 获取SHH设定值
+   * 获取SHH静态设定值（来自点表）
    */
-  getShhSetPoint(): string {
+  getStaticShhSetValue(): string {
     if (this.definition && this.definition.shh_set_value !== undefined && this.definition.shh_set_value !== null) {
       return this.definition.shh_set_value.toFixed(3);
     }
-    return this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI) || '读取中...';
+    return '--';
   }
 
   /**

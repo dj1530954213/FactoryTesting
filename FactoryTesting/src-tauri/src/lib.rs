@@ -151,7 +151,7 @@ pub fn run() {
         let calculator: Arc<dyn IRangeValueCalculator> = Arc::new(DefaultRangeValueCalculator);
 
         // 提前克隆持久化服务，供后续 .manage 使用
-        let persistence_service: Arc<dyn crate::domain::services::IPersistenceService> = app_state.persistence_service.clone();
+        let persistence_service: Arc<dyn crate::domain::services::IPersistenceService> = app_state.persistence_service.as_persistence_service();
 
         let initial_impl: Arc<dyn IChannelRangeSettingService> = if let Some(handle) = plc_handle_opt {
              Arc::new(ChannelRangeSettingService::new(

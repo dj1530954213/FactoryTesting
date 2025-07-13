@@ -1,3 +1,4 @@
+use std::any::Any;
 use super::*;
 use crate::models::test_plc_config::{TestPlcChannelConfig, PlcConnectionConfig, ChannelMappingConfig};
 use crate::utils::error::AppError;
@@ -6,7 +7,11 @@ use crate::utils::error::AppError;
 /// 
 /// 负责数据的持久化存储和检索，支持事务和批量操作
 #[async_trait]
+
+
 pub trait IPersistenceService: BaseService {
+    /// 将 trait 对象转换为 Any，以支持向下转型
+    fn as_any(&self) -> &dyn Any;
     /// 保存通道点位定义
     /// 
     /// # 参数

@@ -1,8 +1,10 @@
 /// 持久化服务接口定义和相关数据结构
 
 use async_trait::async_trait;
+use crate::domain::services::IPersistenceService;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use crate::utils::error::AppResult;
 use crate::domain::services::{PersistenceService};
 use crate::models::structs::*;
@@ -151,7 +153,13 @@ impl HasTimestamps for RawTestOutcome {
 /// 扩展的持久化服务接口
 /// 在基础PersistenceService的基础上添加了高级功能
 #[async_trait]
-pub trait ExtendedPersistenceService: PersistenceService {
+
+
+pub trait ExtendedPersistenceService: IPersistenceService + Send + Sync {
+    /// 向上转型为 IPersistenceService
+            /// 将自身克隆为一个 Arc<dyn IPersistenceService>
+    fn as_persistence_service(&self) -> Arc<dyn IPersistenceService>;
+
     // 高级查询功能
 
     /// 条件查询通道定义
