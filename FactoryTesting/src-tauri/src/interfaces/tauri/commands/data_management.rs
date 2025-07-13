@@ -400,8 +400,11 @@ pub async fn get_batch_channel_definitions(
 /// 导入Excel并准备批次的参数
 #[derive(Debug, Deserialize)]
 pub struct ImportExcelAndPrepareBatchCmdArgs {
+    //文件地址
     pub file_path_str: String,
+    //没有使用
     pub product_model: Option<String>,
+    //没有使用
     pub serial_number: Option<String>,
 }
 
@@ -446,12 +449,13 @@ pub struct BatchProgressInfo {
     pub skipped_points: u32,
 }
 
-/// 导入Excel文件并自动分配批次 - 这是主要的点表导入入口
+/// 导入Excel文件并自动分配批次(核心逻辑，前端调用的入口点)
 #[tauri::command]
 pub async fn import_excel_and_prepare_batch_cmd(
     args: ImportExcelAndPrepareBatchCmdArgs,
     state: State<'_, AppState>
 ) -> Result<ImportAndPrepareBatchResponse, String> {
+    //State<'_, AppState>AppState 是全局状态结构体，它包含了整个应用共享的数据和服务(依赖注入)
     // ===== 先行清空旧的内存状态 & 会话批次 =====
     state.channel_state_manager.clear_caches().await;
     {
@@ -475,12 +479,14 @@ pub async fn import_excel_and_prepare_batch_cmd(
         use std::collections::HashSet;
         use crate::models::structs::{GlobalFunctionTestStatus, GlobalFunctionKey, default_id};
         use crate::models::enums::OverallTestStatus;
+        //使用HashSet来存储站场名称，避免重复
         let mut stations: HashSet<String> = HashSet::new();
         for def in &definitions {
             stations.insert(def.station_name.clone());
         }
         let import_time = chrono::Utc::now().to_rfc3339();
         for station in stations {
+            //根据站场名和时间查询数据库，但是导入的时候肯定是新的记录，所以这部分应该永远都是空的
             let existing = match state.persistence_service.load_global_function_test_statuses_by_station_time(&station, &import_time).await {
                 Ok(v) => v,
                 Err(e) => {
@@ -488,17 +494,19 @@ pub async fn import_excel_and_prepare_batch_cmd(
                     Vec::new()
                 }
             };
+            //如果查询结果为空，说明是新的站场，需要初始化
             if existing.is_empty() {
                                     // 先调用确保批次默认记录存在（幂等）
                     if let Err(e) = state.persistence_service.ensure_global_function_tests(&station, &import_time).await {
                         error!("初始化全局功能测试状态失败: {}", e);
                     }
-
+                //TODO!:这里加载的是上位机功能检查的5个项
                 // `ensure_global_function_tests` 已确保数据库存在 5 条默认记录，这里仅同步到内存缓存
                 if let Ok(list) = state
                     .persistence_service
                     .load_global_function_test_statuses_by_station_time(&station, &import_time)
                     .await {
+                    //将数据库中的上位机功能检查状态填充至内存中
                     let mut guard = state.global_function_tests.lock().await;
                     guard.extend(list);
                 }

@@ -92,10 +92,10 @@ impl ExcelImporter {
         if worksheet_names.is_empty() {
             return Err(AppError::validation_error("Excel文件中没有工作表"));
         }
-
+        //获取到第一个表的名称
         let sheet_name = &worksheet_names[0];
         info!("读取工作表: {}", sheet_name);
-
+        //获取到第一个表的范围
         let range = match workbook.worksheet_range(sheet_name) {
             Some(Ok(range)) => range,
             Some(Err(e)) => return Err(AppError::validation_error(format!("无法读取工作表: {}", e))),
@@ -107,7 +107,8 @@ impl ExcelImporter {
 
         // 生成列索引映射
         let mut header_map: Option<HashMap<String, usize>> = None;
-
+        //rows返回一个迭代器，但是通过这个迭代器只能获取到行，如果我们在迭代的时候需要给这一行增加一个索引，那么就要使用enumerate
+        //而且返回的一定是一个元组，而且元组中的第一个数据绝对是索引
         for (row_idx, row) in range.rows().enumerate() {
             if row_idx == 0 {
                 // 构建标题映射
