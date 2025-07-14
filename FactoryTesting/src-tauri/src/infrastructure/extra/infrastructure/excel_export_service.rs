@@ -88,7 +88,16 @@ impl ExcelExportService {
 
         // 6. 写数据行
         let mut row = 1u32;
-        for (idx, inst) in instances.iter().enumerate() {
+        // 按测试ID(定义中的 sequence_number) 升序排序
+        let mut instance_refs: Vec<&ChannelTestInstance> = instances.iter().collect();
+        instance_refs.sort_by_key(|inst| {
+            def_map
+                .get(&inst.definition_id)
+                .and_then(|d| d.sequence_number)
+                .unwrap_or(u32::MAX)
+        });
+
+        for (idx, inst) in instance_refs.iter().enumerate() {
             let def = match def_map.get(&inst.definition_id) {
                 Some(d) => *d,
                 None => continue, // 没找到定义，跳过
@@ -126,11 +135,12 @@ impl ExcelExportService {
                 }
 
                 // 若当前 outcome 含有百分比字段，统一覆盖（只要非 None 即写入）
-                if let Some(v) = oc.test_result_0_percent { pct_vals[0] = v.to_string(); }
-                if let Some(v) = oc.test_result_25_percent { pct_vals[1] = v.to_string(); }
-                if let Some(v) = oc.test_result_50_percent { pct_vals[2] = v.to_string(); }
-                if let Some(v) = oc.test_result_75_percent { pct_vals[3] = v.to_string(); }
-                if let Some(v) = oc.test_result_100_percent { pct_vals[4] = v.to_string(); }
+                //百分比需要增加小数点过滤。
+                if let Some(v) = oc.test_result_0_percent { pct_vals[0] = format!("{:.3}", v); }
+                if let Some(v) = oc.test_result_25_percent { pct_vals[1] = format!("{:.3}", v); }
+                if let Some(v) = oc.test_result_50_percent { pct_vals[2] = format!("{:.3}", v); }
+                if let Some(v) = oc.test_result_75_percent { pct_vals[3] = format!("{:.3}", v); }
+                if let Some(v) = oc.test_result_100_percent { pct_vals[4] = format!("{:.3}", v); }
 
                 match oc.sub_test_item {
                     SubTestItem::LowLowAlarm => {
