@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::timeout;
+use tokio::time::{timeout, sleep};
 use tokio_modbus::prelude::*;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -197,6 +197,87 @@ impl ModbusTcpConnectionPool {
 
         connections.insert(config.id.clone(), connection.clone());
         configs.insert(config.id.clone(), config.clone());
+
+        // 启动心跳探活与自动重连任务 (500ms, 读取地址03001)
+        {
+            let connections_map = self.connections.clone();
+            let configs_map = self.configs.clone();
+            let conn_id = config.id.clone();
+            tokio::spawn(async move {
+                let interval = Duration::from_millis(500);
+                loop {
+                    sleep(interval).await;
+
+                    // 若连接已被移除则结束任务
+                    let conn_opt = {
+                        let conns = connections_map.read().await;
+                        conns.get(&conn_id).cloned()
+                    };
+                    if conn_opt.is_none() {
+                        break;
+                    }
+                    let conn = conn_opt.unwrap();
+
+                    // 执行心跳读取 03001 (地址3000)
+                    let heartbeat_ok = {
+                        let mut ctx_guard = conn.context.lock().await;
+                        if let Some(ctx) = ctx_guard.as_mut() {
+                            ctx.read_coils(3000, 1).await.is_ok()
+                        } else {
+                            false
+                        }
+                    };
+
+                    if heartbeat_ok {
+                        *conn.is_connected.lock().await = true;
+                        *conn.last_heartbeat.lock().await = Utc::now();
+                        // 同步 Domain 层状态
+                        if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
+                            let mut mgr_conns = mgr.connections.write().await;
+                            if let Some(mgr_conn) = mgr_conns.get_mut(&conn_id) {
+                                mgr_conn.state = crate::domain::impls::plc_connection_manager::PlcConnectionState::Connected;
+                                mgr_conn.last_heartbeat = Some(Utc::now());
+                                mgr_conn.error_message = None;
+                                mgr_conn.heart_failure_count = 0;
+                            }
+                        }
+                        continue;
+                    }
+
+                    // 心跳失败，尝试重连
+                    *conn.is_connected.lock().await = false;
+
+                    let cfg_opt = {
+                        let cfgs = configs_map.read().await;
+                        cfgs.get(&conn_id).cloned()
+                    };
+                    // 同步失败状态到 Domain 层
+                    if let Some(mgr) = crate::infrastructure::plc_communication::get_global_plc_manager() {
+                        let mut mgr_conns = mgr.connections.write().await;
+                        if let Some(mgr_conn) = mgr_conns.get_mut(&conn_id) {
+                            mgr_conn.state = crate::domain::impls::plc_connection_manager::PlcConnectionState::Reconnecting;
+                            mgr_conn.error_message = Some("Heartbeat failed, reconnecting".to_string());
+                        }
+                    }
+
+                    if let Some(cfg) = cfg_opt {
+                        if let Ok(socket_addr) = format!("{}:{}", cfg.host, cfg.port).parse::<std::net::SocketAddr>() {
+                            let slave_id = cfg.protocol_params
+                                .get("slave_id")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(1) as u8;
+                            let slave = Slave(slave_id);
+                            if let Ok(new_ctx) = tokio_modbus::client::tcp::connect_slave(socket_addr, slave).await {
+                                let mut ctx_guard = conn.context.lock().await;
+                                *ctx_guard = Some(new_ctx);
+                                *conn.is_connected.lock().await = true;
+                                *conn.last_heartbeat.lock().await = Utc::now();
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         // 更新全局统计
         let mut global_stats = self.global_stats.lock().await;
