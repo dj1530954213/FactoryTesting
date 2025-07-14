@@ -13,7 +13,7 @@ use crate::models::structs::{
 };
 use crate::domain::services::BaseService;
 use crate::utils::error::AppResult;
-use crate::infrastructure::plc_communication::IPlcCommunicationService;
+use crate::infrastructure::plc_communication::{IPlcCommunicationService, get_global_plc_manager};
 use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
 use crate::domain::services::EventPublisher;
 
@@ -223,6 +223,18 @@ impl PlcMonitoringService {
                 crate::models::enums::ModuleType::DONone | crate::models::enums::ModuleType::AONone => "manual_test_plc",
                 crate::models::enums::ModuleType::Communication | crate::models::enums::ModuleType::Other(_) => "manual_test_plc",
             } };
+
+            // 🐞 调试日志：记录当前读取所使用的连接ID及其对应的 PLC 端点（IP:Port）
+            let endpoint_info = if let Some(mgr) = get_global_plc_manager() {
+                match mgr.endpoint_by_id(connection_id).await {
+                    Some(ep) => ep,
+                    None => "unknown".to_string(),
+                }
+            } else {
+                "n/a".to_string()
+            };
+            log::debug!("📡 [PLC_MONITORING] 读取地址 {} via conn_id={} ({})", address, connection_id, endpoint_info);
+
 
             match module_type {
                 crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::AO |

@@ -240,9 +240,11 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
       // 构建地址→键名映射
       const addressKeyMap: Record<string, string> = {};
       const moduleType = this.definition.module_type as ModuleType;
-      const baseAddress = this.definition.plc_communication_address;
+
+      // 以第一个监控地址作为“基准”地址写入 addressKeyMap，避免 DI/DO 键名与监控地址不一致
+      const baseAddress = monitoringAddresses[0];
       if (!baseAddress) {
-        console.warn('⚠️ [MANUAL_TEST_MODAL] 通道定义缺少PLC通信地址:', this.definition.tag);
+        console.warn('⚠️ [MANUAL_TEST_MODAL] 无法确定基准监控地址:', this.definition.tag);
         return;
       }
 

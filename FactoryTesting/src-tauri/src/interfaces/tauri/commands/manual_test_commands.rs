@@ -101,8 +101,13 @@ pub async fn start_plc_monitoring_cmd(
     // 根据模块类型补充 connection_id
     if request.connection_id.is_none() {
         let conn_id = match request.module_type {
+            // DI/AI 模块监控被测对象，使用 target_connection_id
             crate::models::enums::ModuleType::AI | crate::models::enums::ModuleType::DI |
             crate::models::enums::ModuleType::DINone | crate::models::enums::ModuleType::AINone => app_state.target_connection_id.clone(),
+            // DO/AO 模块监控测试台，使用 test_rig_connection_id
+            crate::models::enums::ModuleType::DO | crate::models::enums::ModuleType::DONone |
+            crate::models::enums::ModuleType::AO | crate::models::enums::ModuleType::AONone => app_state.test_rig_connection_id.clone(),
+            // 其他未明确指定的模块类型，也默认使用测试台连接
             _ => app_state.test_rig_connection_id.clone(),
         };
         request.connection_id = Some(conn_id);
@@ -116,7 +121,7 @@ pub async fn start_plc_monitoring_cmd(
                 // 仅 DO/AO 等需要测试 PLC 的模块才兜底使用 test_plc_communication_address
                 let need_test_plc_addr = matches!(
                     request.module_type,
-                    ModuleType::DO | ModuleType::DONone | ModuleType::AO | ModuleType::AONone
+                    ModuleType::DO | ModuleType::AO | ModuleType::DONone | ModuleType::AONone
                 );
 
                 if need_test_plc_addr {

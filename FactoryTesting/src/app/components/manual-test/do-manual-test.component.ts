@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -128,7 +128,8 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
     private manualTestService: ManualTestService,
     private plcMonitoringService: PlcMonitoringService,
     private message: NzMessageService,
-    private modal: NzModalService
+    private modal: NzModalService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   // 防止重复触发完成事件
@@ -140,7 +141,10 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     // 订阅PLC监控数据，保持界面刷新
     this.subscriptions.add(
-      this.plcMonitoringService.currentMonitoringData$.subscribe(() => {})
+      this.plcMonitoringService.currentMonitoringData$.subscribe(() => {
+        // 监控数据更新后手动触发变更检测，确保界面刷新
+        this.cdr.markForCheck();
+      })
     );
 
     // 订阅手动测试状态变化，自动检测是否完成
