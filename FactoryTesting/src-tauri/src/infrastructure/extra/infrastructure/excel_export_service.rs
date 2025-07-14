@@ -172,8 +172,11 @@ impl ExcelExportService {
             }
 
             // 开始/结束/时长
-            let start_time = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
-            let end_time = inst.final_test_time.unwrap_or_else(|| outcomes.last().map(|o| o.end_time).unwrap_or(start_time));
+            let start_time_utc = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
+            let end_time_utc = inst.final_test_time.unwrap_or_else(|| outcomes.last().map(|o| o.end_time).unwrap_or(start_time_utc));
+            // 转换为本地(北京时间)显示
+            let start_time = start_time_utc.with_timezone(&Local);
+            let end_time = end_time_utc.with_timezone(&Local);
             let duration = end_time.signed_duration_since(start_time);
             let total_minutes = duration.num_minutes();
             let hours = total_minutes / 60;

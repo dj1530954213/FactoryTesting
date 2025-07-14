@@ -456,6 +456,6 @@ pub async fn get_plc_connection_status_cmd(
         target_plc_connected,
         test_plc_name,
         target_plc_name,
-        last_check_time: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        last_check_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     })
 }

@@ -153,7 +153,7 @@ impl Logger {
         trace_id: Option<String>,
     ) {
         let log_entry = StructuredLog {
-            timestamp: Utc::now(),
+            timestamp: chrono::Local::now().with_timezone(&Utc),
             level: level.to_string(),
             target: target.to_string(),
             message: self.sanitize_message(message),
@@ -173,7 +173,7 @@ impl Logger {
             }
             LogFormat::Structured => {
                 log::log!(level, "[{}] {} - {} {:?}", 
-                         log_entry.timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
+                         log_entry.timestamp.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S%.3f"),
                          log_entry.level,
                          log_entry.message,
                          log_entry.fields);
