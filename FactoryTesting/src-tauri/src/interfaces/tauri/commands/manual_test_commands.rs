@@ -108,27 +108,38 @@ pub async fn start_plc_monitoring_cmd(
         request.connection_id = Some(conn_id);
     }
 
-    // ===== 兜底：若前端未提供监控地址，则从实例中获取测试PLC通信地址 =====
+    // ===== 兜底：若前端未提供监控地址，根据模块类型智能填充 =====
     if request.monitoring_addresses.is_empty() {
+        use crate::models::enums::ModuleType;
         match app_state.persistence_service.load_test_instance(&request.instance_id).await {
             Ok(Some(inst)) => {
-                if let Some(addr) = inst.test_plc_communication_address {
-                    request.monitoring_addresses.push(addr.clone());
-                    // 若仍未提供 address_key_map，自动根据模块类型生成
-                    if request.address_key_map.is_none() {
-                        use crate::models::enums::ModuleType;
-                        let key = match request.module_type {
-                            ModuleType::AO | ModuleType::AONone => "currentOutput",
-                            ModuleType::DI | ModuleType::DO | ModuleType::DINone | ModuleType::DONone => "currentState",
-                            _ => "currentValue",
-                        };
-                        let mut map = std::collections::HashMap::new();
-                        map.insert(addr.clone(), key.to_string());
-                        request.address_key_map = Some(map);
+                // 仅 DO/AO 等需要测试 PLC 的模块才兜底使用 test_plc_communication_address
+                let need_test_plc_addr = matches!(
+                    request.module_type,
+                    ModuleType::DO | ModuleType::DONone | ModuleType::AO | ModuleType::AONone
+                );
+
+                if need_test_plc_addr {
+                    if let Some(addr) = inst.test_plc_communication_address {
+                        request.monitoring_addresses.push(addr.clone());
+
+                        // 若未提供 address_key_map，则自动生成
+                        if request.address_key_map.is_none() {
+                            let key = if matches!(request.module_type, ModuleType::AO | ModuleType::AONone) {
+                                "currentOutput"
+                            } else {
+                                "currentState"
+                            };
+                            let mut map = std::collections::HashMap::new();
+                            map.insert(addr.clone(), key.to_string());
+                            request.address_key_map = Some(map);
+                        }
+                        info!("🔧 [MANUAL_TEST_CMD] 监控地址为空，已使用测试PLC地址兜底: {}", addr);
+                    } else {
+                        warn!("⚠️ [MANUAL_TEST_CMD] 实例缺少 test_plc_communication_address，无法填充监控地址");
                     }
-                    info!("🔧 [MANUAL_TEST_CMD] 监控地址为空，已从实例填充: {}", addr);
                 } else {
-                    warn!("⚠️ [MANUAL_TEST_CMD] 实例缺少 test_plc_communication_address，无法填充监控地址");
+                    warn!("⚠️ [MANUAL_TEST_CMD] DI 等模块未提供监控地址，且不应使用测试PLC地址兜底");
                 }
             }
             Ok(None) => {

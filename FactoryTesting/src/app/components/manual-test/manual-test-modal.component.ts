@@ -295,6 +295,8 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
 
   /**
    * 获取需要监控的PLC地址
+   * DI → 被测 PLC (definition.plc_communication_address)
+   * DO → 测试 PLC (instance.test_plc_communication_address)
    */
   private getMonitoringAddresses(): string[] {
     if (!this.definition) return [];
@@ -302,18 +304,33 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
     const addresses: string[] = [];
     const moduleType = this.definition.module_type as ModuleType;
 
-    // 优先使用实例分配的测试PLC通信地址（TestPlcChannelConfig.communication_address）
-    let baseAddress = this.instance?.test_plc_communication_address;
-    if (!baseAddress) {
-      // 回退到通道定义自身的 PLC 通信地址
-      baseAddress = this.definition.plc_communication_address;
+    let baseAddress: string | undefined;
+
+    switch (moduleType) {
+      case ModuleType.DI:
+        // 被测 PLC 地址仅来源于通道定义
+        baseAddress = this.definition.plc_communication_address;
+        break;
+      case ModuleType.DO:
+        // 测试 PLC 地址优先来源于实例，其次退回定义（极端容错）
+        baseAddress = this.instance?.test_plc_communication_address || this.definition.plc_communication_address;
+        break;
+      case ModuleType.AO:
+        // AO 仍监控当前输出值，沿用原先优先实例逻辑
+        baseAddress = this.instance?.test_plc_communication_address || this.definition.plc_communication_address;
+        break;
+      default:
+        // AI 及其它类型使用定义地址
+        baseAddress = this.definition.plc_communication_address;
+        break;
     }
+
     if (!baseAddress) {
-      console.warn('⚠️ [MANUAL_TEST_MODAL] 实例和定义均缺少PLC通信地址:', this.definition.tag);
+      console.warn('⚠️ [MANUAL_TEST_MODAL] 缺少可用的PLC通信地址:', this.definition.tag);
       return [];
     }
 
-    console.log('🔧 [MANUAL_TEST_MODAL] 获取监控地址 - 点位:', this.definition.tag, '地址:', baseAddress, '类型:', moduleType);
+    console.log('🔧 [MANUAL_TEST_MODAL] 监控地址确定 - 点位:', this.definition.tag, '地址:', baseAddress, '类型:', moduleType);
 
     switch (moduleType) {
       case ModuleType.AI:
@@ -352,10 +369,15 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
         break;
 
       case ModuleType.DI:
-      case ModuleType.DO:
-        // DI/DO点位监控当前状态
+        // DI 监控当前状态（被测 PLC）
         addresses.push(baseAddress);
-        console.log('📊 [MANUAL_TEST_MODAL] 数字量点位监控地址:', baseAddress);
+        console.log('📊 [MANUAL_TEST_MODAL] DI点位监控地址:', baseAddress);
+        break;
+
+      case ModuleType.DO:
+        // DO 监控当前状态（测试 PLC）
+        addresses.push(baseAddress);
+        console.log('📊 [MANUAL_TEST_MODAL] DO点位监控地址:', baseAddress);
         break;
 
       default:
