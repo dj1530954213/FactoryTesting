@@ -704,10 +704,82 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * 在切换批次时立即重置进度并加载详情
+   */
   selectBatch(batch: TestBatchInfo): void {
-    // 使用批次选择服务来管理状态
+    // 更新批次选择服务
     this.batchSelectionService.selectBatch(batch);
     this.message.success(`已选择批次: ${batch.batch_name || batch.batch_id}`);
+
+    // 1. 立即重置，避免显示上一批次数据
+    this.resetProgress();
+    this.batchDetails = null;
+
+    // 2. 异步加载新批次详情
+    this.loadBatchDetails();
+  }
+
+  /**
+   * 重置总体测试进度对象
+   */
+  private resetProgress(): void {
+    this.testProgress = {
+      totalPoints: 0,
+      completedPoints: 0,
+      successPoints: 0,
+      failedPoints: 0,
+      progressPercentage: 0,
+      currentPoint: undefined,
+      estimatedTimeRemaining: undefined
+    };
+    this.isTestCompleted = false;
+  }
+
+  /**
+   * 判断是否存在正在进行的硬点/报警测试
+   */
+  isHardpointTesting(): boolean {
+    return !!this.batchDetails?.instances?.some(inst =>
+      inst.overall_status === OverallTestStatus.HardPointTesting ||
+      inst.overall_status === OverallTestStatus.AlarmTesting
+    );
+  }
+
+  /**
+   * 加载当前选中批次详情并刷新进度
+   */
+  private async loadBatchDetailsDup(): Promise<void> {
+    if (!this.selectedBatch) {
+      return;
+    }
+
+    this.isLoadingDetails = true;
+    try {
+      const details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
+      this.batchDetails = details as any; // duplicate stub
+      // 重新计算整体进度
+      this.updateOverallProgress();
+    } catch (error) {
+      console.error('❌ [TEST_AREA] 加载批次详情失败:', error);
+      this.message.error('加载批次详情失败: ' + error);
+    } finally {
+      this.isLoadingDetails = false;
+    }
+  }
+
+  /**
+   * 根据 batchDetails 重新计算总体进度并更新 testProgress
+   */
+  private updateOverallProgress(): void {
+    const stats = this.calculateTestStatsFromDetails();
+
+    this.testProgress.totalPoints = stats.totalPoints;
+    this.testProgress.completedPoints = stats.testedPoints;
+    this.testProgress.successPoints = stats.successPoints;
+    this.testProgress.failedPoints = stats.failedPoints;
+
+    this.testProgress.progressPercentage = stats.totalPoints === 0 ? 0 : Math.round((stats.testedPoints / stats.totalPoints) * 100);
   }
 
   /**
@@ -1421,7 +1493,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       }
     });
 
-    const testedPoints = successPoints + failedPoints + skippedPoints;
+    const testedPoints = successPoints + failedPoints; // 跳过的不计入已测
     const pendingPoints = totalPoints - testedPoints;
 
     // 根据进度更新批次状态摘要与 overall_status，便于 UI 正确显示
