@@ -12,7 +12,7 @@ pub fn bj_offset() -> FixedOffset {
 /// 当前北京时间 `DateTime<FixedOffset>`
 #[inline]
 pub fn now_bj() -> DateTime<FixedOffset> {
-    Local::now().with_timezone(&bj_offset())
+    Utc::now().with_timezone(&bj_offset())
 }
 
 /// 将 `DateTime<Utc>` 转换为北京时间

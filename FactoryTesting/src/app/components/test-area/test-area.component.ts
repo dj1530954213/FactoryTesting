@@ -1262,7 +1262,14 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   formatDateTime(dateTimeString: string | undefined): string {
     if (!dateTimeString) return 'N/A';
     try {
-      const date = new Date(dateTimeString);
+      let date: Date;
+      // 如果字符串不包含时区信息，按北京时间(+08:00)解析
+      const plainPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+      if (plainPattern.test(dateTimeString)) {
+        date = new Date(dateTimeString.replace(' ', 'T') + '+08:00');
+      } else {
+        date = new Date(dateTimeString);
+      }
       return date.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',

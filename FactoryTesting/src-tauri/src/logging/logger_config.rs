@@ -173,7 +173,7 @@ impl Logger {
             }
             LogFormat::Structured => {
                 log::log!(level, "[{}] {} - {} {:?}", 
-                         log_entry.timestamp.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S%.3f"),
+                         crate::utils::time_utils::format_bj(log_entry.timestamp, "%Y-%m-%d %H:%M:%S%.3f"),
                          log_entry.level,
                          log_entry.message,
                          log_entry.fields);

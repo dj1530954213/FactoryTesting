@@ -939,7 +939,14 @@ export class TestExecutionComponent implements OnInit, OnDestroy {
   }
 
   formatTimestamp(timestamp: string): string {
-    return new Date(timestamp).toLocaleString('zh-CN');
+    let date: Date;
+    const plainPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+    if (plainPattern.test(timestamp)) {
+      date = new Date(timestamp.replace(' ', 'T') + '+08:00');
+    } else {
+      date = new Date(timestamp);
+    }
+    return date.toLocaleString('zh-CN');
   }
 
   // 新添加的方法

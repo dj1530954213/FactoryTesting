@@ -767,7 +767,14 @@ export class DataManagementComponent implements OnInit, OnDestroy {
   // 格式化日期时间
   formatDateTime(dateTimeString: string): string {
     try {
-      const date = new Date(dateTimeString);
+      let date: Date;
+      // 无时区信息时按北京时间(+08:00)解析
+      const plainPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+      if (plainPattern.test(dateTimeString)) {
+        date = new Date(dateTimeString.replace(' ', 'T') + '+08:00');
+      } else {
+        date = new Date(dateTimeString);
+      }
       return date.toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',

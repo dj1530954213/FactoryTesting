@@ -96,7 +96,7 @@ pub fn run() {
         .format(move |buf, record| {
             use std::io::Write;
             let formatted = format!("[{}] [{}] {}\n",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                crate::utils::time_utils::format_bj(chrono::Utc::now(), "%Y-%m-%d %H:%M:%S"),
                 record.level(),
                 record.args()
             );

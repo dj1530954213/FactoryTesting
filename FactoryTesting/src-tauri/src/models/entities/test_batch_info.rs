@@ -176,6 +176,7 @@ impl From<&Model> for crate::models::structs::TestBatchInfo {
             skipped_points: model.skipped_points,
             overall_status: model.overall_status.parse().unwrap_or_default(),
             custom_data: custom_data_map,
+            import_time: Some(crate::utils::time_utils::format_bj(model.created_time, "%Y-%m-%d %H:%M:%S")),
         }
     }
 }

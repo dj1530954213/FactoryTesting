@@ -432,15 +432,24 @@ impl Default for GlobalFunctionTestStatus {
     }
 }
 
+fn convert_to_bj_string(iso: &str) -> String {
+    // 尝试解析 RFC3339 / ISO8601 字符串并转换为北京时间字符串
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(iso) {
+        crate::utils::time_utils::format_bj(dt.with_timezone(&Utc), "%Y-%m-%d %H:%M:%S")
+    } else {
+        iso.to_string()
+    }
+}
+
 impl From<&crate::models::entities::global_function_test_status::Model> for GlobalFunctionTestStatus {
     fn from(model: &crate::models::entities::global_function_test_status::Model) -> Self {
         Self {
             id: model.id.clone(),
             station_name: model.station_name.clone(),
             function_key: GlobalFunctionKey::from_str(&model.function_key).unwrap_or(GlobalFunctionKey::HistoricalTrend),
-            import_time: model.import_time.clone(),
-            start_time: model.start_time.clone(),
-            end_time: model.end_time.clone(),
+            import_time: convert_to_bj_string(&model.import_time),
+            start_time: model.start_time.as_ref().map(|s| convert_to_bj_string(s)),
+            end_time: model.end_time.as_ref().map(|s| convert_to_bj_string(s)),
             status: OverallTestStatus::from_str(&model.status).unwrap_or_default(),
         }
     }
@@ -666,6 +675,9 @@ pub struct TestBatchInfo {
     /// 其他批次相关信息
     #[serde(default)]
     pub custom_data: HashMap<String, String>,
+    /// 导入时间（北京时间字符串），供前端直接使用
+    #[serde(skip_serializing_if = "Option::is_none", rename = "import_time")]
+    pub import_time: Option<String>,
 }
 
 impl TestBatchInfo {
@@ -690,6 +702,7 @@ impl TestBatchInfo {
             overall_status: OverallTestStatus::NotTested,
             batch_name: String::new(),
             custom_data: HashMap::new(),
+            import_time: None,
         }
     }
 }

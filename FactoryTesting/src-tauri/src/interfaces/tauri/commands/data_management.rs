@@ -2173,6 +2173,20 @@ pub async fn restore_session_cmd(
         }
     }
 
+    // 为前端增加北京时间字段，避免时区误差
+    let target_batches: Vec<TestBatchInfo> = target_batches
+        .into_iter()
+        .map(|mut b| {
+            let bj_str = crate::utils::time_utils::format_bj(b.creation_time, "%Y-%m-%d %H:%M:%S");
+            b.custom_data.insert(
+                "creation_time_bj".to_string(),
+                bj_str.clone(),
+            );
+            b.import_time = Some(bj_str);
+            b
+        })
+        .collect();
+
     info!("恢复完成，会话键={}，加载 {} 个批次", target_key, target_batches.len());
     Ok(target_batches)
 }

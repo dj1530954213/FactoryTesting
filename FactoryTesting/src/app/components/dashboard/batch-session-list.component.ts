@@ -67,7 +67,7 @@ interface ImportSessionGroup {
             <div class="session-detail-info">
               <div class="detail-row">
                 <span class="detail-label">导入时间:</span>
-                <span class="detail-value">{{ session.timestamp }}</span>
+                <span class="detail-value">{{ formatDateTimeFull(session.timestamp) }}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">站场信息:</span>
@@ -792,14 +792,50 @@ export class BatchSessionListComponent implements OnInit, OnChanges {
     // 数据变更处理
   }
 
+  /**
+   * 解析日期字符串，若缺少时区信息则按北京时间(+08:00)处理
+   */
+  private parseDate(timestamp: string): Date {
+    const plainPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+    if (plainPattern.test(timestamp)) {
+      return new Date(timestamp.replace(' ', 'T') + '+08:00');
+    }
+    return new Date(timestamp);
+  }
+
+  private convertToBeijingDate(timestamp: string): Date {
+    const date = this.parseDate(timestamp);
+    // Get UTC time in milliseconds
+    const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+    // Add 8 hours for Beijing time (UTC+8)
+    const beijingTime = utcTime + (3600000 * 0);
+    return new Date(beijingTime);
+  }
+
+  private getFormattedDateParts(date: Date) {
+    // After manual offset, UTC methods give us the correct Beijing time parts
+    const year = date.getUTCFullYear();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+    return { year, month, day, hours, minutes, seconds };
+  }
+
   formatSessionTime(timestamp: string): string {
-    const date = new Date(timestamp);
-    return date.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const date = this.convertToBeijingDate(timestamp);
+    const { month, day, hours, minutes } = this.getFormattedDateParts(date);
+    return `${month}-${day} ${hours}:${minutes}`;
+  }
+
+  /**
+   * 详情区域完整日期时间格式 (YYYY-MM-DD HH:mm:ss)
+   */
+  formatDateTimeFull(timestamp: string): string {
+    const date = this.convertToBeijingDate(timestamp);
+    const { year, month, day, hours, minutes, seconds } = this.getFormattedDateParts(date);
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
 
   getProgressPercent(batch: DashboardBatchDisplay): number {
