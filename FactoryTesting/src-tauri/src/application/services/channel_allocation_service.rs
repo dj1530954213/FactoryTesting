@@ -297,7 +297,7 @@ impl ChannelAllocationService {
         let ai_powered_true_channels: Vec<_> = remaining_channels.iter()
             .filter(|def| matches!(def.module_type, ModuleType::AI) && self.is_powered_channel(def))
             .collect();
-
+        //saturating_sub:如果max_channels_per_batch小于batch_instances.len()则返回0
         let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
         let allocated_count = std::cmp::min(
             std::cmp::min(ai_powered_true_channels.len(), test_channel_pools.ao_powered_false.len()),
