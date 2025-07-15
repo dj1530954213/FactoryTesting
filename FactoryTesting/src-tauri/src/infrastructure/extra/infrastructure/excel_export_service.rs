@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use chrono::{Local, Utc};
+use chrono::{Local};
+use crate::utils::time_utils;
 use rust_xlsxwriter::{Workbook, Format, FormatAlign, FormatBorder, Color};
 
 use crate::models::{ChannelPointDefinition, ModuleType, ChannelTestInstance};
@@ -209,8 +210,8 @@ impl ExcelExportService {
             .chain(alarm_vals.into_iter())
             .chain(vec![maint_result])
             .chain(vec![
-                start_time.format("%Y-%m-%d %H:%M:%S").to_string(),
-                end_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+                time_utils::format_bj(start_time, "%Y-%m-%d %H:%M:%S"),
+                time_utils::format_bj(end_time, "%Y-%m-%d %H:%M:%S"),
                 duration_fmt,
                 hardpoint_result,
                 overall.into(),

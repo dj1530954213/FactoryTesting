@@ -2106,7 +2106,7 @@ pub async fn restore_session_cmd(
     // 组织到秒级 creation_time 作为会话分组
     let mut session_map: std::collections::HashMap<String, Vec<TestBatchInfo>> = std::collections::HashMap::new();
     for b in &all_batches {
-        let ts_iso = b.creation_time.format("%Y-%m-%dT%H:%M:%S").to_string();
+        let ts_iso = crate::utils::time_utils::format_bj(b.creation_time, "%Y-%m-%dT%H:%M:%S");
         let ts_space = ts_iso.replace('T', " ");
         let key_iso = ts_iso.chars().take(19).collect::<String>();
         let key_space = ts_space.chars().take(19).collect::<String>();
@@ -2128,7 +2128,7 @@ pub async fn restore_session_cmd(
     let mut target_key = if let Some(id) = batch_id {
         // 根据 batch_id 找对应 creation_time 秒级键
         if let Some(batch) = all_batches.iter().find(|b| b.batch_id == id) {
-            batch.creation_time.format("%Y-%m-%dT%H:%M:%S").to_string()
+            crate::utils::time_utils::format_bj(batch.creation_time, "%Y-%m-%dT%H:%M:%S")
         } else {
             warn!("未找到 batch_id={}, 回退到 session_key/最新会话", id);
             // 如果 batch_id 无效，则继续使用 session_key 或最新

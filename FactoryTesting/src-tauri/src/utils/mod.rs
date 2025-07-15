@@ -6,6 +6,9 @@ pub mod error;
 /// 配置管理模块
 pub mod config;
 
+/// 时间工具模块（UTC ↔ 北京时间转换）
+pub mod time_utils;
+
 
 
 // 重新导出常用类型，方便使用
