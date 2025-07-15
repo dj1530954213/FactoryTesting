@@ -1365,11 +1365,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     // 否则返回基础统计信息
     return {
       totalPoints: batch.total_points || 0,
-      pendingPoints: batch.total_points || 0, // 假设所有点都是待测
-      testedPoints: 0,
-      successPoints: 0,
-      failedPoints: 0,
-      skippedPoints: 0
+      testedPoints: batch.tested_points || 0,
+      pendingPoints: (batch.total_points || 0) - (batch.tested_points || 0),
+      successPoints: batch.passed_points || 0,
+      failedPoints: batch.failed_points || 0,
+      skippedPoints: batch.skipped_points || 0
     };
   }
 
@@ -1391,35 +1391,41 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const instances = this.batchDetails.instances;
     const totalPoints = instances.length;
 
-    let pendingPoints = 0;
-    let testedPoints = 0;
     let successPoints = 0;
     let failedPoints = 0;
     let skippedPoints = 0;
 
     instances.forEach(instance => {
       switch (instance.overall_status) {
-        case OverallTestStatus.NotTested:
-          pendingPoints++;
-          break;
-        case OverallTestStatus.HardPointTesting:
-        case OverallTestStatus.AlarmTesting:
-          testedPoints++;
-          break;
         case OverallTestStatus.TestCompletedPassed:
-          testedPoints++;
           successPoints++;
           break;
         case OverallTestStatus.TestCompletedFailed:
-          testedPoints++;
           failedPoints++;
           break;
+        // 可根据需要补充其他已完成但跳过的状态
         default:
-          // 其他状态视为跳过
-          skippedPoints++;
+          // 其它状态（未测试、测试中等）不计入已测，待测将在后续由总数计算得出
           break;
       }
     });
+
+    const testedPoints = successPoints + failedPoints + skippedPoints;
+    const pendingPoints = totalPoints - testedPoints;
+
+    // 根据进度更新批次状态摘要与 overall_status，便于 UI 正确显示
+    if (this.selectedBatch) {
+      if (testedPoints === 0) {
+        this.selectedBatch.status_summary = '未开始';
+        this.selectedBatch.overall_status = OverallTestStatus.NotTested;
+      } else if (testedPoints < totalPoints) {
+        this.selectedBatch.status_summary = '测试中';
+        this.selectedBatch.overall_status = OverallTestStatus.HardPointTesting;
+      } else {
+        this.selectedBatch.status_summary = '已完成';
+        this.selectedBatch.overall_status = failedPoints === 0 ? OverallTestStatus.TestCompletedPassed : OverallTestStatus.TestCompletedFailed;
+      }
+    }
 
     return {
       totalPoints,
@@ -1432,12 +1438,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
 
-
-  /**
-   * 检查是否有未持久化的数据
-   *
-   * ⚠️ 重要修改：测试区域不再创建批次，只获取已存在的数据
-   * 批次创建应该在点表导入时完成
+   /**
+    * 检查是否有未持久化的数据
+    *
+    * ⚠️ 重要修改：测试区域不再创建批次，只获取已存在的数据
+    * 批次创建应该在点表导入时完成
    */
   private checkForUnpersistedData(): void {
     // console.log('🔍 [TEST_AREA] 检查是否有未持久化的数据');
