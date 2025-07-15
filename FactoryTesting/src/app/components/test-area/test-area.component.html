@@ -188,32 +188,6 @@
                   </div>
                 </div>
 
-                <!-- 详细统计 -->
-                <div class="progress-stats">
-                  <div class="stats-row">
-                    <div class="stat-item success">
-                      <span class="stat-icon">✅</span>
-                      <span class="stat-label">成功</span>
-                      <span class="stat-value">{{ testProgress.successPoints }}</span>
-                    </div>
-                    <div class="stat-item failed">
-                      <span class="stat-icon">❌</span>
-                      <span class="stat-label">失败</span>
-                      <span class="stat-value">{{ testProgress.failedPoints }}</span>
-                    </div>
-                    <div class="stat-item pending">
-                      <span class="stat-icon">⏳</span>
-                      <span class="stat-label">待测</span>
-                      <span class="stat-value">{{ testProgress.totalPoints - testProgress.completedPoints }}</span>
-                    </div>
-                    <div class="stat-item testing" *ngIf="isAutoTesting">
-                      <span class="stat-icon">🔄</span>
-                      <span class="stat-label">测试中</span>
-                      <span class="stat-value">{{ getTestingCount() }}</span>
-                    </div>
-                  </div>
-                </div>
-
                 <!-- 最近测试结果 -->
                 <div class="recent-results" *ngIf="recentTestResults.length > 0">
                   <div class="recent-header">

@@ -20,7 +20,7 @@ import { NzDropDownModule } from 'ng-zorro-antd/dropdown';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { NzCollapseModule } from 'ng-zorro-antd/collapse';
 import { NzProgressModule } from 'ng-zorro-antd/progress';
-import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
+import { NzModalModule, NzModalService, NzModalRef } from 'ng-zorro-antd/modal';
 import { listen } from '@tauri-apps/api/event';
 // Tauri 对话框 API：按需导入 save 方法
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -167,6 +167,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   selectedErrorDefinition: ChannelPointDefinition | null = null;
 
   // 手动测试模态框相关
+  private hardPointModalRef?: NzModalRef;
   manualTestModalVisible = false;
   selectedManualTestInstance: ChannelTestInstance | null = null;
   selectedManualTestDefinition: ChannelPointDefinition | null = null;
@@ -370,298 +371,29 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新本地状态
         this.updateInstanceStatusDirect(statusChange.instanceId, statusChange.newStatus);
 
+        // 弹窗控制
+        if (statusChange.newStatus === OverallTestStatus.HardPointTesting) {
+          this.openHardPointTestingModal();
+        } else if (statusChange.newStatus === OverallTestStatus.HardPointTestCompleted || statusChange.newStatus === OverallTestStatus.ManualTesting) {
+          this.closeHardPointTestingModal();
+        }
+
+        // 更新整体进度
+        this.updateOverallProgress();
+
         // 🔧 优化：测试状态变化后智能刷新
-        if (statusChange.newStatus === OverallTestStatus.TestCompletedPassed ||
-            statusChange.newStatus === OverallTestStatus.TestCompletedFailed) {
-          this.scheduleDataRefresh('status-changed', 500);
-        }
-
-        // 更新当前测试点位
-        if (statusChange.newStatus === OverallTestStatus.HardPointTesting && statusChange.pointTag) {
-          this.testProgress.currentPoint = statusChange.pointTag;
-        }
+        this.scheduleDataRefresh('test-status-changed', 800);
       });
 
-      // 监听测试进度更新事件
-      const unlistenProgressUpdate = await listen('test-progress-update', (event) => {
-        console.log('📊 [TEST_AREA] 收到测试进度更新事件:', event.payload);
-
-        const progressData = event.payload as {
-          batchId: string;
-          totalPoints: number;
-          completedPoints: number;
-          successPoints: number;
-          failedPoints: number;
-          progressPercentage: number;
-          currentPoint?: string;
-        };
-
-        // 只有当批次ID匹配时才更新进度
-        if (progressData.batchId === this.selectedBatch?.batch_id) {
-          this.testProgress.totalPoints = progressData.totalPoints;
-          this.testProgress.completedPoints = progressData.completedPoints;
-          this.testProgress.successPoints = progressData.successPoints;
-          this.testProgress.failedPoints = progressData.failedPoints;
-          this.testProgress.progressPercentage = progressData.progressPercentage;
-          this.testProgress.currentPoint = progressData.currentPoint;
-
-          // 检查是否完成
-          if (this.testProgress.progressPercentage >= 100 && !this.isTestCompleted) {
-            this.isTestCompleted = true;
-            this.isAutoTesting = false;
-            this.testProgress.currentPoint = undefined;
-            this.message.success('批次测试已完成！', { nzDuration: 5000 });
-          }
-
-          console.log('📊 [TEST_AREA] 测试进度已更新:', this.testProgress);
-        }
-      });
-
-      // 监听批次状态变化事件
-      const unlistenBatchStatusChanged = await listen('batch-status-changed', (event) => {
-        console.log('📋 [TEST_AREA] 收到批次状态变化事件:', event.payload);
-
-        const batchStatusData = event.payload as {
-          batchId: string;
-          status: string;
-          statistics: {
-            total_channels: number;
-            tested_channels: number;
-            passed_channels: number;
-            failed_channels: number;
-            skipped_channels: number;
-            in_progress_channels: number;
-          };
-        };
-
-        // 只有当批次ID匹配时才更新状态
-        if (batchStatusData.batchId === this.selectedBatch?.batch_id) {
-          console.log('📋 [TEST_AREA] 更新批次状态:', batchStatusData.status);
-
-          // 更新测试进度
-          this.testProgress.totalPoints = batchStatusData.statistics.total_channels;
-          this.testProgress.completedPoints = batchStatusData.statistics.tested_channels;
-          this.testProgress.successPoints = batchStatusData.statistics.passed_channels;
-          this.testProgress.failedPoints = batchStatusData.statistics.failed_channels;
-          this.testProgress.progressPercentage = this.testProgress.totalPoints > 0
-            ? (this.testProgress.completedPoints / this.testProgress.totalPoints) * 100
-            : 0;
-
-          // 检查批次是否完成
-          if (batchStatusData.status === 'completed' && !this.isTestCompleted) {
-            this.isTestCompleted = true;
-            this.isAutoTesting = false;
-            this.testProgress.currentPoint = undefined;
-            this.message.success('批次测试已完成！', { nzDuration: 5000 });
-
-            // 🔧 优化：批次完成后智能刷新
-            this.scheduleDataRefresh('batch-completed', 1200);
-          }
-
-          console.log('📋 [TEST_AREA] 批次状态已更新:', this.testProgress);
-        }
-      });
-
-      // 在组件销毁时清理事件监听器
+      // 组件销毁时自动注销事件监听
       this.subscriptions.add({
         unsubscribe: () => {
           unlistenCompleted();
           unlistenStatusChanged();
-          unlistenProgressUpdate();
-          unlistenBatchStatusChanged();
         }
       });
-
-      console.log('✅ [TEST_AREA] 测试事件监听器设置成功');
     } catch (error) {
-      console.error('❌ [TEST_AREA] 设置事件监听器失败:', error);
-
-      // 如果事件监听失败，回退到定时器轮询
-      this.setupPollingFallback();
-    }
-  }
-
-  /**
-   * 回退到定时器轮询方式
-   */
-  private setupPollingFallback(): void {
-    console.log('🔄 [TEST_AREA] 定时器轮询已禁用，避免无限循环');
-
-    // 暂时禁用定时器轮询，避免无限循环
-    // TODO: 重新设计轮询机制，只在必要时启用
-    /*
-    const intervalId = setInterval(async () => {
-      if (this.selectedBatch && this.isAutoTesting) {
-        // 移除频繁的日志输出，避免控制台噪音
-        // console.log('🔄 [TEST_AREA] 定时刷新批次状态');
-        await this.loadBatchDetails();
-      }
-    }, 2000); // 每2秒刷新一次
-
-    // 在组件销毁时清理定时器
-    this.subscriptions.add({
-      unsubscribe: () => clearInterval(intervalId)
-    });
-    */
-  }
-
-  /**
-   * 更新实例状态
-   */
-  private updateInstanceStatus(testResult: any): void {
-    if (!this.batchDetails?.instances) return;
-
-    // 查找对应的实例
-    const instance = this.batchDetails.instances.find(inst =>
-      inst.instance_id === testResult.instanceId
-    );
-
-    if (instance) {
-      // 更新状态
-      if (testResult.success) {
-        instance.overall_status = OverallTestStatus.TestCompletedPassed;
-      } else {
-        instance.overall_status = OverallTestStatus.TestCompletedFailed;
-      }
-
-      // 🔧 性能优化：延迟更新统计信息
-      this.scheduleStatsUpdate();
-
-      console.log(`🔄 [TEST_AREA] 已更新实例状态: ${testResult.instanceId} -> ${instance.overall_status}`);
-    } else {
-      console.warn(`⚠️ [TEST_AREA] 未找到实例: ${testResult.instanceId}`);
-    }
-  }
-
-  /**
-   * 更新测试进度
-   */
-  private updateTestProgressFromResult(testResult: any): void {
-    if (!this.batchDetails?.instances) return;
-
-    // 添加到最近测试结果
-    const definition = this.getDefinitionByInstanceId(testResult.instanceId);
-    if (definition) {
-      this.recentTestResults.push({
-        pointTag: definition.tag || testResult.instanceId,
-        success: testResult.success,
-        message: testResult.message || '',
-        timestamp: new Date()
-      });
-
-      // 只保留最近10个结果
-      if (this.recentTestResults.length > 10) {
-        this.recentTestResults = this.recentTestResults.slice(-10);
-      }
-    }
-
-    // 重新计算进度统计
-    this.calculateTestProgress();
-  }
-
-  /**
-   * 计算测试进度
-   */
-  private calculateTestProgress(): void {
-    if (!this.batchDetails?.instances) {
-      this.testProgress = {
-        totalPoints: 0,
-        completedPoints: 0,
-        successPoints: 0,
-        failedPoints: 0,
-        progressPercentage: 0,
-        currentPoint: undefined,
-        estimatedTimeRemaining: undefined
-      };
-      return;
-    }
-
-    const instances = this.batchDetails.instances;
-    const totalPoints = instances.length;
-    let completedPoints = 0;
-    let successPoints = 0;
-    let failedPoints = 0;
-    let testingPoints = 0;
-
-    // 统计各种状态的点位数量
-    instances.forEach(instance => {
-      switch (instance.overall_status) {
-        case OverallTestStatus.TestCompletedPassed:
-          completedPoints++;
-          successPoints++;
-          break;
-        case OverallTestStatus.TestCompletedFailed:
-          completedPoints++;
-          failedPoints++;
-          break;
-        case OverallTestStatus.HardPointTesting:
-        case OverallTestStatus.AlarmTesting:
-          testingPoints++;
-          break;
-        case OverallTestStatus.WiringConfirmed:
-        case OverallTestStatus.NotTested:
-        default:
-          // 这些状态不计入已完成
-          break;
-      }
-    });
-
-    const progressPercentage = totalPoints > 0 ? (completedPoints / totalPoints) * 100 : 0;
-
-    this.testProgress = {
-      totalPoints,
-      completedPoints,
-      successPoints,
-      failedPoints,
-      progressPercentage,
-      currentPoint: this.testProgress.currentPoint,
-      estimatedTimeRemaining: this.testProgress.estimatedTimeRemaining
-    };
-
-    // 检查是否完成 - 只有当所有点位都测试完成时才算完成
-    const allCompleted = completedPoints === totalPoints && testingPoints === 0;
-    if (allCompleted && !this.isTestCompleted) {
-      this.isTestCompleted = true;
-      this.isAutoTesting = false;
-      this.testProgress.currentPoint = undefined;
-      console.log('🎉 [TEST_AREA] 批次测试已完成！成功:', successPoints, '失败:', failedPoints);
-    } else if (testingPoints === 0 && this.isAutoTesting && completedPoints > 0) {
-      // 如果没有正在测试的点位，但还有未完成的，可能测试已停止
-      this.isAutoTesting = false;
-      console.log('⚠️ [TEST_AREA] 测试已停止，但可能未完全完成');
-    }
-
-    console.log('📊 [TEST_AREA] 测试进度统计:', {
-      totalPoints,
-      completedPoints,
-      successPoints,
-      failedPoints,
-      testingPoints,
-      progressPercentage: progressPercentage.toFixed(1) + '%'
-    });
-  }
-
-  /**
-   * 直接更新实例状态（用于状态变化事件）
-   */
-  private updateInstanceStatusDirect(instanceId: string, newStatus: OverallTestStatus): void {
-    if (!this.batchDetails?.instances) return;
-
-    // 查找对应的实例
-    const instance = this.batchDetails.instances.find(inst =>
-      inst.instance_id === instanceId
-    );
-
-    if (instance) {
-      // 直接更新状态
-      instance.overall_status = newStatus;
-
-      // 🔧 性能优化：延迟更新统计信息
-      this.scheduleStatsUpdate();
-
-      console.log(`🔄 [TEST_AREA] 直接更新实例状态: ${instanceId} -> ${newStatus}`);
-    } else {
-      console.warn(`⚠️ [TEST_AREA] 未找到实例: ${instanceId}`);
+      console.error('❌ [TEST_AREA] 设置测试结果监听失败:', error);
     }
   }
 
@@ -746,27 +478,35 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     );
   }
 
-  /**
-   * 加载当前选中批次详情并刷新进度
-   */
-  private async loadBatchDetailsDup(): Promise<void> {
-    if (!this.selectedBatch) {
-      return;
-    }
-
-    this.isLoadingDetails = true;
-    try {
-      const details = await firstValueFrom(this.tauriApiService.getBatchDetails(this.selectedBatch.batch_id));
-      this.batchDetails = details as any; // duplicate stub
-      // 重新计算整体进度
-      this.updateOverallProgress();
-    } catch (error) {
-      console.error('❌ [TEST_AREA] 加载批次详情失败:', error);
-      this.message.error('加载批次详情失败: ' + error);
-    } finally {
-      this.isLoadingDetails = false;
+  // ========= 硬点测试弹窗控制 =========
+  private openHardPointTestingModal(): void {
+    if (!this.hardPointModalRef) {
+      this.hardPointModalRef = this.modal.create({
+        nzTitle: '硬点通道自动测试',
+        nzContent: '正在进行硬点通道测试，请稍候……',
+        nzClosable: false,
+        nzMaskClosable: false
+      });
     }
   }
+
+  private closeHardPointTestingModal(): void {
+    if (this.hardPointModalRef) {
+      this.hardPointModalRef.close();
+      this.hardPointModalRef = undefined;
+    }
+  }
+
+  // ========= 进度更新辅助 =========
+  private updateTestProgressFromResult(_result: { instanceId: string; success: boolean }): void {
+    // 统一调用整体进度更新
+    this.updateOverallProgress();
+  }
+
+
+
+
+
 
   /**
    * 根据 batchDetails 重新计算总体进度并更新 testProgress
@@ -780,7 +520,52 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.testProgress.failedPoints = stats.failedPoints;
 
     this.testProgress.progressPercentage = stats.totalPoints === 0 ? 0 : Math.round((stats.testedPoints / stats.totalPoints) * 100);
+
+    // 根据当前实例状态自动控制硬点测试弹窗
+    const instancesList = this.batchDetails?.instances ?? [];
+    const hasHardPointTesting = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTesting);
+    const hasHardPointCompleted = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTestCompleted);
+
+    if (hasHardPointTesting) {
+      // 仍有硬点通道在测试，确保弹窗保持打开
+      this.openHardPointTestingModal();
+    } else if (hasHardPointCompleted) {
+      // 所有硬点通道已结束测试，关闭弹窗
+      this.closeHardPointTestingModal();
+    }
+
   }
+
+  /**
+   * 根据当前批次详情计算整体进度（兼容旧调用）
+   */
+  private calculateTestProgress(): void {
+    this.updateOverallProgress();
+  }
+
+  /**
+   * 更新指定实例的整体状态（来自 test-completed 事件）
+   */
+  private updateInstanceStatus(testResult: { instanceId: string; success: boolean }): void {
+    const inst = this.batchDetails?.instances?.find(i => i.instance_id === testResult.instanceId);
+    if (inst) {
+      inst.overall_status = testResult.success ? OverallTestStatus.TestCompletedPassed : OverallTestStatus.TestCompletedFailed;
+    }
+    this.updateOverallProgress();
+  }
+
+  /**
+   * 直接更新实例状态（来自 test-status-changed 事件）
+   */
+  private updateInstanceStatusDirect(instanceId: string, newStatus: OverallTestStatus): void {
+    const inst = this.batchDetails?.instances?.find(i => i.instance_id === instanceId);
+    if (inst) {
+      inst.overall_status = newStatus;
+    }
+    this.updateOverallProgress();
+  }
+
+  /**
 
   /**
    * 确认接线 - 连接测试PLC和被测PLC
@@ -928,6 +713,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.isTestCompleted = true;
       this.isAutoTesting = false;
       this.testProgress.currentPoint = undefined;
+      // 关闭硬点测试弹窗（如果仍然打开）
+      this.closeHardPointTestingModal();
       this.message.success('批次测试已完成！', { nzDuration: 5000 });
     }
 
@@ -1390,6 +1177,27 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   readonly OverallTestStatus = OverallTestStatus;
   readonly ModuleType = ModuleType;
+
+  /**
+   * 硬点测试弹窗控制
+   */
+  private showHardPointModal(): void {
+    if (this.hardPointModalRef) return;
+    this.hardPointModalRef = this.modal.create({
+      nzTitle: '硬点通道自动测试',
+      nzContent: '正在进行硬点通道测试，请稍候……',
+      nzClosable: false,
+      nzMaskClosable: false,
+      nzFooter: null
+    });
+  }
+
+  private closeHardPointModal(): void {
+    if (this.hardPointModalRef) {
+      this.hardPointModalRef.destroy();
+      this.hardPointModalRef = undefined;
+    }
+  }
 
   /**
    * 批次面板折叠状态切换
