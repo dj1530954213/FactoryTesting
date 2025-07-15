@@ -144,6 +144,7 @@ impl ChannelAllocationService {
         for def in definitions.iter() {
             // 使用通道位号字段（形如 "1_2_AI_0"）解析机架号
             let rack_key = self.get_rack_number(&def.channel_tag_in_module).unwrap_or(u32::MAX);
+            //如果从rack_map中没有找到这个机架号则创建一个空的Vec，如果存在则添加到Vec中
             rack_map.entry(rack_key).or_default().push(def.clone());
         }
 
@@ -157,6 +158,7 @@ impl ChannelAllocationService {
         let mut batch_counter = start_batch_number;
 
         for rack in rack_numbers {
+            //将rack_map中的 rack_key 对应的 Vec取出，如果找不到则继续看下一个机架
             let defs_of_rack = rack_map.remove(&rack).unwrap_or_default();
             if defs_of_rack.is_empty() {
                 continue;
@@ -211,7 +213,7 @@ impl ChannelAllocationService {
             // 每个批次重新创建完整的测试PLC通道池（支持通道复用）
             let mut test_channel_pools = self.create_test_channel_pools(test_plc_config);
 
-            // 分配单批次
+            // 分配单批次，used_def_ids为本次分配的通道定义ID
             let (batch_instances, used_def_ids) = self.allocate_single_batch_with_capacity_limit(
                 &remaining_channels,
                 &mut test_channel_pools,
@@ -241,6 +243,7 @@ impl ChannelAllocationService {
 
             // 移除已使用的定义
             let used_set: HashSet<String> = used_def_ids.into_iter().collect();
+            //这里的tetain是保留闭包中结果为true的元素，对于这里只保留没有被使用的通道
             remaining_channels.retain(|d| !used_set.contains(&d.id));
 
             batch_number += 1;
@@ -970,7 +973,7 @@ impl IChannelAllocationService for ChannelAllocationService {
 
         // 安全型 PLC：先分配 AI/DI，再分配 AO/DO
         let all_definitions = definitions.clone(); // 留作最终统计
-
+        //使用partition方法将定义按模块类型分区(切分)，且into_iter()方法将会转移所有权
         let (ai_di_defs, ao_do_defs): (Vec<_>, Vec<_>) = definitions
             .into_iter()
             .partition(|d| matches!(d.module_type, ModuleType::AI | ModuleType::DI));
