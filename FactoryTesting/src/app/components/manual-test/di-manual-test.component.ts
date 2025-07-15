@@ -226,7 +226,7 @@ export class DiManualTestComponent implements OnInit, OnDestroy {
 
     this.modal.confirm({
       nzTitle: '确认测试失败',
-      nzContent: `确定要测试失败 "${MANUAL_TEST_SUB_ITEM_LABELS[subItem]}" 吗？`,
+      nzContent: `确定要将测试标记为失败吗？`,
       nzOnOk: async () => {
         try {
           await this.manualTestService.skipSubItem(this.instance!.instance_id, subItem, '用户手动跳过');

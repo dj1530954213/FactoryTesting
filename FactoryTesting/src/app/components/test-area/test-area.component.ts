@@ -868,16 +868,13 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
 
 
-
-
   /**
    * 初始化测试进度
    */
   private initializeTestProgress(): void {
-    const totalPoints = this.batchDetails?.instances?.length || 0;
-
+    // 重置总体进度对象
     this.testProgress = {
-      totalPoints,
+      totalPoints: 0,
       completedPoints: 0,
       successPoints: 0,
       failedPoints: 0,
@@ -897,11 +894,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 获取测试状态颜色
+   * success | warning | processing | default
    */
   getTestStatusColor(): string {
-    if (this.isTestCompleted) {
-      return this.testProgress.failedPoints > 0 ? 'warning' : 'success';
-    } else if (this.isAutoTesting) {
+    const { totalPoints, completedPoints, failedPoints } = this.testProgress;
+    const allDone = totalPoints > 0 && completedPoints === totalPoints;
+
+    if (allDone) {
+      return failedPoints > 0 ? 'warning' : 'success';
+    } else if (completedPoints > 0) {
       return 'processing';
     } else {
       return 'default';
@@ -909,25 +910,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * 获取测试状态文本
-   */
-  getTestStatusText(): string {
-    if (this.isTestCompleted) {
-      return this.testProgress.failedPoints > 0 ? '测试完成(有失败)' : '测试完成(全部通过)';
-    } else if (this.isAutoTesting) {
-      return '测试进行中';
-    } else {
-      return '等待开始';
-    }
-  }
-
-  /**
    * 获取进度条状态
    */
   getProgressStatus(): 'success' | 'exception' | 'active' | 'normal' {
-    if (this.isTestCompleted) {
-      return this.testProgress.failedPoints > 0 ? 'exception' : 'success';
-    } else if (this.isAutoTesting) {
+    const { totalPoints, completedPoints, failedPoints } = this.testProgress;
+    const allDone = totalPoints > 0 && completedPoints === totalPoints;
+
+    if (allDone) {
+      return failedPoints > 0 ? 'exception' : 'success';
+    } else if (completedPoints > 0) {
       return 'active';
     } else {
       return 'normal';
@@ -938,13 +929,33 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 获取进度条颜色
    */
   getProgressColor(): string {
-    if (this.isTestCompleted) {
-      return this.testProgress.failedPoints > 0 ? '#ff4d4f' : '#52c41a';
-    } else if (this.isAutoTesting) {
-      return '#1890ff';
-    } else {
-      return '#d9d9d9';
+    switch (this.getProgressStatus()) {
+      case 'success':
+        return '#52c41a';
+      case 'exception':
+        return '#ff4d4f';
+      case 'active':
+        return '#1890ff';
+      default:
+        return '#d9d9d9';
     }
+  }
+
+  /**
+   * 获取测试状态文本
+   */
+  getTestStatusText(): string {
+    const { totalPoints, completedPoints, failedPoints } = this.testProgress;
+
+    if (totalPoints === 0 || completedPoints === 0) {
+      return '等待开始';
+    }
+
+    if (completedPoints < totalPoints) {
+      return '测试进行中';
+    }
+
+    return failedPoints > 0 ? '测试完成(有失败)' : '测试完成(全部通过)';
   }
 
   /**
