@@ -524,13 +524,19 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     // 根据当前实例状态自动控制硬点测试弹窗
     const instancesList = this.batchDetails?.instances ?? [];
     const hasHardPointTesting = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTesting);
-    const hasHardPointCompleted = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTestCompleted);
+
+    // 计算是否所有点位状态均为已完成(通过/失败/硬点测试完成)
+    const allPointsTested = instancesList.every(inst =>
+      inst.overall_status === OverallTestStatus.TestCompletedPassed ||
+      inst.overall_status === OverallTestStatus.TestCompletedFailed ||
+      inst.overall_status === OverallTestStatus.HardPointTestCompleted
+    );
 
     if (hasHardPointTesting) {
       // 仍有硬点通道在测试，确保弹窗保持打开
       this.openHardPointTestingModal();
-    } else if (hasHardPointCompleted) {
-      // 所有硬点通道已结束测试，关闭弹窗
+    } else if (allPointsTested) {
+      // 整个批次硬点测试全部完成，关闭弹窗
       this.closeHardPointTestingModal();
     }
 
