@@ -130,10 +130,10 @@
                           <span class="stat-label">失败点数</span>
                           <span class="stat-value failed">{{ getBatchTestStats(batch).failedPoints }}</span>
                         </div>
-                        <div class="stat-item">
+                        <!--div class="stat-item">
                           <span class="stat-label">跳过点数</span>
                           <span class="stat-value skipped">{{ getBatchTestStats(batch).skippedPoints }}</span>
-                        </div>
+                      </div-->
                       </div>
                     </div>
                   </div>
@@ -311,7 +311,7 @@
                 <th>错误详情</th>
                 <th>测试状态</th>
                 <th>硬点重测</th>
-                <th>手动测试</th>
+                <th>上位机测试</th>
               </tr>
             </thead>
             
@@ -406,7 +406,7 @@
                     [disabled]="!isManualTestEnabled(instance)"
                     (click)="startManualTest(instance)">
                     <i nz-icon nzType="setting"></i>
-                    手动测试
+                    上位机测试
                   </button>
                 </td>
               </tr>

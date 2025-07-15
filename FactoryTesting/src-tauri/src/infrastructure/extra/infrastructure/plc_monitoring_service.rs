@@ -200,8 +200,6 @@ impl PlcMonitoringService {
     ) -> AppResult<()> {
         let mut values = HashMap::new();
         
-        // 读取所有地址的值
-        // log::debug!("📊 [PLC_MONITORING] 开始读取地址列表: {:?}", addresses);
 
         for address in addresses {
             let value_key = if let Some(map) = address_key_map {
@@ -213,7 +211,6 @@ impl PlcMonitoringService {
             } else {
                 Self::get_value_key(address, module_type)
             };
-            // log::debug!("🔧 [PLC_MONITORING] 读取地址: {} -> 键名: {}", address, value_key);
 
             // 根据模块类型选择 PLC 连接 ID
             let connection_id = if let Some(cid) = connection_id { cid } else { match module_type {
@@ -233,7 +230,6 @@ impl PlcMonitoringService {
             } else {
                 "n/a".to_string()
             };
-            log::debug!("📡 [PLC_MONITORING] 读取地址 {} via conn_id={} ({})", address, connection_id, endpoint_info);
 
 
             match module_type {

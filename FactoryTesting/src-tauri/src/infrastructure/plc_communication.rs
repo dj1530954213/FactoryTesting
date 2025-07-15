@@ -147,7 +147,7 @@ impl ModbusTcpConnectionPool {
         let slave = Slave(slave_id);
 
         // 建立连接
-        let context = timeout(
+        let mut context = timeout(
             Duration::from_millis(config.timeout_ms),
             tcp::connect_slave(socket_addr, slave)
         ).await
@@ -155,6 +155,12 @@ impl ModbusTcpConnectionPool {
         .map_err(|e| AppError::plc_communication_error(
             format!("Modbus连接失败: {}", e)
         ))?;
+
+        // 初次连接后立即验证心跳（读取线圈 03001 / 地址3000）
+        if let Err(e) = context.read_coils(3000, 1).await {
+            log::warn!("初次心跳失败，连接视为无效: {}:{} - {}", config.host, config.port, e);
+            return Err(AppError::plc_communication_error(format!("初次心跳失败: {}", e)));
+        }
 
         // 创建连接句柄
         let handle = ConnectionHandle {
@@ -204,7 +210,7 @@ impl ModbusTcpConnectionPool {
             let configs_map = self.configs.clone();
             let conn_id = config.id.clone();
             tokio::spawn(async move {
-                let interval = Duration::from_millis(500);
+                let interval = Duration::from_millis(1000);
                 loop {
                     sleep(interval).await;
 

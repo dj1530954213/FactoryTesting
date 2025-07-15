@@ -263,23 +263,7 @@ impl PlcConnectionManager {
         // 等待首次连接完成（最多3秒）
         self.wait_for_initial_connections(Duration::from_secs(3)).await;
 
-        // 🚫 此处不再启动心跳检测任务，由通信层 (plc_communication) 内部负责探活与重连
-        let connections_for_heartbeat_task = connections.clone();
-        let is_running_for_heartbeat_task = is_running.clone();
-        tokio::spawn(async move {
-            let mut interval = interval(heartbeat_interval);
 
-            loop {
-                interval.tick().await;
-
-                let running = *is_running_for_heartbeat_task.lock().await;
-                if !running {
-                    break;
-                }
-
-                Self::perform_heartbeat_check(connections_for_heartbeat_task.clone()).await;
-            }
-        });
     }
 
     /// 处理单个连接任务

@@ -225,14 +225,14 @@ export class DiManualTestComponent implements OnInit, OnDestroy {
     if (!this.instance) return;
 
     this.modal.confirm({
-      nzTitle: '确认跳过',
-      nzContent: `确定要跳过 "${MANUAL_TEST_SUB_ITEM_LABELS[subItem]}" 吗？`,
+      nzTitle: '确认测试失败',
+      nzContent: `确定要测试失败 "${MANUAL_TEST_SUB_ITEM_LABELS[subItem]}" 吗？`,
       nzOnOk: async () => {
         try {
           await this.manualTestService.skipSubItem(this.instance!.instance_id, subItem, '用户手动跳过');
           this.message.info(`${MANUAL_TEST_SUB_ITEM_LABELS[subItem]} 已跳过`);
         } catch (error) {
-          this.message.error(`跳过测试项失败: ${error}`);
+          this.message.error(`确认测试失败异常: ${error}`);
         }
       }
     });
