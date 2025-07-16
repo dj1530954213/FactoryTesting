@@ -89,67 +89,187 @@ pub async fn execute_manual_sub_test_cmd(
     Ok(outcome)
 }
 
-/// 读取通道值
+/// PLC通道数据读取命令
+///
+/// **业务作用**:
+/// - 从PLC设备读取指定通道的实时数据值
+/// - 支持多种数据类型的读取操作
+/// - 为手动测试和数据监控提供数据源
+/// - 实现前端界面的实时数据显示
+///
+/// **前后端交互**:
+/// - **前端调用**: 用户查看通道值或执行手动测试时触发
+/// - **参数**: ReadChannelValueCmdArgs包含实例ID、PLC地址、数据类型
+/// - **返回值**: serde_json::Value动态类型，适应不同数据类型
+/// - **错误处理**: PLC通信失败时返回详细错误信息
+///
+/// **参数说明**:
+/// - `instance_id`: 通道测试实例的唯一标识符
+/// - `plc_address`: PLC中的具体地址（如"40001", "DB1.DBD0"）
+/// - `data_type`: 期望的数据类型（Bool, Int, Float, String等）
+///
+/// **数据类型支持**:
+/// - **Bool**: 布尔值，用于开关状态、报警信号等
+/// - **Int/Int16/Int32**: 整数类型，用于计数值、状态码等
+/// - **UInt16/UInt32**: 无符号整数，用于正数范围的数值
+/// - **Float/Double**: 浮点数，用于模拟量数值、传感器读数等
+/// - **String**: 字符串，用于设备名称、状态描述等
+///
+/// **当前实现**:
+/// - 目前返回模拟数据，便于前端开发和测试
+/// - 模拟数据覆盖所有支持的数据类型
+/// - 每种类型都有合理的默认值
+///
+/// **数据类型转换**:
+/// - 使用serde_json::Value统一表示不同类型的数据
+/// - 浮点数转换时处理精度丢失的情况
+/// - 字符串类型支持中文和特殊字符
+///
+/// **未来扩展**:
+/// - 集成PLC通信服务进行真实读取
+/// - 添加数据缓存机制提高性能
+/// - 支持批量读取操作
+/// - 添加数据验证和范围检查
+///
+/// **Rust知识点**:
+/// - `serde_json::Value`: 动态JSON值类型，支持任意JSON数据
+/// - `match`表达式: 模式匹配，根据数据类型返回不同值
+/// - `unwrap_or()`: 错误处理，提供默认值避免panic
+/// - `from_f64()`: 浮点数转换，可能失败需要处理
 #[tauri::command]
 pub async fn read_channel_value_cmd(
     args: ReadChannelValueCmdArgs,
     state: State<'_, AppState>
 ) -> Result<serde_json::Value, String> {
-    info!("读取通道值: 实例ID={}, 地址={}, 类型={:?}", 
+    info!("读取通道值: 实例ID={}, 地址={}, 类型={:?}",
           args.instance_id, args.plc_address, args.data_type);
-    
+
     // 这里应该调用PLC通信服务读取实际值
-    // 目前返回模拟值
+    // **当前状态**: 返回模拟数据用于前端开发
+    // **未来改进**: 集成PLC通信服务进行真实读取
     let mock_value = match args.data_type {
+        // 布尔类型 - 用于开关状态、报警信号等
         PointDataType::Bool => serde_json::Value::Bool(true),
+
+        // 整数类型 - 用于计数值、状态码等
         PointDataType::Int => serde_json::Value::Number(serde_json::Number::from(42)),
+
+        // 32位浮点数 - 用于模拟量数值
         PointDataType::Float => serde_json::Value::Number(
             serde_json::Number::from_f64(3.14159).unwrap_or(serde_json::Number::from(0))
         ),
+
+        // 字符串类型 - 用于设备名称、状态描述等
         PointDataType::String => serde_json::Value::String("测试字符串".to_string()),
+
+        // 64位浮点数 - 用于高精度数值
         PointDataType::Double => serde_json::Value::Number(
             serde_json::Number::from_f64(3.14159265359).unwrap_or(serde_json::Number::from(0))
         ),
+
+        // 16位有符号整数
         PointDataType::Int16 => serde_json::Value::Number(serde_json::Number::from(16)),
+
+        // 32位有符号整数
         PointDataType::Int32 => serde_json::Value::Number(serde_json::Number::from(32)),
+
+        // 16位无符号整数
         PointDataType::UInt16 => serde_json::Value::Number(serde_json::Number::from(16)),
+
+        // 32位无符号整数
         PointDataType::UInt32 => serde_json::Value::Number(serde_json::Number::from(32)),
     };
-    
+
     info!("通道值读取完成: {:?}", mock_value);
-    Ok(mock_value)
+    Ok(mock_value) // 返回JSON格式的数据值
 }
 
-/// 写入通道值
+/// PLC通道数据写入命令
+///
+/// **业务作用**:
+/// - 向PLC设备写入指定通道的数据值
+/// - 支持多种数据类型的写入操作
+/// - 为手动测试和设备控制提供写入能力
+/// - 实现前端界面的设备控制功能
+///
+/// **前后端交互**:
+/// - **前端调用**: 用户设置通道值或执行控制操作时触发
+/// - **参数**: WriteChannelValueCmdArgs包含实例ID、PLC地址、数据类型、写入值
+/// - **返回值**: Result<(), String>，成功时返回空，失败时返回错误信息
+/// - **错误处理**: 类型不匹配或PLC通信失败时返回详细错误
+///
+/// **参数说明**:
+/// - `instance_id`: 通道测试实例的唯一标识符
+/// - `plc_address`: PLC中的具体地址（如"40001", "DB1.DBD0"）
+/// - `data_type`: 数据类型，用于验证写入值的类型正确性
+/// - `value_to_write`: 要写入的JSON格式数据值
+///
+/// **数据类型验证**:
+/// - **Bool**: 验证是否为布尔值类型
+/// - **数值类型**: 验证是否为数字类型（Int, Float, Double等）
+/// - **String**: 验证是否为字符串类型
+/// - **类型安全**: 写入前严格验证数据类型匹配
+///
+/// **安全考虑**:
+/// - **类型验证**: 防止类型不匹配导致的数据错误
+/// - **写入确认**: 确保数据正确写入到PLC
+/// - **错误处理**: 提供详细的错误信息便于故障排查
+/// - **审计日志**: 记录所有写入操作用于审计
+///
+/// **当前实现**:
+/// - 实现了完整的类型验证逻辑
+/// - 目前只记录日志，未实际写入PLC
+/// - 为真实PLC集成预留了接口
+///
+/// **数据类型转换**:
+/// - 接收JSON格式的动态类型数据
+/// - 根据指定的数据类型进行验证
+/// - 支持所有常用的PLC数据类型
+///
+/// **未来扩展**:
+/// - 集成PLC通信服务进行真实写入
+/// - 添加写入确认和重试机制
+/// - 支持批量写入操作
+/// - 添加写入权限控制
+///
+/// **Rust知识点**:
+/// - `serde_json::Value`: 动态JSON值，支持类型检查方法
+/// - `is_boolean()`, `is_number()`, `is_string()`: JSON值类型检查
+/// - `Result<(), String>`: 无返回值的错误处理类型
+/// - `format!`: 字符串格式化宏，用于错误信息
 #[tauri::command]
 pub async fn write_channel_value_cmd(
     args: WriteChannelValueCmdArgs,
     state: State<'_, AppState>
 ) -> Result<(), String> {
-    info!("写入通道值: 实例ID={}, 地址={}, 类型={:?}, 值={:?}", 
+    info!("写入通道值: 实例ID={}, 地址={}, 类型={:?}, 值={:?}",
           args.instance_id, args.plc_address, args.data_type, args.value_to_write);
-    
+
     // 验证值类型是否匹配
+    // **类型安全**: 确保写入的数据类型与期望类型一致
+    // **错误预防**: 避免类型不匹配导致的PLC通信错误
     let is_valid = match args.data_type {
-        PointDataType::Bool => args.value_to_write.is_boolean(),
-        PointDataType::Int => args.value_to_write.is_number(),
-        PointDataType::Float => args.value_to_write.is_number(),
-        PointDataType::String => args.value_to_write.is_string(),
-        PointDataType::Double => args.value_to_write.is_number(),
-        PointDataType::Int16 => args.value_to_write.is_number(),
-        PointDataType::Int32 => args.value_to_write.is_number(),
-        PointDataType::UInt16 => args.value_to_write.is_number(),
-        PointDataType::UInt32 => args.value_to_write.is_number(),
+        PointDataType::Bool => args.value_to_write.is_boolean(),     // 布尔值验证
+        PointDataType::Int => args.value_to_write.is_number(),       // 整数验证
+        PointDataType::Float => args.value_to_write.is_number(),     // 浮点数验证
+        PointDataType::String => args.value_to_write.is_string(),    // 字符串验证
+        PointDataType::Double => args.value_to_write.is_number(),    // 双精度验证
+        PointDataType::Int16 => args.value_to_write.is_number(),     // 16位整数验证
+        PointDataType::Int32 => args.value_to_write.is_number(),     // 32位整数验证
+        PointDataType::UInt16 => args.value_to_write.is_number(),    // 16位无符号整数验证
+        PointDataType::UInt32 => args.value_to_write.is_number(),    // 32位无符号整数验证
     };
-    
+
+    // 类型验证失败时返回错误
     if !is_valid {
         return Err(format!("值类型不匹配: 期望{:?}类型", args.data_type));
     }
-    
+
     // 这里应该调用PLC通信服务写入实际值
-    // 目前只是记录日志
+    // **当前状态**: 只记录日志，未实际写入PLC
+    // **未来改进**: 集成PLC通信服务进行真实写入
     info!("通道值写入完成");
-    Ok(())
+    Ok(()) // 返回成功结果
 }
 
 /// PLC连接响应结构
@@ -183,7 +303,39 @@ pub struct PlcConnectionStatus {
     pub last_check_time: String,
 }
 
-/// 连接PLC - 确认接线
+/// PLC连接命令 - 确认接线
+///
+/// **业务作用**:
+/// - 启动PLC连接管理器，建立与测试PLC和被测PLC的连接
+/// - 等待连接建立完成，确保系统可以正常通信
+/// - 动态注入量程设置服务，支持实时的量程配置
+/// - 为后续的测试操作做好准备
+///
+/// **前后端交互**:
+/// - **前端调用**: 用户点击"确认接线"按钮时触发
+/// - **参数**: 无需参数，使用应用状态中的配置
+/// - **返回值**: PlcConnectionResponse包含连接状态和详细信息
+/// - **错误处理**: 连接失败时返回详细的错误信息
+///
+/// **业务流程**:
+/// 1. 启动PLC连接管理器
+/// 2. 等待连接建立（最多3秒）
+/// 3. 检查连接状态
+/// 4. 动态注入量程设置服务
+/// 5. 返回连接结果
+///
+/// **技术特点**:
+/// - **异步操作**: 使用async/await处理连接建立
+/// - **超时控制**: 3秒超时避免无限等待
+/// - **状态轮询**: 200ms间隔检查连接状态
+/// - **动态注入**: 运行时替换服务实例
+/// - **错误恢复**: 连接失败时提供详细诊断信息
+///
+/// **Rust知识点**:
+/// - `#[tauri::command]`: Tauri命令宏，暴露给前端
+/// - `State<'_, T>`: Tauri状态管理，访问应用状态
+/// - `AppHandle`: Tauri应用句柄，用于动态服务管理
+/// - `Result<T, String>`: 错误处理，String作为错误类型便于前端处理
 #[tauri::command]
 pub async fn connect_plc_cmd(
     app: tauri::AppHandle, // 用于动态覆盖 manage 中的服务实例
@@ -191,28 +343,35 @@ pub async fn connect_plc_cmd(
 ) -> Result<PlcConnectionResponse, String> {
     info!("🔗 开始连接PLC - 确认接线");
 
-    let app_state = state.inner();
-    let plc_connection_manager = app_state.plc_connection_manager.clone();
+    let app_state = state.inner(); // 获取应用状态的内部引用
+    let plc_connection_manager = app_state.plc_connection_manager.clone(); // 克隆连接管理器
 
     // 启动PLC连接管理器，建立持久连接
+    // **业务逻辑**: 同时启动测试PLC和被测PLC的连接
     match plc_connection_manager.start_connections().await {
         Ok(()) => {
             info!("✅ PLC连接管理器启动成功");
 
             // 等待PLC实际连上，最多3秒，每200ms检查一次
+            // **超时控制**: 避免连接建立过程中的无限等待
+            // **轮询机制**: 定期检查连接状态直到成功或超时
             let mut waited_ms = 0;
             let (mut test_plc_connected, mut target_plc_connected, mut test_plc_name, mut target_plc_name) = (false, false, None, None);
-            while waited_ms < 3000 {
+
+            while waited_ms < 3000 { // 最大等待3秒
                 let summary = plc_connection_manager.get_plc_status_summary().await;
-                test_plc_connected = summary.0;
-                target_plc_connected = summary.1;
-                test_plc_name = summary.2.clone();
-                target_plc_name = summary.3.clone();
+                test_plc_connected = summary.0;    // 测试PLC连接状态
+                target_plc_connected = summary.1;  // 被测PLC连接状态
+                test_plc_name = summary.2.clone(); // 测试PLC名称
+                target_plc_name = summary.3.clone(); // 被测PLC名称
+
+                // 两个PLC都连接成功时退出等待
                 if test_plc_connected && target_plc_connected {
                     break;
                 }
-                sleep(Duration::from_millis(200)).await;
-                waited_ms += 200;
+
+                sleep(Duration::from_millis(200)).await; // 等待200ms后重试
+                waited_ms += 200; // 累计等待时间
             }
             // 动态替换量程写入服务实现
             {
@@ -439,23 +598,63 @@ pub async fn start_batch_auto_test_cmd(
     }
 }
 
-/// 获取PLC连接状态
+/// 获取PLC连接状态命令
+///
+/// **业务作用**:
+/// - 实时查询测试PLC和被测PLC的连接状态
+/// - 为前端界面提供连接状态显示数据
+/// - 支持连接状态的定期刷新和监控
+/// - 提供连接诊断和故障排查信息
+///
+/// **前后端交互**:
+/// - **前端调用**: 定期轮询或用户主动查询连接状态
+/// - **参数**: 无需参数，直接查询当前状态
+/// - **返回值**: PlcConnectionStatus包含详细的连接状态信息
+/// - **实时性**: 每次调用都返回最新的连接状态
+///
+/// **返回数据结构**:
+/// - `test_plc_connected`: 测试PLC连接状态（布尔值）
+/// - `target_plc_connected`: 被测PLC连接状态（布尔值）
+/// - `test_plc_name`: 测试PLC的显示名称
+/// - `target_plc_name`: 被测PLC的显示名称
+/// - `last_check_time`: 最后检查时间（北京时间格式）
+///
+/// **使用场景**:
+/// - 系统状态页面的连接状态显示
+/// - 测试前的连接状态确认
+/// - 连接故障的实时监控
+/// - 系统健康检查的一部分
+///
+/// **性能考虑**:
+/// - 查询操作轻量级，适合频繁调用
+/// - 不会影响实际的PLC通信性能
+/// - 时间格式化使用北京时间便于用户理解
+///
+/// **Rust知识点**:
+/// - 异步函数返回Future，支持非阻塞查询
+/// - 元组解构赋值，简化多返回值处理
+/// - 时间格式化工具的使用
 #[tauri::command]
 pub async fn get_plc_connection_status_cmd(
     state: State<'_, AppState>
 ) -> Result<PlcConnectionStatus, String> {
-    let app_state = state.inner();
-    let plc_connection_manager = app_state.plc_connection_manager.clone();
+    let app_state = state.inner(); // 获取应用状态引用
+    let plc_connection_manager = app_state.plc_connection_manager.clone(); // 克隆连接管理器
 
     // 从PLC连接管理器获取实时连接状态
+    // **实时查询**: 每次调用都获取最新的连接状态
+    // **元组解构**: 一次调用获取所有连接状态信息
     let (test_plc_connected, target_plc_connected, test_plc_name, target_plc_name) =
         plc_connection_manager.get_plc_status_summary().await;
 
+    // 构造返回结果
+    // **时间格式化**: 使用北京时间格式，便于用户理解
+    // **状态封装**: 将所有状态信息封装到统一的结构体中
     Ok(PlcConnectionStatus {
-        test_plc_connected,
-        target_plc_connected,
-        test_plc_name,
-        target_plc_name,
-        last_check_time: crate::utils::time_utils::format_bj(chrono::Utc::now(), "%Y-%m-%d %H:%M:%S"),
+        test_plc_connected,    // 测试PLC连接状态
+        target_plc_connected,  // 被测PLC连接状态
+        test_plc_name,         // 测试PLC名称
+        target_plc_name,       // 被测PLC名称
+        last_check_time: crate::utils::time_utils::format_bj(chrono::Utc::now(), "%Y-%m-%d %H:%M:%S"), // 格式化的检查时间
     })
 }

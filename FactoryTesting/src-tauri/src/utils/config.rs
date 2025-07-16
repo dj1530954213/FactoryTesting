@@ -42,32 +42,102 @@ pub struct AppSettings {
     pub default_timeout_ms: u64,
 }
 
-/// PLC连接配置
+/// PLC连接配置结构体
+///
+/// **业务作用**:
+/// - 统一管理PLC设备的连接参数和通信配置
+/// - 支持多种PLC协议和厂商的配置
+/// - 提供灵活的超时和重试机制配置
+/// - 支持开发和生产环境的配置切换
+///
+/// **配置来源**:
+/// - 配置文件（config.toml/config.json）
+/// - 环境变量覆盖
+/// - 代码中的默认值
+/// - 运行时动态配置
+///
+/// **使用场景**:
+/// - 应用启动时的PLC连接初始化
+/// - 连接参数的动态调整
+/// - 不同环境的配置管理
+/// - PLC通信故障的参数调优
+///
+/// **Rust知识点**:
+/// - `#[derive(...)]`: 自动实现常用trait
+/// - `Serialize/Deserialize`: serde序列化支持
+/// - `#[serde(default)]`: 字段缺失时使用默认值
+/// - `#[serde(default="function")]`: 使用指定函数提供默认值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlcConfig {
-    /// PLC类型 (modbus, s7, opcua)
+    /// PLC协议类型
+    /// **支持协议**: "modbus"(Modbus TCP), "s7"(Siemens S7), "opcua"(OPC UA)
+    /// **默认值**: "modbus"
+    /// **验证**: 必须是预定义的有效协议类型
     pub plc_type: String,
-    /// PLC IP地址
+
+    /// PLC设备IP地址
+    /// **格式**: 标准IPv4地址格式（如"192.168.1.100"）
+    /// **默认值**: "127.0.0.1"（本地回环地址）
+    /// **验证**: 不能为空，必须是有效的IP地址格式
     pub host: String,
-    /// PLC端口
+
+    /// PLC设备端口号
+    /// **默认端口**: 502（Modbus TCP标准端口）
+    /// **范围**: 1-65535
+    /// **验证**: 不能为0，必须在有效端口范围内
     pub port: u16,
-    /// 连接超时时间（毫秒）
+
+    /// 连接建立超时时间（毫秒）
+    /// **业务含义**: TCP连接建立的最大等待时间
+    /// **默认值**: 5000ms（5秒）
+    /// **调优**: 网络环境差时可适当增加
     pub connection_timeout_ms: u64,
-    /// 读取超时时间（毫秒）
+
+    /// 数据读取超时时间（毫秒）
+    /// **业务含义**: 单次读取操作的最大等待时间
+    /// **默认值**: 3000ms（3秒）
+    /// **影响**: 影响读取操作的响应性
     pub read_timeout_ms: u64,
-    /// 写入超时时间（毫秒）
+
+    /// 数据写入超时时间（毫秒）
+    /// **业务含义**: 单次写入操作的最大等待时间
+    /// **默认值**: 3000ms（3秒）
+    /// **考虑**: 写入通常比读取耗时更长
     pub write_timeout_ms: u64,
-    /// 重试次数
+
+    /// 操作失败时的重试次数
+    /// **默认值**: 3次
+    /// **策略**: 0表示不重试，过大会影响响应速度
+    /// **适用**: 网络抖动或设备临时繁忙的情况
     pub retry_count: u32,
-    /// 重试间隔（毫秒）
+
+    /// 重试间隔时间（毫秒）
+    /// **默认值**: 1000ms（1秒）
+    /// **作用**: 避免频繁重试对设备造成压力
+    /// **调优**: 根据设备响应特性调整
     pub retry_interval_ms: u64,
-    /// 字节顺序配置 (ABCD / CDAB / BADC / DCBA)
+
+    /// 多字节数据的字节序配置
+    /// **支持格式**: "ABCD"(大端), "CDAB", "BADC", "DCBA"(小端)
+    /// **默认值**: 通过default_byte_order()函数提供，通常为"CDAB"
+    /// **重要性**: 错误的字节序会导致浮点数解析错误
+    /// **serde属性**: 配置文件中缺失时使用默认函数值
     #[serde(default="default_byte_order")]
     pub byte_order: String,
-    /// Modbus 地址是否使用 0 基
+
+    /// Modbus地址编码模式
+    /// **业务含义**: PLC地址是否从0开始编号
+    /// **默认值**: false（从1开始，符合大多数PLC习惯）
+    /// **厂商差异**: 不同PLC厂商的地址编码方式不同
+    /// **serde属性**: 配置文件中缺失时使用类型默认值
     #[serde(default)]
     pub zero_based_address: bool,
-    /// 是否启用 Mock 模式（仅用于测试环境）
+
+    /// Mock模式开关
+    /// **业务含义**: 是否使用模拟PLC进行开发和测试
+    /// **默认值**: false（使用真实PLC）
+    /// **用途**: 开发环境下的离线测试和CI/CD流水线
+    /// **环境隔离**: 避免开发测试影响生产设备
     #[serde(default)]
     pub mock_mode: bool,
 }
@@ -262,21 +332,67 @@ impl ConfigManager {
     }
 
     /// 从环境变量覆盖配置
+    ///
+    /// **业务作用**:
+    /// - 支持通过环境变量动态调整配置参数
+    /// - 便于不同环境（开发、测试、生产）的配置管理
+    /// - 支持容器化部署和CI/CD流水线
+    /// - 提供配置的灵活性和安全性
+    ///
+    /// **支持的PLC环境变量**:
+    /// - `PLC_HOST`: PLC设备IP地址
+    /// - `PLC_PORT`: PLC设备端口号
+    /// - `PLC_TYPE`: PLC协议类型
+    /// - `PLC_MOCK_MODE`: Mock模式开关
+    ///
+    /// **使用场景**:
+    /// - Docker容器部署时的配置注入
+    /// - 不同环境的配置切换
+    /// - 敏感信息的安全配置
+    /// - 运维人员的配置调整
+    ///
+    /// **错误处理**:
+    /// - 环境变量不存在时保持原配置不变
+    /// - 类型转换失败时忽略该环境变量
+    /// - 不会因环境变量错误而导致程序崩溃
+    ///
+    /// **Rust知识点**:
+    /// - `std::env::var()`: 获取环境变量，返回Result类型
+    /// - `if let Ok(...)`: 模式匹配，只处理成功的情况
+    /// - `parse::<T>()`: 字符串解析为指定类型
+    /// - `to_lowercase()`: 字符串转小写，便于布尔值解析
     pub fn override_from_env(&mut self) {
-        // PLC 配置
+        // PLC配置的环境变量覆盖
+        // **配置优先级**: 环境变量 > 配置文件 > 默认值
+
+        // PLC主机地址覆盖
+        // **环境变量**: PLC_HOST
+        // **用途**: 在不同环境中指定不同的PLC设备
         if let Ok(host) = std::env::var("PLC_HOST") {
             self.config.plc_config.host = host;
         }
+
+        // PLC端口号覆盖
+        // **环境变量**: PLC_PORT
+        // **类型转换**: 字符串转换为u16类型
+        // **错误处理**: 转换失败时保持原配置
         if let Ok(port) = std::env::var("PLC_PORT") {
             if let Ok(port) = port.parse::<u16>() {
                 self.config.plc_config.port = port;
             }
         }
+
+        // PLC协议类型覆盖
+        // **环境变量**: PLC_TYPE
+        // **支持值**: "modbus", "s7", "opcua"
         if let Ok(plc_type) = std::env::var("PLC_TYPE") {
             self.config.plc_config.plc_type = plc_type;
         }
 
-        // Mock 模式开关
+        // Mock模式开关覆盖
+        // **环境变量**: PLC_MOCK_MODE
+        // **布尔值解析**: "true"(不区分大小写)为真，其他为假
+        // **用途**: 开发环境启用Mock模式，生产环境禁用
         if let Ok(mock_mode) = std::env::var("PLC_MOCK_MODE") {
             self.config.plc_config.mock_mode = mock_mode.to_lowercase() == "true";
         }

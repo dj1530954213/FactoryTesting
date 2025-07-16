@@ -1,4 +1,27 @@
-// modbus_plc_service.rs
+//! # Modbus PLC服务实现模块
+//!
+//! ## 业务作用
+//! 本模块实现了基于Modbus TCP协议的PLC通信服务，提供：
+//! - 完整的Modbus TCP协议实现
+//! - 多种数据类型的读写操作（布尔、整数、浮点数等）
+//! - 灵活的字节序配置支持
+//! - 连接状态管理和自动重连机制
+//! - 与全局连接管理器的集成
+//!
+//! ## 技术特点
+//! - **协议支持**: 完整实现Modbus TCP协议规范
+//! - **数据转换**: 支持多种字节序的浮点数转换
+//! - **异步操作**: 基于tokio的异步I/O操作
+//! - **连接管理**: 智能连接池和状态管理
+//! - **错误处理**: 详细的错误分类和恢复机制
+//!
+//! ## Rust知识点
+//! - **async/await**: 异步编程模式
+//! - **OnceLock**: 线程安全的延迟初始化
+//! - **Arc<Mutex<T>>**: 多线程共享状态管理
+//! - **trait实现**: 为具体类型实现抽象接口
+//! - **字节操作**: 底层字节序转换和位操作
+
 /*use async_trait::async_trait;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -16,66 +39,129 @@ use super::plc_communication_service::{
 };
 use crate::models::test_plc_config::PlcConnectionConfig;
 
-// 全局PLC连接管理器注册表
+/// 全局PLC连接管理器注册表
+///
+/// **业务作用**: 提供全局访问点，用于获取PLC连接管理器实例
+/// **线程安全**: OnceLock确保多线程环境下的安全初始化
+/// **单例模式**: 全局唯一的管理器实例，避免重复创建
+///
+/// **Rust知识点**:
+/// - `OnceLock<T>`: 线程安全的延迟初始化容器
+/// - `static`: 全局静态变量，程序生命周期内存在
+/// - `Arc<T>`: 原子引用计数，支持多线程共享所有权
 static GLOBAL_PLC_MANAGER: OnceLock<Arc<crate::domain::plc_connection_manager::PlcConnectionManager>> = OnceLock::new();
 
 /// 设置全局PLC连接管理器
+///
+/// **业务作用**: 在应用启动时注册PLC连接管理器
+/// **调用时机**: 通常在应用初始化阶段调用一次
+/// **线程安全**: 只能设置一次，后续调用会被忽略
+///
+/// **参数**: `manager` - PLC连接管理器的Arc智能指针
 pub fn set_global_plc_manager(manager: Arc<crate::domain::plc_connection_manager::PlcConnectionManager>) {
-    let _ = GLOBAL_PLC_MANAGER.set(manager);
+    let _ = GLOBAL_PLC_MANAGER.set(manager); // 忽略返回值，设置失败表示已经设置过
 }
 
 /// 获取全局PLC连接管理器
+///
+/// **业务作用**: 为其他模块提供PLC连接管理器的访问接口
+/// **返回值**: `Option<Arc<T>>` - 可能为空的管理器引用
+/// **使用场景**: 在需要查询连接状态或管理连接时调用
+///
+/// **Rust知识点**:
+/// - `Option<T>`: 表示可能存在或不存在的值
+/// - `cloned()`: 对Option内的Arc进行克隆，增加引用计数
 pub fn get_global_plc_manager() -> Option<Arc<crate::domain::plc_connection_manager::PlcConnectionManager>> {
     GLOBAL_PLC_MANAGER.get().cloned()
 }
 
 // 引入全局 ByteOrder 枚举，替代本文件的临时定义
+// **模块化设计**: 使用统一的字节序定义，避免重复代码
 use crate::models::ByteOrder;
 
-// ByteOrderConverter 实现
+/// 字节序转换器
+///
+/// **业务作用**:
+/// - 处理不同PLC厂商的字节序差异
+/// - 实现浮点数与Modbus寄存器之间的转换
+/// - 支持四种常见的字节序格式
+///
+/// **技术背景**:
+/// - Modbus协议使用16位寄存器存储数据
+/// - 32位浮点数需要占用2个连续寄存器
+/// - 不同厂商对字节序的处理方式不同
+///
+/// **Rust知识点**:
+/// - `struct`: 结构体定义，这里用作命名空间
+/// - 位操作：`>>`, `&`, `|` 等位运算符
+/// - 类型转换：`as u8` 显式类型转换
 struct ByteOrderConverter;
+
 impl ByteOrderConverter {
-    /// 将两个寄存器转换为 float32
+    /// 将两个Modbus寄存器转换为32位浮点数
+    ///
+    /// **业务逻辑**:
+    /// - 根据指定的字节序重新排列字节
+    /// - 将重排后的字节转换为IEEE 754浮点数
+    ///
+    /// **参数**:
+    /// - `reg1`: 第一个16位寄存器值
+    /// - `reg2`: 第二个16位寄存器值
+    /// - `order`: 字节序类型
+    ///
+    /// **返回值**: 转换后的32位浮点数
+    ///
+    /// **字节序说明**:
+    /// - ABCD: 高字在前，高字节在前（大端序）
+    /// - CDAB: 低字在前，高字节在前
+    /// - BADC: 高字在前，低字节在前
+    /// - DCBA: 低字在前，低字节在前（小端序）
     fn registers_to_float(reg1: u16, reg2: u16, order: ByteOrder) -> f32 {
         let bytes = match order {
             ByteOrder::ABCD => {
                 // 高字在前，高字节在前：[reg1_high, reg1_low, reg2_high, reg2_low]
+                // **位操作解释**: reg1 >> 8 提取高字节，reg1 & 0xFF 提取低字节
                 [
-                    (reg1 >> 8) as u8,
-                    (reg1 & 0xFF) as u8,
-                    (reg2 >> 8) as u8,
-                    (reg2 & 0xFF) as u8,
+                    (reg1 >> 8) as u8,    // reg1的高字节
+                    (reg1 & 0xFF) as u8,  // reg1的低字节
+                    (reg2 >> 8) as u8,    // reg2的高字节
+                    (reg2 & 0xFF) as u8,  // reg2的低字节
                 ]
             },
             ByteOrder::CDAB => {
                 // 低字在前，高字节在前：[reg2_high, reg2_low, reg1_high, reg1_low]
+                // **业务含义**: 交换寄存器顺序，但保持字节内顺序
                 [
-                    (reg2 >> 8) as u8,
-                    (reg2 & 0xFF) as u8,
-                    (reg1 >> 8) as u8,
-                    (reg1 & 0xFF) as u8,
+                    (reg2 >> 8) as u8,    // reg2的高字节
+                    (reg2 & 0xFF) as u8,  // reg2的低字节
+                    (reg1 >> 8) as u8,    // reg1的高字节
+                    (reg1 & 0xFF) as u8,  // reg1的低字节
                 ]
             },
             ByteOrder::BADC => {
                 // 高字在前，低字节在前：[reg1_low, reg1_high, reg2_low, reg2_high]
+                // **业务含义**: 保持寄存器顺序，但交换字节内顺序
                 [
-                    (reg1 & 0xFF) as u8,
-                    (reg1 >> 8) as u8,
-                    (reg2 & 0xFF) as u8,
-                    (reg2 >> 8) as u8,
+                    (reg1 & 0xFF) as u8,  // reg1的低字节
+                    (reg1 >> 8) as u8,    // reg1的高字节
+                    (reg2 & 0xFF) as u8,  // reg2的低字节
+                    (reg2 >> 8) as u8,    // reg2的高字节
                 ]
             },
             ByteOrder::DCBA => {
                 // 低字在前，低字节在前：[reg2_low, reg2_high, reg1_low, reg1_high]
+                // **业务含义**: 完全反转字节顺序（小端序）
                 [
-                    (reg2 & 0xFF) as u8,
-                    (reg2 >> 8) as u8,
-                    (reg1 & 0xFF) as u8,
-                    (reg1 >> 8) as u8,
+                    (reg2 & 0xFF) as u8,  // reg2的低字节
+                    (reg2 >> 8) as u8,    // reg2的高字节
+                    (reg1 & 0xFF) as u8,  // reg1的低字节
+                    (reg1 >> 8) as u8,    // reg1的高字节
                 ]
             },
         };
 
+        // **IEEE 754转换**: 将字节数组转换为浮点数
+        // 使用大端序解释字节数组，因为我们已经按照目标字节序排列了字节
         f32::from_be_bytes(bytes)
     }
 

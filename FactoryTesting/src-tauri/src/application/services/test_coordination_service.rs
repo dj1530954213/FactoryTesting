@@ -279,6 +279,13 @@ pub struct TestCoordinationService {
     /// 通道分配服务
     channel_allocation_service: Arc<dyn crate::application::services::channel_allocation_service::IChannelAllocationService>,
     /// 测试PLC配置服务
+    /// **业务作用**: 提供测试PLC的配置管理功能
+    /// **主要功能**:
+    /// - 获取测试PLC的连接配置（IP地址、端口、协议等）
+    /// - 管理PLC通道映射表和地址转换规则
+    /// - 提供PLC配置的增删改查操作
+    /// - 支持不同PLC厂商的配置适配
+    /// **依赖注入**: 通过trait对象实现依赖倒置，便于测试和扩展
     test_plc_config_service: Arc<dyn crate::domain::test_plc_config_service::ITestPlcConfigService>,
     /// 当前活跃的批次
     active_batches: Arc<Mutex<HashMap<String, BatchExecutionInfo>>>,
@@ -485,33 +492,46 @@ impl ITestCoordinationService for TestCoordinationService {
             log::info!("[TestCoordination]   {}: {} 个", type_name, count);
         }
 
-        // 获取真实的测试PLC配置
+        // 获取测试PLC配置
+        // **业务逻辑**: 从配置服务获取测试PLC的连接和映射配置
+        // **容错处理**: 配置获取失败时使用默认配置，确保系统可用性
+        // **配置重要性**: PLC配置决定了通道分配和地址映射的正确性
         use crate::application::services::channel_allocation_service::TestPlcConfig;
         let test_plc_config = match self.test_plc_config_service.get_test_plc_config().await {
-            Ok(config) => config,
+            Ok(config) => {
+                // **配置验证**: 成功获取配置，使用真实的PLC配置
+                config
+            },
             Err(e) => {
+                // **降级策略**: 配置获取失败时使用默认配置
+                // **系统可用性**: 确保即使配置服务异常，系统仍能继续运行
                 warn!("[TestCoordination] 获取测试PLC配置失败，使用默认配置: {}", e);
                 TestPlcConfig {
-                    brand_type: "ModbusTcp".to_string(),
-                    ip_address: "127.0.0.1".to_string(),
-                    comparison_tables: Vec::new(),
+                    brand_type: "ModbusTcp".to_string(),    // 默认使用Modbus TCP协议
+                    ip_address: "127.0.0.1".to_string(),   // 默认本地地址
+                    comparison_tables: Vec::new(),          // 空的映射表
                 }
             }
         };
 
+        // **配置日志**: 记录使用的PLC配置信息，便于故障排查
+        // **监控价值**: 帮助运维人员了解当前使用的PLC配置
         log::info!("[TestCoordination] 测试PLC配置: 品牌={}, IP={}, 映射表数量={}",
             test_plc_config.brand_type, test_plc_config.ip_address, test_plc_config.comparison_tables.len());
 
         // 调用通道分配服务
+        // **核心业务**: 根据通道定义和PLC配置进行通道分配
+        // **依赖注入**: 使用注入的通道分配服务实现业务逻辑
+        // **异步操作**: 通道分配可能涉及数据库操作，使用异步处理
         log::info!("[TestCoordination] 正在调用通道分配服务...");
         let allocation_result = self.channel_allocation_service
             .allocate_channels(
-                request.channel_definitions.clone(),
-                test_plc_config,
-                request.batch_info.product_model.clone(),
-                request.batch_info.serial_number.clone(),
+                request.channel_definitions.clone(),       // 通道定义列表
+                test_plc_config,                           // PLC配置信息
+                request.batch_info.product_model.clone(), // 产品型号
+                request.batch_info.serial_number.clone(), // 序列号
             )
-            .await?;
+            .await?; // 等待分配完成，传播错误
 
 
 

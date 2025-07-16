@@ -20,6 +20,25 @@ pub enum AppError {
     PersistenceError { message: String },
 
     /// PLC通信相关错误
+    ///
+    /// **业务含义**: 表示与PLC设备通信过程中发生的各种错误
+    /// **错误类型**:
+    /// - 连接建立失败（网络不通、设备离线等）
+    /// - 通信超时（设备响应慢、网络延迟等）
+    /// - 协议错误（数据格式错误、功能码不支持等）
+    /// - 地址错误（无效地址、权限不足等）
+    /// - 数据类型错误（类型不匹配、范围超限等）
+    ///
+    /// **错误恢复**:
+    /// - 自动重试机制：短暂的网络问题
+    /// - 连接重建：连接断开的情况
+    /// - 降级处理：使用缓存数据或默认值
+    /// - 用户通知：严重错误需要人工干预
+    ///
+    /// **日志记录**:
+    /// - 记录详细的错误上下文信息
+    /// - 包含PLC地址、操作类型、错误时间等
+    /// - 便于故障诊断和性能分析
     #[error("PLC通信错误: {message}")]
     PlcCommunicationError { message: String },
 
@@ -173,9 +192,35 @@ impl AppError {
     }
 
     /// 创建PLC通信错误
+    ///
+    /// **业务作用**: 为PLC通信相关的错误创建统一的错误实例
+    /// **使用场景**:
+    /// - PLC连接建立失败时
+    /// - 数据读写操作失败时
+    /// - 协议解析错误时
+    /// - 设备响应超时时
+    ///
+    /// **参数**: `message` - 错误描述信息，支持任何可转换为String的类型
+    /// **返回值**: AppError::PlcCommunicationError实例
+    ///
+    /// **使用示例**:
+    /// ```rust
+    /// return Err(AppError::plc_communication_error("连接PLC失败: 设备不在线"));
+    /// ```
+    ///
+    /// **错误信息规范**:
+    /// - 包含具体的错误原因
+    /// - 提供足够的上下文信息
+    /// - 使用用户友好的语言描述
+    /// - 便于故障排查和问题定位
+    ///
+    /// **Rust知识点**:
+    /// - `impl Into<String>`: 泛型约束，接受任何可转换为String的类型
+    /// - `Into<String>`: trait，提供类型转换能力
+    /// - `message.into()`: 调用Into trait进行类型转换
     pub fn plc_communication_error(message: impl Into<String>) -> Self {
         Self::PlcCommunicationError {
-            message: message.into(),
+            message: message.into(), // 将输入转换为String类型
         }
     }
 
@@ -438,9 +483,39 @@ impl From<&str> for AppError {
 pub type AppResult<T> = Result<T, AppError>;
 
 /// tokio_modbus 错误到 AppError 的转换
+///
+/// **业务作用**: 将底层Modbus库的错误转换为应用层统一的错误类型
+/// **错误传播**: 实现错误的自动转换，简化错误处理代码
+///
+/// **转换逻辑**:
+/// - 将tokio_modbus::Error包装为PlcCommunicationError
+/// - 保留原始错误信息，便于调试和故障排查
+/// - 提供统一的错误处理接口
+///
+/// **使用场景**:
+/// - Modbus TCP连接失败
+/// - 数据读写操作异常
+/// - 协议解析错误
+/// - 网络通信超时
+///
+/// **错误恢复策略**:
+/// - 连接错误：尝试重新连接
+/// - 超时错误：增加超时时间或重试
+/// - 协议错误：检查地址和数据类型
+/// - 设备错误：检查设备状态和配置
+///
+/// **Rust知识点**:
+/// - `From<T>` trait: 提供类型转换功能
+/// - `format!`: 字符串格式化宏
+/// - 自动错误转换：使用`?`操作符时自动调用
 impl From<tokio_modbus::Error> for AppError {
     fn from(err: tokio_modbus::Error) -> Self {
-        AppError::PlcCommunicationError { message: format!("Modbus error: {}", err) }
+        // 将Modbus错误包装为PLC通信错误
+        // **错误上下文**: 添加"Modbus error:"前缀，明确错误来源
+        // **信息保留**: 保留原始错误的详细信息
+        AppError::PlcCommunicationError {
+            message: format!("Modbus error: {}", err)
+        }
     }
 }
 

@@ -1,8 +1,50 @@
+//! # 模型枚举类型模块
+//!
+//! ## 业务作用
+//! 本模块定义了系统中使用的各种枚举类型，包括：
+//! - **测试状态枚举**: 表示测试流程中的各种状态
+//! - **PLC相关枚举**: PLC协议、数据类型、连接状态等
+//! - **字节序枚举**: 处理不同PLC厂商的字节序差异
+//! - **业务流程枚举**: 测试流程、状态转换等业务逻辑
+//!
+//! ## 设计原则
+//! - **类型安全**: 使用强类型枚举避免魔法数字和字符串
+//! - **序列化支持**: 所有枚举都支持JSON序列化
+//! - **字符串转换**: 提供与字符串的双向转换能力
+//! - **默认值**: 为枚举提供合理的默认值
+//! - **向后兼容**: 通过重新导出保持API稳定性
+//!
+//! ## Rust知识点
+//! - **枚举类型**: Rust的代数数据类型
+//! - **trait实现**: Display、FromStr、Default等trait
+//! - **derive宏**: 自动实现常用trait
+//! - **模块重导出**: pub use语句的使用
+
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-// Re-export PlcProtocol for compatibility with older import paths
+// ==================== PLC协议类型重导出 ====================
+
+/// PLC协议类型重导出
+///
+/// **业务作用**: 为了保持向后兼容性，从领域服务层重新导出PlcProtocol枚举
+/// **使用场景**: 允许旧代码继续使用models::enums::PlcProtocol路径
+///
+/// **协议支持**:
+/// - `ModbusTcp`: Modbus TCP/IP协议，最常用的工业通信协议
+/// - `SiemensS7`: 西门子S7通信协议，用于西门子PLC
+/// - `OpcUa`: OPC统一架构协议，现代工业4.0标准
+/// - `EthernetIp`: 以太网/IP协议，主要用于罗克韦尔设备
+///
+/// **设计考虑**:
+/// - 协议定义在领域层，确保业务逻辑的一致性
+/// - 通过重导出提供便捷的访问路径
+/// - 支持未来添加新的协议类型
+///
+/// **Rust知识点**:
+/// - `pub use`: 重新导出，使外部可以通过当前模块访问
+/// - 模块路径：通过完整路径引用其他模块的类型
 pub use crate::domain::services::plc_communication_service::PlcProtocol;
 
 /// 整体测试状态枚举
@@ -329,49 +371,129 @@ impl Default for LogLevel {
     }
 }
 
-// ==================== 字节顺序 ====================
-/// PLC 字节顺序
-/// 与 Modbus/TCP 的寄存器组合方式对应
+// ==================== PLC字节顺序枚举 ====================
+
+/// PLC数据字节顺序枚举
+///
+/// **业务作用**:
+/// - 定义多字节数据在PLC寄存器中的存储顺序
+/// - 解决不同PLC厂商字节序差异的兼容性问题
+/// - 确保浮点数和多字节整数的正确解析
+///
+/// **技术背景**:
+/// - Modbus协议使用16位寄存器存储数据
+/// - 32位数据需要占用2个连续寄存器
+/// - 不同厂商对字节在寄存器中的排列方式不同
+/// - 错误的字节序会导致数据解析完全错误
+///
+/// **字节序说明**:
+/// 以32位浮点数1.0为例，其IEEE 754表示为0x3F800000
+/// - ABCD: 3F80 0000 (大端序，高字在前，高字节在前)
+/// - CDAB: 0000 3F80 (低字在前，高字节在前) - 最常见
+/// - BADC: 803F 0000 (高字在前，低字节在前)
+/// - DCBA: 0000 803F (小端序，低字在前，低字节在前)
+///
+/// **厂商差异**:
+/// - 西门子PLC通常使用ABCD或BADC
+/// - 施耐德PLC通常使用CDAB
+/// - 三菱PLC通常使用DCBA
+/// - Modbus RTU设备多数使用CDAB
+///
+/// **Rust知识点**:
+/// - `#[derive(...)]`: 自动实现常用trait
+/// - `Copy`: 支持按位复制，性能更好
+/// - `PartialEq, Eq`: 支持相等性比较
+/// - `Serialize/Deserialize`: 支持JSON序列化
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ByteOrder {
-    /// 寄存器高字节在前，高字在前 (AB CD)
+    /// 大端序：高字在前，高字节在前 (AB CD)
+    /// **适用设备**: 西门子S7-300/400系列PLC
+    /// **字节排列**: [高字高字节, 高字低字节, 低字高字节, 低字低字节]
+    /// **示例**: 浮点数1.0存储为 [3F, 80, 00, 00]
     ABCD,
-    /// 寄存器低字在前，高字节在前 (CD AB)
+
+    /// 混合序：低字在前，高字节在前 (CD AB) - 默认值
+    /// **适用设备**: 大多数Modbus RTU设备、施耐德PLC
+    /// **字节排列**: [低字高字节, 低字低字节, 高字高字节, 高字低字节]
+    /// **示例**: 浮点数1.0存储为 [00, 00, 3F, 80]
+    /// **常见性**: 这是最常见的字节序，因此设为默认值
     CDAB,
-    /// 寄存器高字节在前，低字在前 (BA DC)
+
+    /// 混合序：高字在前，低字节在前 (BA DC)
+    /// **适用设备**: 部分西门子PLC、ABB设备
+    /// **字节排列**: [高字低字节, 高字高字节, 低字低字节, 低字高字节]
+    /// **示例**: 浮点数1.0存储为 [80, 3F, 00, 00]
     BADC,
-    /// 寄存器低字节在前，低字节在前 (DC BA)
+
+    /// 小端序：低字在前，低字节在前 (DC BA)
+    /// **适用设备**: 三菱PLC、部分欧姆龙PLC
+    /// **字节排列**: [低字低字节, 低字高字节, 高字低字节, 高字高字节]
+    /// **示例**: 浮点数1.0存储为 [00, 00, 80, 3F]
     DCBA,
 }
 
+/// 默认字节序实现
+///
+/// **业务考虑**: 选择CDAB作为默认值的原因：
+/// 1. 这是Modbus协议中最常见的字节序
+/// 2. 大多数工业设备都支持这种格式
+/// 3. 与大部分PLC厂商的默认设置一致
+///
+/// **Rust知识点**:
+/// - `Default` trait提供类型的默认值
+/// - 在结构体初始化时可以使用`..Default::default()`
 impl Default for ByteOrder {
     fn default() -> Self {
-        ByteOrder::CDAB
+        ByteOrder::CDAB // 最常见的字节序作为默认值
     }
 }
 
+/// 字节序的字符串显示实现
+///
+/// **业务用途**:
+/// - 用于配置文件的可读性
+/// - 日志输出和错误信息
+/// - 用户界面的显示
+///
+/// **格式标准**: 使用4个字母的标准表示法
 impl Display for ByteOrder {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            ByteOrder::ABCD => "ABCD",
-            ByteOrder::CDAB => "CDAB",
-            ByteOrder::BADC => "BADC",
-            ByteOrder::DCBA => "DCBA",
+            ByteOrder::ABCD => "ABCD", // 大端序标准表示
+            ByteOrder::CDAB => "CDAB", // 混合序标准表示
+            ByteOrder::BADC => "BADC", // 混合序标准表示
+            ByteOrder::DCBA => "DCBA", // 小端序标准表示
         };
         write!(f, "{}", s)
     }
 }
 
+/// 从字符串解析字节序
+///
+/// **业务用途**:
+/// - 从配置文件读取字节序设置
+/// - 解析用户输入的字节序参数
+/// - 支持API参数的字符串格式
+///
+/// **容错处理**:
+/// - 支持大小写不敏感的解析
+/// - 提供详细的错误信息
+/// - 验证输入的有效性
+///
+/// **Rust知识点**:
+/// - `FromStr` trait支持字符串解析
+/// - `to_uppercase()`: 转换为大写进行匹配
+/// - `Result<T, E>`: 错误处理类型
 impl FromStr for ByteOrder {
-    type Err = String;
+    type Err = String; // 错误类型为字符串，便于错误信息传递
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
+        match s.to_uppercase().as_str() { // 大小写不敏感匹配
             "ABCD" => Ok(ByteOrder::ABCD),
             "CDAB" => Ok(ByteOrder::CDAB),
             "BADC" => Ok(ByteOrder::BADC),
             "DCBA" => Ok(ByteOrder::DCBA),
-            _ => Err(format!("Unsupported ByteOrder: {}", s)),
+            _ => Err(format!("不支持的字节序格式: {}，支持的格式: ABCD, CDAB, BADC, DCBA", s)),
         }
     }
 }
