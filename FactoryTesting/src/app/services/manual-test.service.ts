@@ -27,6 +27,10 @@ export class ManualTestService {
   private testCompleted = new Subject<ManualTestStatus>();
   public testCompleted$ = this.testCompleted.asObservable();
 
+  // 手动测试状态实时更新事件（供测试区域实时刷新）
+  private testStatusUpdated = new Subject<ManualTestStatus>();
+  public testStatusUpdated$ = this.testStatusUpdated.asObservable();
+
   // 当前是否有活跃的手动测试
   private hasActiveTest = new BehaviorSubject<boolean>(false);
   public hasActiveTest$ = this.hasActiveTest.asObservable();
@@ -75,7 +79,7 @@ export class ManualTestService {
 
       if (response.success && response.testStatus) {
         this.currentTestStatus.next(response.testStatus);
-        
+        this.testStatusUpdated.next(response.testStatus);
         console.log('[MANUAL_TEST_SERVICE] 最新 overallStatus:', response.testStatus.overallStatus);
         
         // 如果测试完成，发布完成事件
@@ -183,7 +187,8 @@ export class ManualTestService {
     const subItemResult = currentStatus.subItemResults[subItem];
     return subItemResult && (
       subItemResult.status === ManualTestSubItemStatus.Passed ||
-      subItemResult.status === ManualTestSubItemStatus.Skipped
+      subItemResult.status === ManualTestSubItemStatus.Skipped ||
+      subItemResult.status === ManualTestSubItemStatus.Failed
     );
   }
 

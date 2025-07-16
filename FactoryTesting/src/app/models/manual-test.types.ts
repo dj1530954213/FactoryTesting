@@ -49,6 +49,8 @@ export interface ManualTestStatus {
   subItemResults: Record<ManualTestSubItem, ManualTestSubItemResult>;
   startTime?: Date;
   completionTime?: Date;
+  /** 错误信息（如有）*/
+  errorMessage?: string;
   currentOperator?: string;
 }
 

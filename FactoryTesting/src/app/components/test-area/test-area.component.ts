@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzMessageService } from 'ng-zorro-antd/message';
@@ -26,6 +26,7 @@ import { listen } from '@tauri-apps/api/event';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 import { TauriApiService } from '../../services/tauri-api.service';
+import { ManualTestService } from '../../services/manual-test.service';
 import { DataStateService } from '../../services/data-state.service';
 import { BatchSelectionService } from '../../services/batch-selection.service';
 import { Subscription, firstValueFrom } from 'rxjs';
@@ -38,12 +39,14 @@ import {
   ModuleType,
   PointDataType,
   AllocationSummary,
+
   SubTestItem,
   SubTestStatus,
   OVERALL_TEST_STATUS_LABELS,
   MODULE_TYPE_LABELS,
   POINT_DATA_TYPE_LABELS
 } from '../../models';
+import { ManualTestStatus } from '../../models/manual-test.types';
 import { ErrorDetailModalComponent } from './error-detail-modal.component';
 import { ManualTestModalComponent } from '../manual-test/manual-test-modal.component';
 
@@ -181,10 +184,26 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     private message: NzMessageService,
     private dataStateService: DataStateService,
     private batchSelectionService: BatchSelectionService,
-    private modal: NzModalService
+    private modal: NzModalService,
+    private manualTestService: ManualTestService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    // 订阅手动测试状态变化，实时刷新实例状态
+    // 订阅当前手动测试状态（启动测试时会推送一次）
+    this.subscriptions.add(
+      this.manualTestService.currentTestStatus$.subscribe(status => {
+        this.applyManualTestStatus(status);
+      })
+    );
+
+    // 订阅实时状态更新流，实现 UI 实时刷新
+    this.subscriptions.add(
+      this.manualTestService.testStatusUpdated$.subscribe(status => {
+        this.applyManualTestStatus(status);
+      })
+    );
     this.loadAvailableBatches();
     this.checkForUnpersistedData();
     this.subscribeToSelectedBatch();
@@ -213,6 +232,24 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     if (this._statsUpdateTimer) {
       clearTimeout(this._statsUpdateTimer);
       this._statsUpdateTimer = null;
+    }
+  }
+
+  /**
+   * 根据手动测试状态更新对应实例，触发变更检测
+   */
+  private applyManualTestStatus(status: ManualTestStatus | null): void {
+    if (!status || !this.batchDetails) {
+      return;
+    }
+    const inst = this.batchDetails.instances?.find((i: ChannelTestInstance) => i.instance_id === status.instanceId);
+    if (inst) {
+      inst.overall_status = status.overallStatus as any;
+      // 如果有错误信息也同步更新
+      if (status.errorMessage !== undefined) {
+        (inst as any).error_message = status.errorMessage;
+      }
+      this.cdr.detectChanges();
     }
   }
 

@@ -240,8 +240,8 @@ export class DoManualTestComponent implements OnInit, OnDestroy {
       nzContent: `确定要将测试标记为失败吗？`,
       nzOnOk: async () => {
         try {
-          await this.manualTestService.skipSubItem(this.instance!.instance_id, subItem, '用户手动跳过');
-          this.message.info(`${MANUAL_TEST_SUB_ITEM_LABELS[subItem]} 已跳过`);
+          await this.manualTestService.failSubItem(this.instance!.instance_id, subItem, '用户手动标记失败');
+          this.message.error(`${MANUAL_TEST_SUB_ITEM_LABELS[subItem]} 已标记失败`);
         } catch (error) {
           this.message.error(`确认测试失败异常: ${error}`);
         }

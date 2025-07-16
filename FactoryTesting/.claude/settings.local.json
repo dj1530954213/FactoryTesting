@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(rustc:*)",
+      "Bash(ng version)",
+      "Bash(tauri:*)",
+      "Bash(sudo npm install -g @angular/cli@18.2.14)",
+      "Bash(npx:*)",
+      "Bash(cargo install:*)",
+      "Bash(cargo:*)",
+      "Bash(find:*)",
+      "Bash(kill:*)",
+      "Bash(ng build:*)"
+    ],
+    "deny": []
+  }
+}
