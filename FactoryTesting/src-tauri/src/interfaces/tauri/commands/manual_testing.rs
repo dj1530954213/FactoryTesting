@@ -375,10 +375,11 @@ pub async fn connect_plc_cmd(
             }
             // 动态替换量程写入服务实现
             {
-                // 一定存在，直接获取
+                // 一定存在，直接获取，就算其中使用的是一个默认的实现我们也可以获取到然后将其替换
                 let range_container = app.state::<Arc<DynamicRangeSettingService>>();
                 // 构建新的 ChannelRangeSettingService
                 let plc_service = crate::infrastructure::plc_communication::global_plc_service();
+                //获得默认的plc句柄，并且创建一个新的量程设定服务将原来的服务替换掉
                 if let Some(handle) = plc_service.default_handle().await {
                     let db_conn = app_state.persistence_service.get_database_connection();
                     let range_repo: Arc<dyn IRangeRegisterRepository> = Arc::new(RangeRegisterRepository::new(db_conn));
@@ -394,7 +395,9 @@ pub async fn connect_plc_cmd(
                     warn!("[connect_plc_cmd] PLC连接已建立但未获取到默认句柄，无法替换量程服务");
                 }
             }
-
+            /*
+            下方的这部分代码功能重复但这才是真正替换服务的代码
+            */
             // 等待一段时间让连接建立
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 

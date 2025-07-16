@@ -28,6 +28,17 @@
           *nzSpaceItem
           nz-button
           nzType="default"
+          [nzLoading]="isRetestingFailed"
+          [disabled]="!selectedBatch || !isConnected || isRetestingFailed || !hasFailedHardPoints()"
+          (click)="retestFailedHardPoints()">
+          <span nz-icon nzType="history" nzTheme="outline"></span>
+          失败点位重测
+        </button>
+
+        <button
+          *nzSpaceItem
+          nz-button
+          nzType="default"
           [nzLoading]="isLoadingDetails"
           [disabled]="!selectedBatch || isLoadingDetails"
           (click)="refreshBatchDetails()">

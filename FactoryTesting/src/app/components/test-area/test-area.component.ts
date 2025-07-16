@@ -108,6 +108,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   isConnecting = false;
   isConnected = false;
   isAutoTesting = false;
+  /** 失败点位重测状态 */
+  isRetestingFailed = false;
+  /** 当前处于硬点/报警测试状态的实例数量 */
+  activeHardpointTests = 0;
 
   // 测试进度相关
   testProgress = {
@@ -371,11 +375,16 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新本地状态
         this.updateInstanceStatusDirect(statusChange.instanceId, statusChange.newStatus);
 
-        // 弹窗控制
-        if (statusChange.newStatus === OverallTestStatus.HardPointTesting) {
+        // 弹窗控制：使用计数避免闪烁
+        // 使用本地 Set 精准控制弹窗
+        if (statusChange.newStatus === OverallTestStatus.HardPointTesting || statusChange.newStatus === OverallTestStatus.AlarmTesting) {
+          this.hardpointTestingSet.add(statusChange.instanceId);
           this.openHardPointTestingModal();
-        } else if (statusChange.newStatus === OverallTestStatus.HardPointTestCompleted || statusChange.newStatus === OverallTestStatus.ManualTesting) {
-          this.closeHardPointTestingModal();
+        } else if (statusChange.newStatus === OverallTestStatus.HardPointTestCompleted) {
+          this.hardpointTestingSet.delete(statusChange.instanceId);
+          if (this.hardpointTestingSet.size === 0) {
+            this.closeHardPointTestingModal();
+          }
         }
 
         // 更新整体进度
@@ -478,6 +487,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     );
   }
 
+  // ========= 硬点测试实例跟踪 =========
+  private hardpointTestingSet = new Set<string>();
+
   // ========= 硬点测试弹窗控制 =========
   private openHardPointTestingModal(): void {
     if (!this.hardPointModalRef) {
@@ -494,6 +506,23 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     if (this.hardPointModalRef) {
       this.hardPointModalRef.close();
       this.hardPointModalRef = undefined;
+    }
+  }
+
+  /**
+   * 根据当前实例状态刷新硬点测试弹窗
+   * 打开条件：至少有一个实例处于 HardPointTesting 或 AlarmTesting
+   * 关闭条件：全部实例不在以上状态
+   */
+  private refreshHardPointModal(): void {
+    const stillTesting = this.batchDetails?.instances?.some(inst =>
+      inst.overall_status === OverallTestStatus.HardPointTesting ||
+      inst.overall_status === OverallTestStatus.AlarmTesting
+    );
+    if (stillTesting) {
+      this.openHardPointTestingModal();
+    } else {
+      this.closeHardPointTestingModal();
     }
   }
 
@@ -542,24 +571,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       }
     }
 
-    // 根据当前实例状态自动控制硬点测试弹窗
-    const instancesList = this.batchDetails?.instances ?? [];
-    const hasHardPointTesting = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTesting);
-
-    // 计算是否所有点位状态均为已完成(通过/失败/硬点测试完成)
-    const allPointsTested = instancesList.every(inst =>
-      inst.overall_status === OverallTestStatus.TestCompletedPassed ||
-      inst.overall_status === OverallTestStatus.TestCompletedFailed ||
-      inst.overall_status === OverallTestStatus.HardPointTestCompleted
-    );
-
-    if (hasHardPointTesting) {
-      // 仍有硬点通道在测试，确保弹窗保持打开
-      this.openHardPointTestingModal();
-    } else if (allPointsTested) {
-      // 整个批次硬点测试全部完成，关闭弹窗
-      this.closeHardPointTestingModal();
-    }
+    // 弹窗开关逻辑已统一由 hardpointTestingSet（事件监听驱动）控制，此处不再处理
 
   }
 
@@ -711,13 +723,17 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const totalPoints = instances.length;
     let completedPoints = 0;
     let testingPoints = 0;
+    let failedPoints = 0;
 
     // 统计各种状态的点位数量
     instances.forEach(instance => {
       switch (instance.overall_status) {
         case OverallTestStatus.TestCompletedPassed:
-        case OverallTestStatus.TestCompletedFailed:
           completedPoints++;
+          break;
+        case OverallTestStatus.TestCompletedFailed:
+          // 仍视为未完成，等待重测
+          failedPoints++;
           break;
         case OverallTestStatus.HardPointTesting:
         case OverallTestStatus.AlarmTesting:
@@ -730,18 +746,20 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       totalPoints,
       completedPoints,
       testingPoints,
+      failedPoints,
       isTestCompleted: this.isTestCompleted,
       isAutoTesting: this.isAutoTesting
     });
 
+    // 弹窗显示/隐藏逻辑已迁移至事件监听中的 hardpointTestingSet 管理，这里不再根据 testingPoints 控制弹窗，以避免早关的问题
+
     // 如果所有点位都已完成测试，且当前状态不是已完成
-    if (completedPoints === totalPoints && testingPoints === 0 && !this.isTestCompleted) {
+    if (failedPoints === 0 && completedPoints + failedPoints === totalPoints && testingPoints === 0 && !this.isTestCompleted) {
       console.log('🎉 [TEST_AREA] 检测到测试已完成，更新状态');
       this.isTestCompleted = true;
       this.isAutoTesting = false;
       this.testProgress.currentPoint = undefined;
-      // 关闭硬点测试弹窗（如果仍然打开）
-      this.closeHardPointTestingModal();
+      // 弹窗关闭由 hardpointTestingSet 逻辑统一处理
       this.message.success('批次测试已完成！', { nzDuration: 5000 });
     }
 
@@ -1206,6 +1224,17 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   readonly ModuleType = ModuleType;
 
   /**
+   * 判断当前批次是否存在硬点测试失败的点位
+   */
+  hasFailedHardPoints(): boolean {
+    if (this.batchDetails) {
+      return this.batchDetails.instances.some(inst => inst.overall_status === OverallTestStatus.TestCompletedFailed);
+    }
+    // 如果没有详情，回退到批次摘要信息
+    return (this.selectedBatch?.failed_points || 0) > 0;
+  }
+
+  /**
    * 硬点测试弹窗控制
    */
   private showHardPointModal(): void {
@@ -1571,6 +1600,58 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.manualTestModalVisible = false;
     this.selectedManualTestInstance = null;
     this.selectedManualTestDefinition = null;
+  }
+
+  /**
+   * 重新测试当前批次硬点测试失败的点位
+   */
+  async retestFailedHardPoints(): Promise<void> {
+    if (!this.selectedBatch) {
+      this.message.warning('请先选择一个测试批次');
+      return;
+    }
+    if (!this.isConnected) {
+      this.message.warning('请先确认接线并连接PLC');
+      return;
+    }
+    if (!this.hasFailedHardPoints()) {
+      this.message.info('当前批次没有硬点失败，无需重测');
+      return;
+    }
+
+    this.isRetestingFailed = true;
+    this.openHardPointTestingModal();
+
+    try {
+      // 收集失败的硬点实例
+      if (!this.batchDetails) {
+        await this.loadBatchDetails();
+      }
+      const failedInstances = (this.batchDetails?.instances || []).filter(inst => inst.overall_status === OverallTestStatus.TestCompletedFailed);
+      // 清空跟踪集合并打开弹窗
+      this.hardpointTestingSet.clear();
+      this.openHardPointTestingModal();
+      if (failedInstances.length === 0) {
+        this.message.info('当前批次没有硬点失败，无需重测');
+        return;
+      }
+
+      // 并行启动所有失败实例重测（不 await，避免串行导致计数过早归零）
+      failedInstances.forEach(inst => {
+        this.tauriApiService.startSingleChannelTest(inst.instance_id).subscribe({
+          error: err => console.error('启动单通道重测失败', err)
+        });
+      });
+      this.message.success(`已启动 ${failedInstances.length} 个失败点位重测`);
+      // 启动后刷新数据
+      this.scheduleDataRefresh('failed-retest-started', 800);
+    } catch (error) {
+      console.error('❌ [TEST_AREA] 启动失败点位重测失败:', error);
+      this.message.error('启动失败点位重测失败: ' + error);
+    } finally {
+      this.isRetestingFailed = false;
+      
+    }
   }
 
   // ======================= 导出通道分配 =========================

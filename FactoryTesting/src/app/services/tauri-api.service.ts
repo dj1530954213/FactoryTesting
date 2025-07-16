@@ -223,6 +223,28 @@ export class TauriApiService {
   }
 
   /**
+   * 重新测试批次中硬点测试失败的点位
+   */
+  retestFailedHardPoints(batchId: string): Observable<{ success: boolean; message?: string }> {
+    console.log('🚀 [TAURI_API] 调用重新测试失败硬点API, 批次ID:', batchId);
+    return from(invoke<{ success: boolean; message?: string }>('retest_failed_hardpoints_cmd', {
+      args: { batch_id: batchId }
+    })).pipe(
+      tap(result => {
+        if (result.success) {
+          console.log('✅ [TAURI_API] 重新测试失败硬点启动成功');
+        } else {
+          console.error('❌ [TAURI_API] 重新测试失败硬点启动失败:', result.message);
+        }
+      }),
+      catchError(error => {
+        console.error('❌ [TAURI_API] 重新测试失败硬点API调用失败:', error);
+        throw error;
+      })
+    );
+  }
+
+  /**
    * 获取PLC连接状态
    */
   getPlcConnectionStatus(): Observable<PlcConnectionStatus> {

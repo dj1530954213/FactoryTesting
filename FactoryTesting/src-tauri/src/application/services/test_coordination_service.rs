@@ -23,6 +23,8 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
 use log::{debug, warn, error, info, trace};
+use tokio::time::{sleep, Duration};
+use crate::domain::impls::test_execution_engine::TaskStatus;
 use chrono::Utc;
 use crate::application::services::channel_allocation_service::{IChannelAllocationService};
 use crate::domain::services::EventPublisher;
@@ -1004,6 +1006,44 @@ impl ITestCoordinationService for TestCoordinationService {
         }
 
         info!("单个通道硬点测试任务已提交: {} -> {}", instance_id, task_id);
+
+        // 8. 启动异步任务等待测试真正完成后发布完成事件
+        let ep = self.event_publisher.clone();
+        let engine = self.test_execution_engine.clone();
+        let inst_id = instance_id.to_string();
+        let task_id_clone = task_id.clone();
+        tokio::spawn(async move {
+            loop {
+                // 轮询任务状态；任务执行完毕后 active_tasks 中将被移除
+                match engine.get_task_status(&task_id_clone).await {
+                    Ok(status) => {
+                        if matches!(status, TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Cancelled) {
+                            // 发布完成事件
+                            if let Err(e) = ep.publish_test_status_changed(
+                                &inst_id,
+                                OverallTestStatus::HardPointTesting,
+                                OverallTestStatus::HardPointTestCompleted,
+                            ).await {
+                                error!("发布单通道完成事件失败: {}", e);
+                            }
+                            break;
+                        }
+                    },
+                    Err(_) => {
+                        // 查不到任务，说明已清理，视为完成
+                        if let Err(e) = ep.publish_test_status_changed(
+                            &inst_id,
+                            OverallTestStatus::HardPointTesting,
+                            OverallTestStatus::HardPointTestCompleted,
+                        ).await {
+                            error!("发布单通道完成事件失败: {}", e);
+                        }
+                        break;
+                    }
+                }
+                sleep(Duration::from_millis(500)).await;
+            }
+        });
         Ok(())
     }
 
