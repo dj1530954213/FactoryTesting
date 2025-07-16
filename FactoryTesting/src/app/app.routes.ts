@@ -31,10 +31,7 @@ export const routes: Routes = [
     path: 'result-export',
     loadComponent: () => import('./components/result-export/result-export.component').then(m => m.ResultExportComponent)
   },
-  {
-    path: 'system-settings',
-    loadComponent: () => import('./components/system-settings/system-settings.component').then(m => m.SystemSettingsComponent)
-  },
+
   
   // 向后兼容的路由重定向
   {
@@ -57,11 +54,7 @@ export const routes: Routes = [
     redirectTo: '/test-area',
     pathMatch: 'full'
   },
-  {
-    path: 'settings',
-    redirectTo: '/system-settings',
-    pathMatch: 'full'
-  },
+
   {
     path: 'report-generation',
     redirectTo: '/result-export',

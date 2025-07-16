@@ -521,6 +521,27 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
     this.testProgress.progressPercentage = stats.totalPoints === 0 ? 0 : Math.round((stats.testedPoints / stats.totalPoints) * 100);
 
+    // --- 同步更新批次统计信息，避免切换批次后数据显示为初始值 ---
+    if (this.selectedBatch) {
+      this.selectedBatch.total_points = stats.totalPoints;
+      this.selectedBatch.tested_points = stats.testedPoints;
+      this.selectedBatch.passed_points = stats.successPoints;
+      this.selectedBatch.failed_points = stats.failedPoints;
+      this.selectedBatch.skipped_points = stats.skippedPoints;
+
+      // 同时更新 availableBatches 列表中的同批次对象
+      const idx = this.availableBatches.findIndex(b => b.batch_id === this.selectedBatch!.batch_id);
+      if (idx !== -1) {
+        this.availableBatches[idx] = { ...this.availableBatches[idx], ...{
+          total_points: stats.totalPoints,
+          tested_points: stats.testedPoints,
+          passed_points: stats.successPoints,
+          failed_points: stats.failedPoints,
+          skipped_points: stats.skippedPoints
+        } } as TestBatchInfo;
+      }
+    }
+
     // 根据当前实例状态自动控制硬点测试弹窗
     const instancesList = this.batchDetails?.instances ?? [];
     const hasHardPointTesting = instancesList.some(inst => inst.overall_status === OverallTestStatus.HardPointTesting);
