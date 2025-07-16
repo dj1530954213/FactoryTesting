@@ -87,7 +87,7 @@ import {
                   [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
                   (click)="skipSubItem(ManualTestSubItem.ShowValueCheck)">
                   <i nz-icon nzType="forward"></i>
-                  跳过
+                  测试失败
                 </button>
               </div>
             </div>
