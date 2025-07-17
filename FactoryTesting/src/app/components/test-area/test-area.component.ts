@@ -383,8 +383,6 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     try {
       // 监听后端发布的测试完成事件
       const unlistenCompleted = await listen('test-completed', (event) => {
-        // console.log('🎉 [TEST_AREA] 收到测试完成事件:', event.payload);
-
         // 解析事件数据
         const testResult = event.payload as {
           instanceId: string;
@@ -403,6 +401,16 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         // 更新测试进度
         this.updateTestProgressFromResult(testResult);
+
+        // 🔧 新增：测试完成计数逻辑
+        this.completedTestCount++;
+        console.log(`📊 [TEST_AREA] 测试完成计数: ${this.completedTestCount}/${this.expectedTestCount}`);
+
+        // 🔧 检查是否所有测试都已完成
+        if (this.isTestingModalVisible && this.completedTestCount >= this.expectedTestCount) {
+          console.log('🎉 [TEST_AREA] 所有测试已完成，关闭弹窗');
+          this.closeTestingModal();
+        }
 
         // 🔧 新增：智能缓存刷新确保数据一致性
         this.smartCacheRefresh('complete');
@@ -436,15 +444,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新本地状态
         this.updateInstanceStatusDirect(statusChange.instanceId, statusChange.newStatus);
 
-        // 弹窗控制：使用计数避免闪烁
-        // 使用本地 Set 精准控制弹窗
+        // 🔧 简化弹窗控制：只用于显示弹窗，不用于关闭
         if (statusChange.newStatus === OverallTestStatus.HardPointTesting || statusChange.newStatus === OverallTestStatus.AlarmTesting) {
-          this.hardpointTestingSet.add(statusChange.instanceId);
-          this.openHardPointTestingModal();
-        } else if (statusChange.newStatus === OverallTestStatus.HardPointTestCompleted) {
-          this.hardpointTestingSet.delete(statusChange.instanceId);
-          if (this.hardpointTestingSet.size === 0) {
-            this.closeHardPointTestingModal();
+          // 如果弹窗未显示，则显示弹窗
+          if (!this.isTestingModalVisible) {
+            console.log('🔧 [TEST_AREA] 检测到硬点测试开始，显示弹窗');
+            this.openTestingModal();
           }
         }
 
@@ -633,6 +638,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   // ========= 硬点测试实例跟踪 =========
   private hardpointTestingSet = new Set<string>();
+  
+  // ========= 测试完成计数机制 =========
+  private expectedTestCount = 0;  // 预期要完成的测试数量
+  private completedTestCount = 0; // 已完成的测试数量
+  private isTestingModalVisible = false; // 测试弹窗是否可见
 
   // ========= 硬点测试弹窗控制 =========
   private openHardPointTestingModal(): void {
@@ -653,21 +663,57 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ========= 新的测试弹窗控制（基于完成计数） =========
   /**
-   * 根据当前实例状态刷新硬点测试弹窗
+   * 打开测试弹窗
+   */
+  private openTestingModal(): void {
+    if (!this.hardPointModalRef) {
+      this.hardPointModalRef = this.modal.create({
+        nzTitle: '硬点通道自动测试',
+        nzContent: '正在进行硬点通道测试，请稍候……',
+        nzClosable: false,
+        nzMaskClosable: false
+      });
+      this.isTestingModalVisible = true;
+      console.log('🔧 [TEST_AREA] 测试弹窗已打开');
+    }
+  }
+
+  /**
+   * 关闭测试弹窗
+   */
+  private closeTestingModal(): void {
+    if (this.hardPointModalRef) {
+      this.hardPointModalRef.close();
+      this.hardPointModalRef = undefined;
+      this.isTestingModalVisible = false;
+      
+      // 重置计数器
+      this.expectedTestCount = 0;
+      this.completedTestCount = 0;
+      
+      console.log('🔧 [TEST_AREA] 测试弹窗已关闭，计数器已重置');
+    }
+  }
+
+  /**
+   * 初始化测试计数器
+   */
+  private initializeTestCounter(testCount: number): void {
+    this.expectedTestCount = testCount;
+    this.completedTestCount = 0;
+    console.log(`🔧 [TEST_AREA] 初始化测试计数器，预期完成 ${testCount} 个测试`);
+  }
+
+  /**
+   * 根据当前实例状态刷新硬点测试弹窗（已废弃，使用新的计数机制）
    * 打开条件：至少有一个实例处于 HardPointTesting 或 AlarmTesting
    * 关闭条件：全部实例不在以上状态
    */
   private refreshHardPointModal(): void {
-    const stillTesting = this.batchDetails?.instances?.some(inst =>
-      inst.overall_status === OverallTestStatus.HardPointTesting ||
-      inst.overall_status === OverallTestStatus.AlarmTesting
-    );
-    if (stillTesting) {
-      this.openHardPointTestingModal();
-    } else {
-      this.closeHardPointTestingModal();
-    }
+    // 此方法已废弃，现在使用基于 test-completed 事件的计数机制
+    console.log('⚠️ [TEST_AREA] refreshHardPointModal 方法已废弃');
   }
 
   // ========= 进度更新辅助 =========
@@ -812,6 +858,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       if (result && result.success) {
         this.message.success('🚀 通道自动测试已启动', { nzDuration: 2000 });
         console.log('✅ [TEST_AREA] 通道自动测试启动成功');
+
+        // 🔧 新增：初始化测试计数器，设置预期完成的测试数量
+        const totalPoints = this.batchDetails?.instances?.length || 0;
+        this.initializeTestCounter(totalPoints);
 
         // 🔧 优化：测试启动后智能刷新
         this.scheduleDataRefresh('test-started', 800);
@@ -1708,17 +1758,27 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     try {
       console.log('🚀 [TEST_AREA] 开始单个通道硬点测试:', instance.instance_id);
 
+      // 🔧 新增：为单个通道测试初始化计数器
+      this.initializeTestCounter(1);
+
       // 调用后端API开始单个通道测试
       await firstValueFrom(this.tauriApiService.startSingleChannelTest(instance.instance_id));
 
       console.log('✅ [TEST_AREA] 单个通道硬点测试已启动:', instance.instance_id);
 
-      // 可选：显示成功消息
-      // this.message.success('硬点测试已启动');
+      // 显示成功消息
+      this.message.success('硬点重测已启动');
+
+      // 弹窗的显示依赖后端发送 HardPointTesting 状态事件
+      // 弹窗的关闭依赖 test-completed 事件计数
 
     } catch (error) {
       console.error('❌ [TEST_AREA] 启动单个通道硬点测试失败:', error);
       this.message.error(`启动硬点测试失败: ${error}`);
+      
+      // API调用失败时重置计数器
+      this.expectedTestCount = 0;
+      this.completedTestCount = 0;
     }
   }
 
@@ -1994,7 +2054,6 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     }
 
     this.isRetestingFailed = true;
-    this.openHardPointTestingModal();
 
     try {
       // 收集失败的硬点实例
@@ -2002,21 +2061,46 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         await this.loadBatchDetails();
       }
       const failedInstances = (this.batchDetails?.instances || []).filter(inst => inst.overall_status === OverallTestStatus.TestCompletedFailed);
-      // 清空跟踪集合并打开弹窗
-      this.hardpointTestingSet.clear();
-      this.openHardPointTestingModal();
+      
       if (failedInstances.length === 0) {
         this.message.info('当前批次没有硬点失败，无需重测');
         return;
       }
 
-      // 并行启动所有失败实例重测（不 await，避免串行导致计数过早归零）
-      failedInstances.forEach(inst => {
-        this.tauriApiService.startSingleChannelTest(inst.instance_id).subscribe({
-          error: err => console.error('启动单通道重测失败', err)
-        });
+      console.log('🔄 [TEST_AREA] 开始批量重测失败点位，共', failedInstances.length, '个');
+
+      // 🔧 新增：为批量重测初始化计数器
+      this.initializeTestCounter(failedInstances.length);
+
+      // 并行启动所有失败实例重测
+      let successCount = 0;
+      const startPromises = failedInstances.map(async (inst) => {
+        try {
+          await firstValueFrom(this.tauriApiService.startSingleChannelTest(inst.instance_id));
+          console.log('✅ [TEST_AREA] 失败点位重测启动成功:', inst.instance_id);
+          successCount++;
+        } catch (error) {
+          console.error('❌ [TEST_AREA] 启动单通道重测失败:', inst.instance_id, error);
+        }
       });
-      this.message.success(`已启动 ${failedInstances.length} 个失败点位重测`);
+
+      // 等待所有启动操作完成
+      await Promise.allSettled(startPromises);
+
+      if (successCount === 0) {
+        this.message.error('所有失败点位重测启动都失败');
+        // 如果没有成功启动的测试，重置计数器
+        this.expectedTestCount = 0;
+        this.completedTestCount = 0;
+      } else {
+        this.message.success(`已启动 ${successCount} 个失败点位重测`);
+        // 🔧 修正：根据实际成功启动的数量调整预期计数
+        this.expectedTestCount = successCount;
+      }
+
+      // 弹窗的显示依赖后端发送 HardPointTesting 状态事件
+      // 弹窗的关闭依赖 test-completed 事件计数
+
       // 启动后刷新数据
       this.scheduleDataRefresh('failed-retest-started', 800);
     } catch (error) {
@@ -2024,7 +2108,6 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.message.error('启动失败点位重测失败: ' + error);
     } finally {
       this.isRetestingFailed = false;
-      
     }
   }
 
@@ -2067,5 +2150,6 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       ]
     });
   }
+
 
 }
