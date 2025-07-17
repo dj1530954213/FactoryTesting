@@ -12,7 +12,9 @@
       "Bash(cargo:*)",
       "Bash(find:*)",
       "Bash(kill:*)",
-      "Bash(ng build:*)"
+      "Bash(ng build:*)",
+      "Bash(sqlite3:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

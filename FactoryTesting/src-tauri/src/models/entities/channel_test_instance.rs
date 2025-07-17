@@ -336,9 +336,26 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
                 }
             });
 
-        let transient_data: HashMap<String, serde_json::Value> = model.transient_data_json.as_ref()
+        let mut transient_data: HashMap<String, serde_json::Value> = model.transient_data_json.as_ref()
             .and_then(|json| serde_json::from_str(json).ok())
             .unwrap_or_default();
+
+        // 🔧 修复：将数据库中的百分比测试结果重新填充到transient_data中
+        if let Some(value) = model.test_result_0_percent {
+            transient_data.insert("test_result_0_percent".to_string(), serde_json::json!(value));
+        }
+        if let Some(value) = model.test_result_25_percent {
+            transient_data.insert("test_result_25_percent".to_string(), serde_json::json!(value));
+        }
+        if let Some(value) = model.test_result_50_percent {
+            transient_data.insert("test_result_50_percent".to_string(), serde_json::json!(value));
+        }
+        if let Some(value) = model.test_result_75_percent {
+            transient_data.insert("test_result_75_percent".to_string(), serde_json::json!(value));
+        }
+        if let Some(value) = model.test_result_100_percent {
+            transient_data.insert("test_result_100_percent".to_string(), serde_json::json!(value));
+        }
 
         let result = crate::models::structs::ChannelTestInstance {
             instance_id: model.instance_id.clone(),
@@ -360,6 +377,11 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             manual_test_current_value_output: None, // 新实体结构中没有这个字段
             current_operator: model.current_operator.clone(),
             retries_count: model.retries_count,
+            test_result_0_percent: model.test_result_0_percent,
+            test_result_25_percent: model.test_result_25_percent,
+            test_result_50_percent: model.test_result_50_percent,
+            test_result_75_percent: model.test_result_75_percent,
+            test_result_100_percent: model.test_result_100_percent,
             transient_data,
             test_plc_channel_tag: model.test_plc_channel_tag.clone(),
             test_plc_communication_address: model.test_plc_communication_address.clone(),

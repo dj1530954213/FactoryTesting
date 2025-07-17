@@ -468,24 +468,48 @@ export class ErrorDetailModalComponent implements OnInit, OnChanges {
       const setValue = rangeLow + (rangeSpan * percentage / 100);
       const expectedValue = setValue; // 对于AI/AO，期望值就是设定值
 
-      // 从实例的百分比测试结果字段中获取实际值
+      // 🔧 修复：从实例的百分比测试结果字段中获取实际值
       let actualValue = 0;
+      
+      // 首先尝试从直接字段获取
       switch (percentage) {
         case 0:
-          actualValue = (this.instance as any).test_result_0_percent || 0;
+          actualValue = this.instance.test_result_0_percent || 0;
           break;
         case 25:
-          actualValue = (this.instance as any).test_result_25_percent || 0;
+          actualValue = this.instance.test_result_25_percent || 0;
           break;
         case 50:
-          actualValue = (this.instance as any).test_result_50_percent || 0;
+          actualValue = this.instance.test_result_50_percent || 0;
           break;
         case 75:
-          actualValue = (this.instance as any).test_result_75_percent || 0;
+          actualValue = this.instance.test_result_75_percent || 0;
           break;
         case 100:
-          actualValue = (this.instance as any).test_result_100_percent || 0;
+          actualValue = this.instance.test_result_100_percent || 0;
           break;
+      }
+      
+      // 🔧 备用方案：如果直接字段为空，尝试从transient_data获取
+      if (actualValue === 0 && (this.instance as any).transient_data) {
+        const transientData = (this.instance as any).transient_data;
+        switch (percentage) {
+          case 0:
+            actualValue = transientData.test_result_0_percent || 0;
+            break;
+          case 25:
+            actualValue = transientData.test_result_25_percent || 0;
+            break;
+          case 50:
+            actualValue = transientData.test_result_50_percent || 0;
+            break;
+          case 75:
+            actualValue = transientData.test_result_75_percent || 0;
+            break;
+          case 100:
+            actualValue = transientData.test_result_100_percent || 0;
+            break;
+        }
       }
 
       // 计算偏差百分比

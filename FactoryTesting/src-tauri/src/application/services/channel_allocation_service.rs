@@ -730,6 +730,11 @@ impl ChannelAllocationService {
             test_plc_communication_address: Some(test_channel.communication_address.clone()),
             current_operator: None,
             retries_count: 0,
+            test_result_0_percent: None,
+            test_result_25_percent: None,
+            test_result_50_percent: None,
+            test_result_75_percent: None,
+            test_result_100_percent: None,
             transient_data: HashMap::new(),
         })
     }

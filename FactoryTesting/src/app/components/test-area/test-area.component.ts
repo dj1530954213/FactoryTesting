@@ -130,7 +130,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   // 🔧 优化：数据刷新防抖机制
   private refreshTimeouts = new Map<string, any>();
   private lastRefreshTime = 0;
-  private readonly MIN_REFRESH_INTERVAL = 1000; // 最小刷新间隔1秒
+  private readonly MIN_REFRESH_INTERVAL = 300; // 最小刷新间隔优化为300ms
+  private readonly CRITICAL_REFRESH_INTERVAL = 100; // 关键状态变化立即刷新间隔100ms
+  private readonly INSTANT_UPDATE_INTERVAL = 50; // 即时更新间隔50ms
 
   // 测试状态
   isTestCompleted = false;
@@ -244,12 +246,21 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     }
     const inst = this.batchDetails.instances?.find((i: ChannelTestInstance) => i.instance_id === status.instanceId);
     if (inst) {
+      const oldStatus = inst.overall_status;
       inst.overall_status = status.overallStatus as any;
+      
       // 如果有错误信息也同步更新
       if (status.errorMessage !== undefined) {
         (inst as any).error_message = status.errorMessage;
       }
-      this.cdr.detectChanges();
+      
+      console.log(`🔄 [TEST_AREA] 手动测试状态更新: ${status.instanceId} - ${oldStatus} -> ${status.overallStatus}`);
+      
+      // 🔧 新增：强制清理缓存确保状态变化立即反映
+      this.smartCacheRefresh('status');
+      
+      // 🔧 新增：立即刷新数据以确保持久化状态同步
+      this.scheduleDataRefresh('manual-test-status-changed', this.INSTANT_UPDATE_INTERVAL);
     }
   }
 
@@ -348,6 +359,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
       // console.log(`🔄 [TEST_AREA] 执行数据刷新 (原因: ${reason})`);
       await this.loadBatchDetails();
+      
+      // 🔧 新增：刷新完成后触发变更检测
+      this.cdr.detectChanges();
     }, delay);
 
     this.refreshTimeouts.set(reason, timeoutId);
@@ -383,8 +397,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新测试进度
         this.updateTestProgressFromResult(testResult);
 
-        // 🔧 优化：测试完成后延迟刷新，避免频繁调用
-        this.scheduleDataRefresh('test-completed', 1000);
+        // 🔧 新增：智能缓存刷新确保数据一致性
+        this.smartCacheRefresh('complete');
+
+        // 🔧 优化：测试完成后即时刷新，确保UI及时更新
+        this.scheduleDataRefresh('test-completed', this.INSTANT_UPDATE_INTERVAL);
 
         // 显示通知
         if (testResult.success) {
@@ -427,8 +444,88 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         // 更新整体进度
         this.updateOverallProgress();
 
-        // 🔧 优化：测试状态变化后智能刷新
-        this.scheduleDataRefresh('test-status-changed', 800);
+        // 🔧 新增：智能缓存刷新确保状态变化及时反映
+        this.smartCacheRefresh('status');
+
+        // 🔧 优化：测试状态变化后即时刷新
+        this.scheduleDataRefresh('test-status-changed', this.INSTANT_UPDATE_INTERVAL);
+      });
+
+      // 🔧 新增：监听错误状态变化事件，实时更新错误信息
+      const unlistenErrorStatusChanged = await listen('error-status-changed', (event) => {
+        console.log('🚨 [TEST_AREA] 收到错误状态变化事件:', event.payload);
+
+        const errorChange = event.payload as {
+          instanceId: string;
+          errorMessage?: string;
+          hasError: boolean;
+          timestamp: string;
+        };
+
+        // 更新本地实例的错误信息
+        const inst = this.batchDetails?.instances?.find(i => i.instance_id === errorChange.instanceId);
+        if (inst) {
+          (inst as any).error_message = errorChange.hasError ? errorChange.errorMessage : null;
+          
+          console.log(`🚨 [TEST_AREA] 错误状态已更新: ${errorChange.instanceId} - ${errorChange.hasError ? '有错误' : '无错误'}`);
+        }
+
+        // 🔧 新增：智能缓存刷新确保错误信息及时显示
+        this.smartCacheRefresh('error');
+
+        // 立即刷新数据以确保一致性
+        this.scheduleDataRefresh('error-status-changed', this.INSTANT_UPDATE_INTERVAL);
+      });
+
+      // 🔧 新增：监听测试进度变化事件，实时更新进度信息
+      const unlistenProgressChanged = await listen('test-progress-changed', (event) => {
+        console.log('📊 [TEST_AREA] 收到测试进度变化事件:', event.payload);
+
+        const progressChange = event.payload as {
+          batchId: string;
+          completedCount: number;
+          totalCount: number;
+          progressPercentage: number;
+        };
+
+        // 只更新当前批次的进度
+        if (this.selectedBatch && this.selectedBatch.batch_id === progressChange.batchId) {
+          this.testProgress.completedPoints = progressChange.completedCount;
+          this.testProgress.totalPoints = progressChange.totalCount;
+          this.testProgress.progressPercentage = progressChange.progressPercentage;
+          
+          // 立即触发变更检测
+          this.cdr.detectChanges();
+        }
+      });
+
+      // 🔧 新增：监听实例详情变化事件，实时更新实例详情
+      const unlistenInstanceDetailChanged = await listen('instance-detail-changed', (event) => {
+        console.log('🔄 [TEST_AREA] 收到实例详情变化事件:', event.payload);
+
+        const detailChange = event.payload as {
+          instanceId: string;
+          field: string;
+          value: any;
+          timestamp: string;
+        };
+
+        // 更新本地实例的具体字段
+        const inst = this.batchDetails?.instances?.find(i => i.instance_id === detailChange.instanceId);
+        if (inst) {
+          (inst as any)[detailChange.field] = detailChange.value;
+          
+          console.log(`🔄 [TEST_AREA] 实例详情已更新: ${detailChange.instanceId}.${detailChange.field} = ${detailChange.value}`);
+          
+          // 根据字段类型智能刷新
+          if (detailChange.field.includes('status')) {
+            this.smartCacheRefresh('status');
+          } else if (detailChange.field.includes('error')) {
+            this.smartCacheRefresh('error');
+          } else {
+            this.smartCacheRefresh('complete');
+          }
+        }
       });
 
       // 组件销毁时自动注销事件监听
@@ -436,6 +533,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         unsubscribe: () => {
           unlistenCompleted();
           unlistenStatusChanged();
+          unlistenErrorStatusChanged();
+          unlistenProgressChanged();
+          unlistenInstanceDetailChanged();
         }
       });
     } catch (error) {
@@ -1004,6 +1104,46 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  // 🔧 新增：强制清理所有缓存，用于关键状态变化时
+  private forceClearAllCaches(): void {
+    this._filteredInstances = [];
+    this._lastFilterHash = '';
+    this._definitionMap.clear();
+    
+    // 立即重建定义缓存
+    this.rebuildDefinitionCache();
+    
+    // 🔧 新增：强制更新统计信息
+    this.updateModuleTypeStats();
+    
+    // 立即触发变更检测
+    this.cdr.detectChanges();
+  }
+
+  // 🔧 新增：智能缓存刷新，根据变化类型选择刷新策略
+  private smartCacheRefresh(changeType: 'status' | 'error' | 'complete'): void {
+    switch (changeType) {
+      case 'status':
+        // 状态变化：清理过滤缓存，保留定义缓存
+        this._filteredInstances = [];
+        this._lastFilterHash = '';
+        this.updateModuleTypeStats();
+        break;
+      case 'error':
+        // 错误变化：只清理过滤缓存
+        this._filteredInstances = [];
+        this._lastFilterHash = '';
+        break;
+      case 'complete':
+        // 完成变化：全量刷新
+        this.forceClearAllCaches();
+        break;
+    }
+    
+    // 立即触发变更检测
+    this.cdr.detectChanges();
   }
 
   getInstanceStatusColor(status: OverallTestStatus): string {
@@ -1626,8 +1766,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     console.log('🎉 [TEST_AREA] 手动测试完成');
     this.closeManualTestModal();
 
-    // 刷新批次详情以获取最新状态
-    this.loadBatchDetails();
+    // 🔧 新增：强制清理缓存确保状态更新立即显示
+    this.smartCacheRefresh('complete');
+    
+    // 🔧 优化：立即刷新批次详情以获取最新状态
+    this.scheduleDataRefresh('manual-test-completed', this.INSTANT_UPDATE_INTERVAL);
   }
 
   /**

@@ -604,6 +604,13 @@ pub struct ChannelTestInstance {
     /// 重测次数
     pub retries_count: u32,
 
+    /// 百分比测试结果字段 - 存储实际工程量
+    pub test_result_0_percent: Option<f64>,
+    pub test_result_25_percent: Option<f64>,
+    pub test_result_50_percent: Option<f64>,
+    pub test_result_75_percent: Option<f64>,
+    pub test_result_100_percent: Option<f64>,
+
     /// 运行时临时数据，不一定持久化
     #[serde(default)]
     pub transient_data: HashMap<String, serde_json::Value>,
@@ -635,6 +642,11 @@ impl ChannelTestInstance {
             test_plc_communication_address: None,
             current_operator: None,
             retries_count: 0,
+            test_result_0_percent: None,
+            test_result_25_percent: None,
+            test_result_50_percent: None,
+            test_result_75_percent: None,
+            test_result_100_percent: None,
             transient_data: HashMap::new(),
         }
     }

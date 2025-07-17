@@ -349,6 +349,45 @@ impl Default for SubTestItem {
     }
 }
 
+impl Display for SubTestItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            // 通用测试项
+            SubTestItem::HardPoint => "硬点测试",
+            SubTestItem::TrendCheck => "趋势检查",
+            SubTestItem::Trend => "趋势检查",
+            SubTestItem::ReportCheck => "报表检查",
+            SubTestItem::Report => "报表检查",
+            SubTestItem::Maintenance => "维护功能",
+            
+            // AI模块特有测试项
+            SubTestItem::LowLowAlarm => "低低报警测试",
+            SubTestItem::LowAlarm => "低报警测试",
+            SubTestItem::HighAlarm => "高报警测试",
+            SubTestItem::HighHighAlarm => "高高报警测试",
+            SubTestItem::AlarmValueSetting => "报警值设定",
+            SubTestItem::MaintenanceFunction => "维护功能测试",
+            
+            // DI/DO模块特有测试项
+            SubTestItem::StateDisplay => "状态显示测试",
+            
+            // AO模块特有测试项
+            SubTestItem::Output0Percent => "输出0%测试",
+            SubTestItem::Output25Percent => "输出25%测试",
+            SubTestItem::Output50Percent => "输出50%测试",
+            SubTestItem::Output75Percent => "输出75%测试",
+            SubTestItem::Output100Percent => "输出100%测试",
+            
+            // 通信测试项
+            SubTestItem::CommunicationTest => "通信连接测试",
+            
+            // 自定义测试项
+            SubTestItem::Custom(name) => name,
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// 日志级别枚举
 /// 用于系统日志记录
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

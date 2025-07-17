@@ -211,7 +211,7 @@ impl ChannelStateManager {
             let failed_tests: Vec<String> = instance.sub_test_results
                 .iter()
                 .filter(|(_, result)| result.status == SubTestStatus::Failed)
-                .map(|(item, _)| format!("{:?}", item))
+                .map(|(item, _)| format!("{}", item))
                 .collect();
             instance.error_message = Some(format!("测试失败: {}", failed_tests.join(", ")));
         } else {
@@ -393,6 +393,16 @@ impl IChannelStateManager for ChannelStateManager {
                             .transient_data
                             .insert(key.to_string(), serde_json::json!(v));
                         any_written = true;
+                        
+                        // 🔧 新增：同时更新结构体字段
+                        match key {
+                            "test_result_0_percent" => instance.test_result_0_percent = Some(v),
+                            "test_result_25_percent" => instance.test_result_25_percent = Some(v),
+                            "test_result_50_percent" => instance.test_result_50_percent = Some(v),
+                            "test_result_75_percent" => instance.test_result_75_percent = Some(v),
+                            "test_result_100_percent" => instance.test_result_100_percent = Some(v),
+                            _ => {}
+                        }
                     }
                 }
 
@@ -400,26 +410,34 @@ impl IChannelStateManager for ChannelStateManager {
                 if !any_written {
                     if let Some(readings) = &outcome.readings {
                         if readings.len() >= 5 {
-                            instance.transient_data.insert(
-                                "test_result_0_percent".into(),
-                                serde_json::json!(readings[0].actual_reading_eng.map(|v| v as f64)),
-                            );
-                            instance.transient_data.insert(
-                                "test_result_25_percent".into(),
-                                serde_json::json!(readings[1].actual_reading_eng.map(|v| v as f64)),
-                            );
-                            instance.transient_data.insert(
-                                "test_result_50_percent".into(),
-                                serde_json::json!(readings[2].actual_reading_eng.map(|v| v as f64)),
-                            );
-                            instance.transient_data.insert(
-                                "test_result_75_percent".into(),
-                                serde_json::json!(readings[3].actual_reading_eng.map(|v| v as f64)),
-                            );
-                            instance.transient_data.insert(
-                                "test_result_100_percent".into(),
-                                serde_json::json!(readings[4].actual_reading_eng.map(|v| v as f64)),
-                            );
+                            // 🔧 修复：同时更新transient_data和结构体字段
+                            let reading_values = [
+                                readings[0].actual_reading_eng.map(|v| v as f64),
+                                readings[1].actual_reading_eng.map(|v| v as f64),
+                                readings[2].actual_reading_eng.map(|v| v as f64),
+                                readings[3].actual_reading_eng.map(|v| v as f64),
+                                readings[4].actual_reading_eng.map(|v| v as f64),
+                            ];
+                            
+                            let keys = ["test_result_0_percent", "test_result_25_percent", 
+                                       "test_result_50_percent", "test_result_75_percent", 
+                                       "test_result_100_percent"];
+                            
+                            for (i, key) in keys.iter().enumerate() {
+                                if let Some(value) = reading_values[i] {
+                                    instance.transient_data.insert(key.to_string(), serde_json::json!(value));
+                                    
+                                    // 🔧 新增：同时更新结构体字段
+                                    match *key {
+                                        "test_result_0_percent" => instance.test_result_0_percent = Some(value),
+                                        "test_result_25_percent" => instance.test_result_25_percent = Some(value),
+                                        "test_result_50_percent" => instance.test_result_50_percent = Some(value),
+                                        "test_result_75_percent" => instance.test_result_75_percent = Some(value),
+                                        "test_result_100_percent" => instance.test_result_100_percent = Some(value),
+                                        _ => {}
+                                    }
+                                }
+                            }
                         }
                     }
                 }
