@@ -259,43 +259,49 @@ impl ExcelExportService {
 
         let header_fmt = Format::new()
             .set_bold()
+            .set_font_size(12)
             .set_align(FormatAlign::Center)
             .set_background_color(Color::RGB(0xDCE6F1))
             .set_border(FormatBorder::Thin);
 
         let channel_fmt = Format::new()
             .set_bold()
+            .set_font_size(11)
             .set_align(FormatAlign::Center)
             .set_background_color(Color::RGB(0xE8F4FD))
             .set_border(FormatBorder::Thin);
 
         let hardpoint_fmt = Format::new()
+            .set_font_size(10)
             .set_align(FormatAlign::Left)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xFFF2F0));
 
         let manual_fmt = Format::new()
+            .set_font_size(10)
             .set_align(FormatAlign::Left)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xFFF7E6));
 
         let notes_fmt = Format::new()
+            .set_font_size(10)
             .set_align(FormatAlign::Left)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xF6FFED))
             .set_text_wrap();
 
         let stats_fmt = Format::new()
+            .set_font_size(10)
             .set_align(FormatAlign::Left)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xF0F2F5));
 
         // 主标题
-        error_sheet.merge_range(0, 0, 0, 6, "错误信息汇总报告 - 按点位分类", &title_fmt)?;
+        error_sheet.merge_range(0, 0, 0, 7, "错误信息汇总报告 - 按点位分类", &title_fmt)?;
 
         // 表头
         let headers = vec![
-            "点位名称", "变量名称", "通道类型", 
+            "点位名称", "通道位号", "点位描述", "通道类型", 
             "硬点测试错误汇总", "手动测试错误汇总", "用户错误备注汇总", "测试时间"
         ];
         
@@ -326,7 +332,7 @@ impl ExcelExportService {
 
         // 如果没有错误实例，显示提示信息
         if error_instances.is_empty() {
-            error_sheet.merge_range(current_row, 0, current_row, 6, "所有点位测试均通过，无错误信息", &stats_fmt)?;
+            error_sheet.merge_range(current_row, 0, current_row, 7, "所有点位测试均通过，无错误信息", &stats_fmt)?;
             current_row += 2;
         } else {
             // 按点位名称排序
@@ -346,26 +352,27 @@ impl ExcelExportService {
 
                     // 点位基本信息
                     error_sheet.write_with_format(current_row, 0, &def.tag, &channel_fmt)?;
-                    error_sheet.write_with_format(current_row, 1, &def.variable_name, &channel_fmt)?;
-                    error_sheet.write_with_format(current_row, 2, format!("{:?}", def.module_type), &channel_fmt)?;
+                    error_sheet.write_with_format(current_row, 1, &def.channel_tag_in_module, &channel_fmt)?;
+                    error_sheet.write_with_format(current_row, 2, &def.variable_description, &channel_fmt)?;
+                    error_sheet.write_with_format(current_row, 3, format!("{:?}", def.module_type), &channel_fmt)?;
 
                     // 硬点测试错误汇总
                     let hardpoint_errors = self.get_hardpoint_error_summary(instance).await;
-                    error_sheet.write_with_format(current_row, 3, hardpoint_errors, &hardpoint_fmt)?;
+                    error_sheet.write_with_format(current_row, 4, hardpoint_errors, &hardpoint_fmt)?;
 
                     // 手动测试错误汇总
                     let manual_errors = self.get_manual_test_error_summary(instance).await;
-                    error_sheet.write_with_format(current_row, 4, manual_errors, &manual_fmt)?;
+                    error_sheet.write_with_format(current_row, 5, manual_errors, &manual_fmt)?;
 
                     // 用户错误备注汇总
                     let user_notes = self.get_user_notes_summary(instance);
-                    error_sheet.write_with_format(current_row, 5, user_notes, &notes_fmt)?;
+                    error_sheet.write_with_format(current_row, 6, user_notes, &notes_fmt)?;
 
                     // 测试时间
                     let test_time = instance.final_test_time
                         .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
                         .unwrap_or_else(|| "-".into());
-                    error_sheet.write_with_format(current_row, 6, test_time, &stats_fmt)?;
+                    error_sheet.write_with_format(current_row, 7, test_time, &stats_fmt)?;
 
                     current_row += 1;
                 }
