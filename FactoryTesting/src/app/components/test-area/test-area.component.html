@@ -386,12 +386,13 @@
                 <td>
                   <button
                     nz-button
-                    nzType="default"
+                    [nzType]="isManualTestFailed(instance) ? 'primary' : 'default'"
                     nzSize="small"
                     [disabled]="!isManualTestEnabled(instance)"
                     (click)="startManualTest(instance)">
-                    <i nz-icon nzType="setting"></i>
-                    上位机测试
+                    <i nz-icon 
+                       [nzType]="isManualTestFailed(instance) ? 'redo' : 'setting'"></i>
+                    {{ getManualTestButtonText(instance) }}
                   </button>
                 </td>
               </tr>

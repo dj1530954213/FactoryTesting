@@ -18,6 +18,7 @@ import { PlcMonitoringService } from '../../services/plc-monitoring.service';
 import {
   ManualTestStatus,
   ManualTestSubItem,
+  ManualTestSubItemStatus,
   MANUAL_TEST_SUB_ITEM_LABELS,
   MANUAL_TEST_SUB_ITEM_STATUS_COLORS,
   getManualTestConfig
@@ -111,7 +112,7 @@ import {
                   nz-button 
                   nzType="primary" 
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)"
                   (click)="completeSubItem(ManualTestSubItem.ShowValueCheck)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -119,9 +120,9 @@ import {
                 <button 
                   nz-button 
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)"
                   (click)="skipSubItem(ManualTestSubItem.ShowValueCheck)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -143,7 +144,7 @@ import {
                   nz-button 
                   nzType="primary" 
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.MaintenanceFunction)"
                   (click)="completeSubItem(ManualTestSubItem.MaintenanceFunction)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -151,9 +152,9 @@ import {
                 <button 
                   nz-button 
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.MaintenanceFunction)"
                   (click)="skipSubItem(ManualTestSubItem.MaintenanceFunction)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -270,6 +271,16 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
    */
   isSubItemCompleted(subItem: ManualTestSubItem): boolean {
     return this.manualTestService.isSubItemCompleted(subItem);
+  }
+
+  /**
+   * 检查子项是否已通过或跳过（用于按钮disable判断）
+   * 只有通过或跳过的项目才禁用按钮，失败的项目允许重新操作
+   */
+  isSubItemPassedOrSkipped(subItem: ManualTestSubItem): boolean {
+    const status = this.manualTestService.getSubItemStatus(subItem);
+    return status === ManualTestSubItemStatus.Passed || 
+           status === ManualTestSubItemStatus.Skipped;
   }
 
   /**

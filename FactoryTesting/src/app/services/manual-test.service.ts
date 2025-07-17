@@ -168,6 +168,7 @@ export class ManualTestService {
     });
   }
 
+
   /**
    * 取消当前手动测试
    */

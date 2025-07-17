@@ -1721,13 +1721,122 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 检查是否为硬点测试失败
+   * 通过检查硬点测试的具体状态来判断失败原因
+   */
+  private isHardPointTestFailed(instance: ChannelTestInstance): boolean {
+    // 检查是否存在硬点测试结果且状态为失败
+    if (instance.sub_test_results) {
+      for (const [subTestItem, result] of Object.entries(instance.sub_test_results)) {
+        // 硬点测试相关的子测试项
+        if (subTestItem === 'HardPoint' || 
+            subTestItem === 'Output0Percent' || 
+            subTestItem === 'Output25Percent' || 
+            subTestItem === 'Output50Percent' || 
+            subTestItem === 'Output75Percent' || 
+            subTestItem === 'Output100Percent') {
+          if ((result as any).status === 'Failed') {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 检查是否为手动测试失败
+   * 当整体状态为失败但硬点测试通过时，判断为手动测试失败
+   */
+  public isManualTestFailed(instance: ChannelTestInstance): boolean {
+    // 如果整体状态不是失败，则不是手动测试失败
+    if (instance.overall_status !== OverallTestStatus.TestCompletedFailed) {
+      return false;
+    }
+    
+    // 如果是硬点测试失败，则不是手动测试失败
+    if (this.isHardPointTestFailed(instance)) {
+      return false;
+    }
+    
+    // 检查是否存在手动测试项失败
+    if (instance.sub_test_results) {
+      for (const [subTestItem, result] of Object.entries(instance.sub_test_results)) {
+        // 手动测试相关的子测试项
+        if (subTestItem === 'LowLowAlarm' || 
+            subTestItem === 'LowAlarm' || 
+            subTestItem === 'HighAlarm' || 
+            subTestItem === 'HighHighAlarm' || 
+            subTestItem === 'Maintenance' || 
+            subTestItem === 'Trend' || 
+            subTestItem === 'Report' ||
+            subTestItem === 'StateDisplay') {
+          if ((result as any).status === 'Failed') {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * 检查手动测试按钮是否启用
+   * 新逻辑：硬点测试失败时禁用，手动测试失败时允许重测
    */
   isManualTestEnabled(instance: ChannelTestInstance): boolean {
-    // 只有硬点测试通过后才允许手动测试
-    return instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
-           instance.overall_status === OverallTestStatus.TestCompletedPassed ||
-           instance.overall_status === OverallTestStatus.ManualTesting;
+    // 情况1：硬点测试完成，允许手动测试
+    if (instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
+        instance.overall_status === OverallTestStatus.TestCompletedPassed ||
+        instance.overall_status === OverallTestStatus.ManualTesting) {
+      return true;
+    }
+    
+    // 情况2：测试失败时，区分失败类型
+    if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
+      // 如果是硬点测试失败，禁用手动测试
+      if (this.isHardPointTestFailed(instance)) {
+        return false;
+      }
+      
+      // 如果是手动测试失败，允许重新打开手动测试
+      if (this.isManualTestFailed(instance)) {
+        return true;
+      }
+    }
+    
+    // 其他情况禁用
+    return false;
+  }
+
+  /**
+   * 获取手动测试按钮文本
+   * 根据测试状态显示不同的按钮文本
+   */
+  getManualTestButtonText(instance: ChannelTestInstance): string {
+    // 如果正在手动测试中
+    if (instance.overall_status === OverallTestStatus.ManualTesting) {
+      return '测试中...';
+    }
+    
+    // 如果是手动测试失败，显示重测
+    if (this.isManualTestFailed(instance)) {
+      return '重新测试';
+    }
+    
+    // 如果是硬点测试失败，显示禁用状态
+    if (this.isHardPointTestFailed(instance)) {
+      return '硬点测试失败';
+    }
+    
+    // 如果已测试通过
+    if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
+      return '重新测试';
+    }
+    
+    // 默认情况
+    return '上位机测试';
   }
 
   /**

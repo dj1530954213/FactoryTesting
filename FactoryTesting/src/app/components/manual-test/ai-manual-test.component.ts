@@ -138,7 +138,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)"
                   (click)="completeSubItem(ManualTestSubItem.ShowValueCheck)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -146,9 +146,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.ShowValueCheck)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)"
                   (click)="skipSubItem(ManualTestSubItem.ShowValueCheck)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -196,7 +196,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.LowLowAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.LowLowAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.LowLowAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -204,9 +204,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.LowLowAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.LowLowAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.LowLowAlarmTest)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -254,7 +254,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.LowAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.LowAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.LowAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -262,9 +262,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.LowAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.LowAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.LowAlarmTest)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -312,7 +312,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.HighAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.HighAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.HighAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -320,9 +320,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.HighAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.HighAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.HighAlarmTest)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -370,7 +370,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.HighHighAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.HighHighAlarmTest)"
                   (click)="completeSubItem(ManualTestSubItem.HighHighAlarmTest)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -378,9 +378,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.HighHighAlarmTest)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.HighHighAlarmTest)"
                   (click)="skipSubItem(ManualTestSubItem.HighHighAlarmTest)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -427,7 +427,7 @@ import { ModuleType } from '../../models';
                   nz-button
                   nzType="primary"
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.MaintenanceFunction)"
                   (click)="completeSubItem(ManualTestSubItem.MaintenanceFunction)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -435,9 +435,9 @@ import { ModuleType } from '../../models';
                 <button
                   nz-button
                   nzSize="small"
-                  [disabled]="isSubItemCompleted(ManualTestSubItem.MaintenanceFunction)"
+                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.MaintenanceFunction)"
                   (click)="skipSubItem(ManualTestSubItem.MaintenanceFunction)">
-                  <i nz-icon nzType="forward"></i>
+                  <i nz-icon nzType="close"></i>
                   测试失败
                 </button>
               </div>
@@ -624,6 +624,16 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 检查子项是否已通过或跳过（用于按钮disable判断）
+   * 只有通过或跳过的项目才禁用按钮，失败的项目允许重新操作
+   */
+  isSubItemPassedOrSkipped(subItem: ManualTestSubItem): boolean {
+    const status = this.manualTestService.getSubItemStatus(subItem);
+    return status === ManualTestSubItemStatus.Passed || 
+           status === ManualTestSubItemStatus.Skipped;
+  }
+
+  /**
    * 完成子项
    */
   async completeSubItem(subItem: ManualTestSubItem): Promise<void> {
@@ -656,6 +666,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
       }
     });
   }
+
 
   /**
    * 获取已完成数量
