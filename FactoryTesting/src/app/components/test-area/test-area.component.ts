@@ -396,6 +396,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         console.log(`🔄 [TEST_AREA] 处理测试结果: ${testResult.instanceId} - ${testResult.success ? '通过' : '失败'}`);
 
+        // 🔧 去重检查：避免重复计数同一个实例的完成事件
+        if (this.completedTestInstances.has(testResult.instanceId)) {
+          console.log(`⚠️ [TEST_AREA] 实例 ${testResult.instanceId} 已处理过，跳过重复计数`);
+          return;
+        }
+
+        // 添加到已完成集合
+        this.completedTestInstances.add(testResult.instanceId);
+
         // 更新本地状态
         this.updateInstanceStatus(testResult);
 
@@ -404,10 +413,16 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         // 🔧 新增：测试完成计数逻辑
         this.completedTestCount++;
-        console.log(`📊 [TEST_AREA] 测试完成计数: ${this.completedTestCount}/${this.expectedTestCount}`);
+        console.log(`📊 [TEST_AREA] 测试完成计数: ${this.completedTestCount}/${this.expectedTestCount} (实例: ${testResult.instanceId})`);
+        console.log(`📊 [TEST_AREA] 已完成实例列表: [${Array.from(this.completedTestInstances).join(', ')}]`);
+
+        // 🔧 防护检查：确保计数不会超过预期值
+        if (this.completedTestCount > this.expectedTestCount) {
+          console.warn(`⚠️ [TEST_AREA] 异常：完成计数 ${this.completedTestCount} 超过预期 ${this.expectedTestCount}`);
+        }
 
         // 🔧 检查是否所有测试都已完成
-        if (this.isTestingModalVisible && this.completedTestCount >= this.expectedTestCount) {
+        if (this.isTestingModalVisible && this.expectedTestCount > 0 && this.completedTestCount >= this.expectedTestCount) {
           console.log('🎉 [TEST_AREA] 所有测试已完成，关闭弹窗');
           this.closeTestingModal();
         }
@@ -643,6 +658,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   private expectedTestCount = 0;  // 预期要完成的测试数量
   private completedTestCount = 0; // 已完成的测试数量
   private isTestingModalVisible = false; // 测试弹窗是否可见
+  private completedTestInstances = new Set<string>(); // 已完成测试的实例ID，用于去重
 
   // ========= 硬点测试弹窗控制 =========
   private openHardPointTestingModal(): void {
@@ -689,11 +705,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.hardPointModalRef = undefined;
       this.isTestingModalVisible = false;
       
-      // 重置计数器
+      // 重置计数器和去重集合
       this.expectedTestCount = 0;
       this.completedTestCount = 0;
+      this.completedTestInstances.clear();
       
-      console.log('🔧 [TEST_AREA] 测试弹窗已关闭，计数器已重置');
+      console.log('🔧 [TEST_AREA] 测试弹窗已关闭，计数器和去重集合已重置');
     }
   }
 
@@ -701,9 +718,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 初始化测试计数器
    */
   private initializeTestCounter(testCount: number): void {
+    const oldExpected = this.expectedTestCount;
+    const oldCompleted = this.completedTestCount;
+    
     this.expectedTestCount = testCount;
     this.completedTestCount = 0;
-    console.log(`🔧 [TEST_AREA] 初始化测试计数器，预期完成 ${testCount} 个测试`);
+    this.completedTestInstances.clear(); // 清理去重集合
+    
+    console.log(`🔧 [TEST_AREA] 初始化测试计数器：${oldCompleted}/${oldExpected} → 0/${testCount}`);
+    console.log(`🔧 [TEST_AREA] 已清理去重集合，当前弹窗状态：${this.isTestingModalVisible ? '显示' : '隐藏'}`);
   }
 
   /**
@@ -852,16 +875,16 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 初始化测试进度
       this.initializeTestProgress();
 
+      // 🔧 新增：在API调用之前初始化测试计数器，避免时序问题
+      const totalPoints = this.batchDetails?.instances?.length || 0;
+      this.initializeTestCounter(totalPoints);
+
       // 调用后端API开始自动测试
       const result = await this.tauriApiService.startBatchAutoTest(this.selectedBatch.batch_id).toPromise();
 
       if (result && result.success) {
         this.message.success('🚀 通道自动测试已启动', { nzDuration: 2000 });
         console.log('✅ [TEST_AREA] 通道自动测试启动成功');
-
-        // 🔧 新增：初始化测试计数器，设置预期完成的测试数量
-        const totalPoints = this.batchDetails?.instances?.length || 0;
-        this.initializeTestCounter(totalPoints);
 
         // 🔧 优化：测试启动后智能刷新
         this.scheduleDataRefresh('test-started', 800);
@@ -875,9 +898,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       console.error('❌ [TEST_AREA] 启动自动测试失败:', error);
       this.message.error('启动自动测试失败: ' + error);
 
-      // 启动失败时重置状态
+      // 启动失败时重置状态和计数器
       this.isAutoTesting = false;
       this.isTestCompleted = false;
+      this.expectedTestCount = 0;
+      this.completedTestCount = 0;
+      this.completedTestInstances.clear();
     }
   }
 
