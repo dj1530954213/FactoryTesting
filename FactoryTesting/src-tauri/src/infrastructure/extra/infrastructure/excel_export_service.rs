@@ -272,27 +272,29 @@ impl ExcelExportService {
             .set_border(FormatBorder::Thin);
 
         let hardpoint_fmt = Format::new()
-            .set_font_size(10)
-            .set_align(FormatAlign::Left)
+            .set_font_size(12)
+            .set_align(FormatAlign::Center)
             .set_border(FormatBorder::Thin)
-            .set_background_color(Color::RGB(0xFFF2F0));
+            .set_background_color(Color::RGB(0xFFF2F0))
+            .set_text_wrap();
 
         let manual_fmt = Format::new()
-            .set_font_size(10)
-            .set_align(FormatAlign::Left)
+            .set_font_size(12)
+            .set_align(FormatAlign::Center)
             .set_border(FormatBorder::Thin)
-            .set_background_color(Color::RGB(0xFFF7E6));
+            .set_background_color(Color::RGB(0xFFF7E6))
+            .set_text_wrap();
 
         let notes_fmt = Format::new()
-            .set_font_size(10)
-            .set_align(FormatAlign::Left)
+            .set_font_size(12)
+            .set_align(FormatAlign::Center)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xF6FFED))
             .set_text_wrap();
 
         let stats_fmt = Format::new()
-            .set_font_size(10)
-            .set_align(FormatAlign::Left)
+            .set_font_size(12)
+            .set_align(FormatAlign::Center)
             .set_border(FormatBorder::Thin)
             .set_background_color(Color::RGB(0xF0F2F5));
 
@@ -310,6 +312,16 @@ impl ExcelExportService {
             error_sheet.write_with_format(current_row, col as u16, *header, &header_fmt)?;
         }
         current_row += 1;
+
+        // 设置列宽
+        error_sheet.set_column_width(0, 15.0)?; // 点位名称
+        error_sheet.set_column_width(1, 12.0)?; // 通道位号  
+        error_sheet.set_column_width(2, 20.0)?; // 点位描述
+        error_sheet.set_column_width(3, 10.0)?; // 通道类型
+        error_sheet.set_column_width(4, 30.0)?; // 硬点测试错误汇总
+        error_sheet.set_column_width(5, 25.0)?; // 手动测试错误汇总
+        error_sheet.set_column_width(6, 25.0)?; // 用户错误备注汇总
+        error_sheet.set_column_width(7, 18.0)?; // 测试时间
 
         // 筛选出有错误的点位
         let mut error_instances = Vec::new();
@@ -358,21 +370,31 @@ impl ExcelExportService {
 
                     // 硬点测试错误汇总
                     let hardpoint_errors = self.get_hardpoint_error_summary(instance).await;
-                    error_sheet.write_with_format(current_row, 4, hardpoint_errors, &hardpoint_fmt)?;
+                    let hardpoint_lines = hardpoint_errors.matches('\n').count() + 1;
+                    error_sheet.write_with_format(current_row, 4, &hardpoint_errors, &hardpoint_fmt)?;
 
                     // 手动测试错误汇总
                     let manual_errors = self.get_manual_test_error_summary(instance).await;
-                    error_sheet.write_with_format(current_row, 5, manual_errors, &manual_fmt)?;
+                    let manual_lines = manual_errors.matches('\n').count() + 1;
+                    error_sheet.write_with_format(current_row, 5, &manual_errors, &manual_fmt)?;
 
                     // 用户错误备注汇总
                     let user_notes = self.get_user_notes_summary(instance);
-                    error_sheet.write_with_format(current_row, 6, user_notes, &notes_fmt)?;
+                    let notes_lines = user_notes.matches('\n').count() + 1;
+                    error_sheet.write_with_format(current_row, 6, &user_notes, &notes_fmt)?;
 
                     // 测试时间
                     let test_time = instance.final_test_time
                         .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
                         .unwrap_or_else(|| "-".into());
                     error_sheet.write_with_format(current_row, 7, test_time, &stats_fmt)?;
+
+                    // 设置行高，根据内容调整
+                    let max_lines = hardpoint_lines.max(manual_lines).max(notes_lines);
+                    
+                    if max_lines > 1 {
+                        error_sheet.set_row_height(current_row, (max_lines as f64 * 18.0).max(30.0))?;
+                    }
 
                     current_row += 1;
                 }
@@ -480,18 +502,65 @@ impl ExcelExportService {
                 // 错误详情
                 if let Some(details) = &result.details {
                     summary.push_str(&format!("错误信息: {}\n", details));
+                    summary.push_str("\n");
                 }
                 
-                // 期望值和实际值
-                if let Some(expected) = &result.expected_value {
-                    summary.push_str(&format!("期望值: {}\n", expected));
+                // 详细的5个检查点数据
+                summary.push_str("检查点详情:\n");
+                summary.push_str("点位    | 期望值   | 实际值   | 偏差\n");
+                summary.push_str("-------|---------|---------|--------\n");
+                
+                // 0%检查点
+                if let Some(actual_0) = instance.test_result_0_percent {
+                    let expected_0 = self.calculate_expected_value(instance, 0.0).await;
+                    let deviation_0 = self.calculate_deviation(expected_0, actual_0);
+                    summary.push_str(&format!("0%     | {:.2}    | {:.2}    | {:.2}%\n", expected_0, actual_0, deviation_0));
                 }
-                if let Some(actual) = &result.actual_value {
-                    summary.push_str(&format!("实际值: {}\n", actual));
+                
+                // 25%检查点
+                if let Some(actual_25) = instance.test_result_25_percent {
+                    let expected_25 = self.calculate_expected_value(instance, 0.25).await;
+                    let deviation_25 = self.calculate_deviation(expected_25, actual_25);
+                    summary.push_str(&format!("25%    | {:.2}    | {:.2}    | {:.2}%\n", expected_25, actual_25, deviation_25));
+                }
+                
+                // 50%检查点
+                if let Some(actual_50) = instance.test_result_50_percent {
+                    let expected_50 = self.calculate_expected_value(instance, 0.5).await;
+                    let deviation_50 = self.calculate_deviation(expected_50, actual_50);
+                    summary.push_str(&format!("50%    | {:.2}    | {:.2}    | {:.2}%\n", expected_50, actual_50, deviation_50));
+                }
+                
+                // 75%检查点
+                if let Some(actual_75) = instance.test_result_75_percent {
+                    let expected_75 = self.calculate_expected_value(instance, 0.75).await;
+                    let deviation_75 = self.calculate_deviation(expected_75, actual_75);
+                    summary.push_str(&format!("75%    | {:.2}    | {:.2}    | {:.2}%\n", expected_75, actual_75, deviation_75));
+                }
+                
+                // 100%检查点
+                if let Some(actual_100) = instance.test_result_100_percent {
+                    let expected_100 = self.calculate_expected_value(instance, 1.0).await;
+                    let deviation_100 = self.calculate_deviation(expected_100, actual_100);
+                    summary.push_str(&format!("100%   | {:.2}    | {:.2}    | {:.2}%\n", expected_100, actual_100, deviation_100));
+                }
+                
+                // 如果没有百分比数据，显示原有的期望值和实际值
+                if instance.test_result_0_percent.is_none() && 
+                   instance.test_result_25_percent.is_none() && 
+                   instance.test_result_50_percent.is_none() && 
+                   instance.test_result_75_percent.is_none() && 
+                   instance.test_result_100_percent.is_none() {
+                    if let Some(expected) = &result.expected_value {
+                        summary.push_str(&format!("期望值: {}\n", expected));
+                    }
+                    if let Some(actual) = &result.actual_value {
+                        summary.push_str(&format!("实际值: {}\n", actual));
+                    }
                 }
                 
                 // 如果没有详细信息，至少显示失败状态
-                if summary.is_empty() {
+                if summary.trim().is_empty() {
                     summary = "硬点测试失败".to_string();
                 }
                 
@@ -499,6 +568,31 @@ impl ExcelExportService {
             }
         }
         "-".to_string()
+    }
+
+    /// 计算期望值（基于通道范围和百分比）
+    async fn calculate_expected_value(&self, instance: &ChannelTestInstance, percentage: f64) -> f64 {
+        // 获取通道定义以获取工程量范围
+        if let Ok(definitions) = self.persistence_service.load_all_channel_definitions().await {
+            if let Some(def) = definitions.iter().find(|d| d.id == instance.definition_id) {
+                // 计算工程量范围内的期望值
+                let min_value = def.range_low_limit.unwrap_or(0.0) as f64;
+                let max_value = def.range_high_limit.unwrap_or(100.0) as f64;
+                return min_value + (max_value - min_value) * percentage;
+            }
+        }
+        
+        // 如果无法获取工程量范围，使用默认范围 0-100
+        percentage * 100.0
+    }
+    
+    /// 计算偏差百分比
+    fn calculate_deviation(&self, expected: f64, actual: f64) -> f64 {
+        if expected == 0.0 {
+            if actual == 0.0 { 0.0 } else { 100.0 }
+        } else {
+            ((actual - expected) / expected.abs()) * 100.0
+        }
     }
 
     /// 获取手动测试错误汇总
