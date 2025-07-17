@@ -150,6 +150,11 @@ export interface ChannelTestInstance {
   test_result_75_percent?: number;
   test_result_100_percent?: number;
 
+  // 错误备注字段 - 用于人工记录测试失败原因
+  integration_error_notes?: string;        // 集成错误备注
+  plc_programming_error_notes?: string;    // PLC编程错误备注
+  hmi_configuration_error_notes?: string;  // 上位机组态错误备注
+
   // 测试数据字段
   hardpoint_readings?: AnalogReadingPoint[];
   digital_test_steps?: DigitalTestStep[];

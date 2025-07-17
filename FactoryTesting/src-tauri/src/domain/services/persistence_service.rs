@@ -66,6 +66,21 @@ pub trait IPersistenceService: BaseService {
     /// * `instances` - 测试实例列表
     async fn save_test_instances(&self, instances: &[ChannelTestInstance]) -> AppResult<()>;
     
+    /// 更新测试实例的错误备注
+    /// 
+    /// # 参数
+    /// * `instance_id` - 实例ID
+    /// * `integration_error_notes` - 集成错误备注
+    /// * `plc_programming_error_notes` - PLC编程错误备注
+    /// * `hmi_configuration_error_notes` - 上位机组态错误备注
+    async fn update_instance_error_notes(
+        &self,
+        instance_id: &str,
+        integration_error_notes: Option<&str>,
+        plc_programming_error_notes: Option<&str>,
+        hmi_configuration_error_notes: Option<&str>,
+    ) -> AppResult<()>;
+    
     /// 加载测试实例
     /// 
     /// # 参数

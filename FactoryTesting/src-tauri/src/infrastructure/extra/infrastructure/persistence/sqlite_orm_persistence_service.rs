@@ -951,6 +951,53 @@ impl PersistenceService for SqliteOrmPersistenceService {
         Err(AppError::not_implemented_error("save_test_instances (bulk)"))
     }
 
+    async fn update_instance_error_notes(
+        &self,
+        instance_id: &str,
+        integration_error_notes: Option<&str>,
+        plc_programming_error_notes: Option<&str>,
+        hmi_configuration_error_notes: Option<&str>,
+    ) -> AppResult<()> {
+        info!("🛢️ [PERSIST] 更新实例错误备注: instance_id={}", instance_id);
+        
+        use entities::channel_test_instance::{Entity as ChannelTestInstance, Column};
+        use sea_orm::{ActiveModelTrait, Set, EntityTrait, QueryFilter};
+
+        // 查找现有实例
+        let existing_instance = ChannelTestInstance::find()
+            .filter(Column::InstanceId.eq(instance_id))
+            .one(&*self.db_conn)
+            .await
+            .map_err(|e| AppError::persistence_error(format!("查询实例失败: {}", e)))?;
+
+        match existing_instance {
+            Some(instance) => {
+                // 转换为 ActiveModel 以进行更新
+                let mut active_instance: entities::channel_test_instance::ActiveModel = instance.into();
+                
+                // 更新错误备注字段
+                active_instance.integration_error_notes = Set(integration_error_notes.map(|s| s.to_string()));
+                active_instance.plc_programming_error_notes = Set(plc_programming_error_notes.map(|s| s.to_string()));
+                active_instance.hmi_configuration_error_notes = Set(hmi_configuration_error_notes.map(|s| s.to_string()));
+                
+                // 更新时间戳
+                active_instance.updated_time = Set(Utc::now());
+
+                // 保存更新
+                active_instance.update(&*self.db_conn).await
+                    .map_err(|e| AppError::persistence_error(format!("更新实例错误备注失败: {}", e)))?;
+
+                info!("✅ [PERSIST] 实例错误备注更新成功: {}", instance_id);
+                Ok(())
+            },
+            None => {
+                let error_msg = format!("未找到实例: {}", instance_id);
+                error!("❌ [PERSIST] {}", error_msg);
+                Err(AppError::not_found_error("ChannelTestInstance", &error_msg))
+            }
+        }
+    }
+
     async fn query_test_instances(&self, _criteria: &crate::domain::services::persistence_service::QueryCriteria) -> AppResult<Vec<ChannelTestInstance>> {
         Err(AppError::not_implemented_error("query_test_instances"))
     }

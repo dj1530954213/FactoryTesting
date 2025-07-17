@@ -287,7 +287,9 @@ pub fn run() {
                 // 导出通道分配
                 tauri_commands::export_channel_allocation_cmd,
                 // 导出测试结果
-                tauri_commands::export_test_results_cmd
+                tauri_commands::export_test_results_cmd,
+                // 错误备注管理
+                tauri_commands::save_error_notes_cmd
             ])
             .run(tauri::generate_context!())
             .expect("启动 Tauri 应用失败");

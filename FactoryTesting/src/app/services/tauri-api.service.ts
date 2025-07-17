@@ -890,4 +890,42 @@ export class TauriApiService {
     );
   }
 
+  // ============================================================================
+  // 错误备注管理相关命令
+  // ============================================================================
+
+  /**
+   * 保存通道测试实例的错误备注
+   * @param instanceId 通道测试实例ID
+   * @param integrationNotes 集成错误备注
+   * @param plcNotes PLC编程错误备注  
+   * @param hmiNotes 上位机组态错误备注
+   */
+  saveErrorNotes(
+    instanceId: string,
+    integrationNotes: string | null,
+    plcNotes: string | null,
+    hmiNotes: string | null
+  ): Observable<void> {
+    console.log('💾 [TAURI_API] 保存错误备注:', {
+      instanceId,
+      integrationNotes,
+      plcNotes,
+      hmiNotes
+    });
+
+    return from(invoke<void>('save_error_notes_cmd', {
+      instanceId,
+      integrationErrorNotes: integrationNotes,
+      plcProgrammingErrorNotes: plcNotes,
+      hmiConfigurationErrorNotes: hmiNotes
+    })).pipe(
+      tap(() => console.log('✅ [TAURI_API] 错误备注保存成功:', instanceId)),
+      catchError(err => {
+        console.error('❌ [TAURI_API] 错误备注保存失败:', err);
+        throw err;
+      })
+    );
+  }
+
 }

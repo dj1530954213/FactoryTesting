@@ -735,6 +735,10 @@ impl ChannelAllocationService {
             test_result_50_percent: None,
             test_result_75_percent: None,
             test_result_100_percent: None,
+            // 错误备注字段 - 用于人工记录测试失败原因
+            integration_error_notes: None,
+            plc_programming_error_notes: None,
+            hmi_configuration_error_notes: None,
             transient_data: HashMap::new(),
         })
     }

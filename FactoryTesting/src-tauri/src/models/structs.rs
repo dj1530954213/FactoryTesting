@@ -611,6 +611,14 @@ pub struct ChannelTestInstance {
     pub test_result_75_percent: Option<f64>,
     pub test_result_100_percent: Option<f64>,
 
+    /// 错误备注字段 - 用于人工记录测试失败原因
+    /// 集成错误备注 - 系统集成相关的问题
+    pub integration_error_notes: Option<String>,
+    /// PLC编程错误备注 - PLC程序相关的问题  
+    pub plc_programming_error_notes: Option<String>,
+    /// 上位机组态错误备注 - HMI/SCADA组态相关的问题
+    pub hmi_configuration_error_notes: Option<String>,
+
     /// 运行时临时数据，不一定持久化
     #[serde(default)]
     pub transient_data: HashMap<String, serde_json::Value>,
@@ -647,6 +655,10 @@ impl ChannelTestInstance {
             test_result_50_percent: None,
             test_result_75_percent: None,
             test_result_100_percent: None,
+            // 错误备注字段 - 用于人工记录测试失败原因
+            integration_error_notes: None,
+            plc_programming_error_notes: None,
+            hmi_configuration_error_notes: None,
             transient_data: HashMap::new(),
         }
     }

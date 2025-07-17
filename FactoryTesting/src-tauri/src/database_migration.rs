@@ -469,7 +469,10 @@ impl DatabaseMigration {
                 sub_test_results_json TEXT,
                 hardpoint_readings_json TEXT,
                 digital_test_steps_json TEXT,
-                transient_data_json TEXT
+                transient_data_json TEXT,
+                integration_error_notes TEXT,
+                plc_programming_error_notes TEXT,
+                hmi_configuration_error_notes TEXT
             )
         "#;
 
@@ -528,6 +531,10 @@ impl DatabaseMigration {
             ("hardpoint_readings_json", "TEXT"),
             ("digital_test_steps_json", "TEXT"),
             ("transient_data_json", "TEXT"),
+            // 错误备注字段 - 用于人工记录测试失败原因
+            ("integration_error_notes", "TEXT"),
+            ("plc_programming_error_notes", "TEXT"),
+            ("hmi_configuration_error_notes", "TEXT"),
         ];
 
         for (column_name, column_def) in new_columns {

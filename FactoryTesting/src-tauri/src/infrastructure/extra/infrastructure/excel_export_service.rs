@@ -5,10 +5,10 @@ use crate::utils::time_utils;
 use rust_xlsxwriter::{Workbook, Format, FormatAlign, FormatBorder, Color};
 
 use crate::models::{ChannelPointDefinition, ModuleType, ChannelTestInstance};
+use crate::models::enums::{SubTestItem, OverallTestStatus, SubTestStatus};
 use crate::utils::error::{AppResult, AppError};
 use crate::infrastructure::IPersistenceService;
 use crate::domain::services::IChannelStateManager;
-use crate::models::enums::SubTestItem;
 
 /// 颜色常量（柔和不刺眼）
 fn color_for_module(module_type: &ModuleType) -> Color {
@@ -17,7 +17,8 @@ fn color_for_module(module_type: &ModuleType) -> Color {
         ModuleType::AO | ModuleType::AONone => Color::RGB(0xC5E1A5), // LightGreen
         ModuleType::DI | ModuleType::DINone => Color::RGB(0xFFF59D), // LightYellow
         ModuleType::DO | ModuleType::DONone => Color::RGB(0xE1BEE7), // Lavender
-        _ => Color::White,
+        ModuleType::Communication => Color::RGB(0xFFE6CC), // Light Orange
+        ModuleType::Other(_) => Color::White,
     }
 }
 
@@ -229,11 +230,345 @@ impl ExcelExportService {
             sheet.set_column_width(col_index as u16, 18)?;
         }
 
+        // 创建错误信息汇总工作表
+        self.create_error_summary_sheet(&mut workbook, &instances, &def_map).await?;
+
         // 保存
         workbook.save(&file_path)?;
         log::info!("📤 [EXPORT] 测试结果 Excel 已保存到 {}", file_path.to_string_lossy());
         Ok(file_path.to_string_lossy().to_string())
     }
+
+    /// 创建错误信息汇总工作表 - 以点位为基线的错误信息汇总
+    async fn create_error_summary_sheet(
+        &self,
+        workbook: &mut Workbook,
+        instances: &[ChannelTestInstance],
+        def_map: &std::collections::HashMap<String, &ChannelPointDefinition>,
+    ) -> AppResult<()> {
+        let mut error_sheet = workbook.add_worksheet().set_name("错误信息汇总")?;
+
+        // 样式定义
+        let title_fmt = Format::new()
+            .set_bold()
+            .set_font_size(16)
+            .set_align(FormatAlign::Center)
+            .set_background_color(Color::RGB(0x4F81BD))
+            .set_font_color(Color::White)
+            .set_border(FormatBorder::Thin);
+
+        let header_fmt = Format::new()
+            .set_bold()
+            .set_align(FormatAlign::Center)
+            .set_background_color(Color::RGB(0xDCE6F1))
+            .set_border(FormatBorder::Thin);
+
+        let channel_fmt = Format::new()
+            .set_bold()
+            .set_align(FormatAlign::Center)
+            .set_background_color(Color::RGB(0xE8F4FD))
+            .set_border(FormatBorder::Thin);
+
+        let hardpoint_fmt = Format::new()
+            .set_align(FormatAlign::Left)
+            .set_border(FormatBorder::Thin)
+            .set_background_color(Color::RGB(0xFFF2F0));
+
+        let manual_fmt = Format::new()
+            .set_align(FormatAlign::Left)
+            .set_border(FormatBorder::Thin)
+            .set_background_color(Color::RGB(0xFFF7E6));
+
+        let notes_fmt = Format::new()
+            .set_align(FormatAlign::Left)
+            .set_border(FormatBorder::Thin)
+            .set_background_color(Color::RGB(0xF6FFED))
+            .set_text_wrap();
+
+        let stats_fmt = Format::new()
+            .set_align(FormatAlign::Left)
+            .set_border(FormatBorder::Thin)
+            .set_background_color(Color::RGB(0xF0F2F5));
+
+        // 主标题
+        error_sheet.merge_range(0, 0, 0, 6, "错误信息汇总报告 - 按点位分类", &title_fmt)?;
+
+        // 表头
+        let headers = vec![
+            "点位名称", "变量名称", "通道类型", 
+            "硬点测试错误汇总", "手动测试错误汇总", "用户错误备注汇总", "测试时间"
+        ];
+        
+        let mut current_row = 2u32;
+        for (col, header) in headers.iter().enumerate() {
+            error_sheet.write_with_format(current_row, col as u16, *header, &header_fmt)?;
+        }
+        current_row += 1;
+
+        // 筛选出有错误的点位
+        let mut error_instances = Vec::new();
+        for instance in instances {
+            if instance.overall_status == OverallTestStatus::TestCompletedFailed {
+                if let Some(_def) = def_map.get(&instance.definition_id) {
+                    // 检查是否有任何类型的错误
+                    let has_hardpoint_error = self.has_hardpoint_error(instance).await;
+                    let has_manual_error = self.has_manual_test_error(instance).await;
+                    let has_user_notes = instance.integration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+                        || instance.plc_programming_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+                        || instance.hmi_configuration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+
+                    if has_hardpoint_error || has_manual_error || has_user_notes {
+                        error_instances.push(instance);
+                    }
+                }
+            }
+        }
+
+        // 如果没有错误实例，显示提示信息
+        if error_instances.is_empty() {
+            error_sheet.merge_range(current_row, 0, current_row, 6, "所有点位测试均通过，无错误信息", &stats_fmt)?;
+            current_row += 2;
+        } else {
+            // 按点位名称排序
+            error_instances.sort_by(|a, b| {
+                let def_a = def_map.get(&a.definition_id);
+                let def_b = def_map.get(&b.definition_id);
+                match (def_a, def_b) {
+                    (Some(da), Some(db)) => da.tag.cmp(&db.tag),
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+
+            // 为每个有错误的点位创建一行
+            for instance in error_instances {
+                if let Some(def) = def_map.get(&instance.definition_id) {
+                    let start_row = current_row;
+
+                    // 点位基本信息
+                    error_sheet.write_with_format(current_row, 0, &def.tag, &channel_fmt)?;
+                    error_sheet.write_with_format(current_row, 1, &def.variable_name, &channel_fmt)?;
+                    error_sheet.write_with_format(current_row, 2, format!("{:?}", def.module_type), &channel_fmt)?;
+
+                    // 硬点测试错误汇总
+                    let hardpoint_errors = self.get_hardpoint_error_summary(instance).await;
+                    error_sheet.write_with_format(current_row, 3, hardpoint_errors, &hardpoint_fmt)?;
+
+                    // 手动测试错误汇总
+                    let manual_errors = self.get_manual_test_error_summary(instance).await;
+                    error_sheet.write_with_format(current_row, 4, manual_errors, &manual_fmt)?;
+
+                    // 用户错误备注汇总
+                    let user_notes = self.get_user_notes_summary(instance);
+                    error_sheet.write_with_format(current_row, 5, user_notes, &notes_fmt)?;
+
+                    // 测试时间
+                    let test_time = instance.final_test_time
+                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .unwrap_or_else(|| "-".into());
+                    error_sheet.write_with_format(current_row, 6, test_time, &stats_fmt)?;
+
+                    current_row += 1;
+                }
+            }
+        }
+
+        // === 错误统计信息汇总 ===
+        current_row += 1;
+        error_sheet.merge_range(current_row, 0, current_row, 6, "错误统计信息汇总", &title_fmt)?;
+        current_row += 1;
+
+        let total_failed = instances.iter().filter(|i| i.overall_status == OverallTestStatus::TestCompletedFailed).count();
+        let hardpoint_failed = instances.iter().filter(|i| {
+            if i.overall_status == OverallTestStatus::TestCompletedFailed {
+                // 使用同步方式检查硬点错误
+                for (test_item, result) in &i.sub_test_results {
+                    if test_item == &SubTestItem::HardPoint && matches!(result.status, SubTestStatus::Failed) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }).count();
+        
+        let manual_failed = instances.iter().filter(|i| {
+            if i.overall_status == OverallTestStatus::TestCompletedFailed {
+                for (test_item, result) in &i.sub_test_results {
+                    if matches!(test_item, SubTestItem::LowLowAlarm | SubTestItem::LowAlarm | SubTestItem::HighAlarm | SubTestItem::HighHighAlarm | SubTestItem::StateDisplay) {
+                        if matches!(result.status, SubTestStatus::Failed) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        }).count();
+
+        let total_with_notes = instances.iter().filter(|i| {
+            i.integration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+                || i.plc_programming_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+                || i.hmi_configuration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+        }).count();
+
+        let stats = vec![
+            ("总点位数", instances.len()),
+            ("失败点位数", total_failed),
+            ("硬点测试失败", hardpoint_failed),
+            ("手动测试失败", manual_failed),
+            ("有用户备注", total_with_notes),
+        ];
+
+        for (i, (label, count)) in stats.iter().enumerate() {
+            error_sheet.write_with_format(current_row + i as u32, 0, *label, &header_fmt)?;
+            error_sheet.write_with_format(current_row + i as u32, 1, *count as f64, &stats_fmt)?;
+        }
+
+        // 设置列宽 - 优化显示效果
+        let column_widths = vec![20, 25, 15, 35, 35, 35, 20];
+        for (col, width) in column_widths.iter().enumerate() {
+            error_sheet.set_column_width(col as u16, *width)?;
+        }
+
+        // 设置行高以适应文本换行
+        for row in 3..current_row {
+            error_sheet.set_row_height(row, 30)?;
+        }
+
+        log::info!("📊 [EXPORT] 以点位为基线的错误信息汇总工作表创建完成");
+        Ok(())
+    }
+
+    /// 判断是否为硬点测试错误
+    async fn is_hardpoint_test_error(&self, instance: &ChannelTestInstance, _error_msg: &str) -> bool {
+        self.has_hardpoint_error(instance).await
+    }
+
+    /// 检查是否有硬点测试错误
+    async fn has_hardpoint_error(&self, instance: &ChannelTestInstance) -> bool {
+        for (test_item, result) in &instance.sub_test_results {
+            if test_item == &SubTestItem::HardPoint {
+                return matches!(result.status, SubTestStatus::Failed);
+            }
+        }
+        false
+    }
+
+    /// 检查是否有手动测试错误
+    async fn has_manual_test_error(&self, instance: &ChannelTestInstance) -> bool {
+        for (test_item, result) in &instance.sub_test_results {
+            if matches!(test_item, SubTestItem::LowLowAlarm | SubTestItem::LowAlarm | SubTestItem::HighAlarm | SubTestItem::HighHighAlarm | SubTestItem::StateDisplay) {
+                if matches!(result.status, SubTestStatus::Failed) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// 获取硬点测试错误汇总
+    async fn get_hardpoint_error_summary(&self, instance: &ChannelTestInstance) -> String {
+        for (test_item, result) in &instance.sub_test_results {
+            if test_item == &SubTestItem::HardPoint && matches!(result.status, SubTestStatus::Failed) {
+                let mut summary = String::new();
+                
+                // 错误详情
+                if let Some(details) = &result.details {
+                    summary.push_str(&format!("错误信息: {}\n", details));
+                }
+                
+                // 期望值和实际值
+                if let Some(expected) = &result.expected_value {
+                    summary.push_str(&format!("期望值: {}\n", expected));
+                }
+                if let Some(actual) = &result.actual_value {
+                    summary.push_str(&format!("实际值: {}\n", actual));
+                }
+                
+                // 如果没有详细信息，至少显示失败状态
+                if summary.is_empty() {
+                    summary = "硬点测试失败".to_string();
+                }
+                
+                return summary.trim().to_string();
+            }
+        }
+        "-".to_string()
+    }
+
+    /// 获取手动测试错误汇总
+    async fn get_manual_test_error_summary(&self, instance: &ChannelTestInstance) -> String {
+        let mut failed_items = Vec::new();
+        
+        for (test_item, result) in &instance.sub_test_results {
+            if matches!(test_item, SubTestItem::LowLowAlarm | SubTestItem::LowAlarm | SubTestItem::HighAlarm | SubTestItem::HighHighAlarm | SubTestItem::StateDisplay) {
+                if matches!(result.status, SubTestStatus::Failed) {
+                    let item_name = match test_item {
+                        SubTestItem::LowLowAlarm => "低低报警测试",
+                        SubTestItem::LowAlarm => "低报警测试",
+                        SubTestItem::HighAlarm => "高报警测试",
+                        SubTestItem::HighHighAlarm => "高高报警测试",
+                        SubTestItem::StateDisplay => "状态显示测试",
+                        _ => "未知测试项",
+                    };
+                    
+                    let details = result.details.as_ref().map(|d| format!(" ({})", d)).unwrap_or_default();
+                    failed_items.push(format!("{}{}", item_name, details));
+                }
+            }
+        }
+        
+        if failed_items.is_empty() {
+            "-".to_string()
+        } else {
+            failed_items.join("\n")
+        }
+    }
+
+    /// 获取用户错误备注汇总
+    fn get_user_notes_summary(&self, instance: &ChannelTestInstance) -> String {
+        let mut notes = Vec::new();
+        
+        if let Some(integration) = &instance.integration_error_notes {
+            if !integration.trim().is_empty() {
+                notes.push(format!("集成错误: {}", integration.trim()));
+            }
+        }
+        
+        if let Some(plc) = &instance.plc_programming_error_notes {
+            if !plc.trim().is_empty() {
+                notes.push(format!("PLC编程: {}", plc.trim()));
+            }
+        }
+        
+        if let Some(hmi) = &instance.hmi_configuration_error_notes {
+            if !hmi.trim().is_empty() {
+                notes.push(format!("上位机组态: {}", hmi.trim()));
+            }
+        }
+        
+        if notes.is_empty() {
+            "-".to_string()
+        } else {
+            notes.join("\n")
+        }
+    }
+
+    /// 获取失败的手动测试项
+    async fn get_failed_manual_tests(&self, instance: &ChannelTestInstance) -> Vec<(String, String)> {
+        let mut failed_tests = Vec::new();
+        
+        for (test_item, result) in &instance.sub_test_results {
+            // 手动测试相关的项目
+            if matches!(test_item, SubTestItem::LowLowAlarm | SubTestItem::LowAlarm | SubTestItem::HighAlarm | SubTestItem::HighHighAlarm | SubTestItem::StateDisplay) {
+                if matches!(result.status, SubTestStatus::Failed) {
+                    let details = result.details.clone().unwrap_or_else(|| "测试失败".into());
+                    failed_tests.push((format!("{:?}", test_item), details));
+                }
+            }
+        }
+        
+        failed_tests
+    }
+
     pub fn new(
         persistence_service: Arc<dyn IPersistenceService>,
         channel_state_manager: Arc<dyn IChannelStateManager>,

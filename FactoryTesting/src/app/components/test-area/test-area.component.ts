@@ -49,6 +49,7 @@ import {
 import { ManualTestStatus } from '../../models/manual-test.types';
 import { ErrorDetailModalComponent } from './error-detail-modal.component';
 import { ManualTestModalComponent } from '../manual-test/manual-test-modal.component';
+import { ErrorNotesModalComponent } from './error-notes-modal.component';
 
 // 批次测试统计接口
 interface BatchTestStats {
@@ -88,7 +89,8 @@ interface BatchTestStats {
     NzProgressModule,
     NzModalModule,
     ErrorDetailModalComponent,
-    ManualTestModalComponent
+    ManualTestModalComponent,
+    ErrorNotesModalComponent
   ],
   templateUrl: './test-area.component.html',
   styleUrls: ['./test-area.component.css']
@@ -180,6 +182,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   manualTestModalVisible = false;
   selectedManualTestInstance: ChannelTestInstance | null = null;
   selectedManualTestDefinition: ChannelPointDefinition | null = null;
+
+  // 错误备注模态框相关
+  errorNotesModalVisible = false;
+  selectedErrorNotesInstance: ChannelTestInstance | null = null;
+  selectedErrorNotesDefinition: ChannelPointDefinition | null = null;
 
   constructor(
     private tauriApiService: TauriApiService,
@@ -1658,12 +1665,30 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 检查单个通道测试按钮是否应该禁用
    */
   isChannelTestDisabled(instance: ChannelTestInstance): boolean {
-    // 当状态为"通过"或"测试中"时禁用按钮
-    return instance.overall_status === OverallTestStatus.TestCompletedPassed ||
-           instance.overall_status === OverallTestStatus.HardPointTesting ||
-           instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
-           instance.overall_status === OverallTestStatus.ManualTesting ||
-           instance.overall_status === OverallTestStatus.ManualTestInProgress;
+    // 正在测试中时禁用按钮
+    if (instance.overall_status === OverallTestStatus.HardPointTesting ||
+        instance.overall_status === OverallTestStatus.ManualTesting ||
+        instance.overall_status === OverallTestStatus.ManualTestInProgress) {
+      return true;
+    }
+
+    // 整体测试通过时禁用按钮
+    if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
+      return true;
+    }
+
+    // 硬点测试完成且未失败时禁用按钮
+    if (instance.overall_status === OverallTestStatus.HardPointTestCompleted) {
+      return true;
+    }
+
+    // 如果整体状态是失败，只有硬点测试失败时才启用硬点重测按钮
+    if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
+      return !this.isHardPointTestFailed(instance);
+    }
+
+    // 其他情况启用按钮（未测试、接线确认等）
+    return false;
   }
 
   /**
@@ -1889,6 +1914,66 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.manualTestModalVisible = false;
     this.selectedManualTestInstance = null;
     this.selectedManualTestDefinition = null;
+  }
+
+  /**
+   * 检查是否显示错误备注按钮
+   * 当通道整体状态为失败时显示错误备注按钮
+   */
+  showErrorNotesButton(instance: ChannelTestInstance): boolean {
+    return instance.overall_status === OverallTestStatus.TestCompletedFailed;
+  }
+
+  /**
+   * 打开错误备注模态框
+   */
+  openErrorNotesModal(instance: ChannelTestInstance): void {
+    try {
+      console.log('📝 [TEST_AREA] 打开错误备注模态框:', instance.instance_id);
+
+      // 获取通道定义信息
+      const definition = this.getDefinitionByInstanceId(instance.instance_id);
+      if (!definition) {
+        this.message.error('无法找到通道定义信息');
+        return;
+      }
+
+      // 设置选中的实例和定义
+      this.selectedErrorNotesInstance = instance;
+      this.selectedErrorNotesDefinition = definition;
+
+      // 打开错误备注模态框
+      this.errorNotesModalVisible = true;
+
+      console.log('✅ [TEST_AREA] 错误备注模态框已打开');
+
+    } catch (error) {
+      console.error('❌ [TEST_AREA] 打开错误备注模态框失败:', error);
+      this.message.error(`打开错误备注模态框失败: ${error}`);
+    }
+  }
+
+  /**
+   * 错误备注保存完成处理
+   */
+  onErrorNotesSaved(): void {
+    console.log('💾 [TEST_AREA] 错误备注保存完成');
+    this.closeErrorNotesModal();
+    
+    // 强制清理缓存确保状态更新立即显示
+    this.smartCacheRefresh('complete');
+    
+    // 立即刷新批次详情以获取最新状态
+    this.scheduleDataRefresh('error-notes-saved', this.INSTANT_UPDATE_INTERVAL);
+  }
+
+  /**
+   * 关闭错误备注模态框
+   */
+  closeErrorNotesModal(): void {
+    this.errorNotesModalVisible = false;
+    this.selectedErrorNotesInstance = null;
+    this.selectedErrorNotesDefinition = null;
   }
 
   /**

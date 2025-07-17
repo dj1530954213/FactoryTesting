@@ -384,16 +384,29 @@
                   </button>
                 </td>
                 <td>
-                  <button
-                    nz-button
-                    [nzType]="isManualTestFailed(instance) ? 'primary' : 'default'"
-                    nzSize="small"
-                    [disabled]="!isManualTestEnabled(instance)"
-                    (click)="startManualTest(instance)">
-                    <i nz-icon 
-                       [nzType]="isManualTestFailed(instance) ? 'redo' : 'setting'"></i>
-                    {{ getManualTestButtonText(instance) }}
-                  </button>
+                  <div class="manual-test-actions">
+                    <button
+                      nz-button
+                      [nzType]="isManualTestFailed(instance) ? 'primary' : 'default'"
+                      nzSize="small"
+                      [disabled]="!isManualTestEnabled(instance)"
+                      (click)="startManualTest(instance)">
+                      <i nz-icon 
+                         [nzType]="isManualTestFailed(instance) ? 'redo' : 'setting'"></i>
+                      {{ getManualTestButtonText(instance) }}
+                    </button>
+                    <button
+                      *ngIf="showErrorNotesButton(instance)"
+                      nz-button
+                      nzType="default"
+                      nzSize="small"
+                      nzTitle="添加错误备注"
+                      (click)="openErrorNotesModal(instance)"
+                      style="margin-left: 4px;">
+                      <i nz-icon nzType="edit"></i>
+                      备注
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -419,5 +432,14 @@
     (visibleChange)="closeManualTestModal()"
     (testCompleted)="onManualTestCompleted()">
   </app-manual-test-modal>
+
+  <!-- 错误备注模态框 -->
+  <app-error-notes-modal
+    [(visible)]="errorNotesModalVisible"
+    [instance]="selectedErrorNotesInstance"
+    [definition]="selectedErrorNotesDefinition"
+    (visibleChange)="closeErrorNotesModal()"
+    (notesSaved)="onErrorNotesSaved()">
+  </app-error-notes-modal>
 
 </div>

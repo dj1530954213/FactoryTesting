@@ -713,4 +713,16 @@
 .ant-statistic-title {
   color: #595959;
   font-weight: 500;
+}
+
+/* 手动测试操作区域样式 */
+.manual-test-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.manual-test-actions button {
+  flex-shrink: 0;
 } 

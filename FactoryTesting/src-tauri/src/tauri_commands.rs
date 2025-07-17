@@ -976,3 +976,37 @@ pub async fn export_channel_allocation_cmd(
         }
     }
 }
+
+// ============================================================================
+// 错误备注管理命令
+// ============================================================================
+
+/// 保存通道测试实例的错误备注
+#[tauri::command]
+pub async fn save_error_notes_cmd(
+    state: State<'_, AppState>,
+    instance_id: String,
+    integration_error_notes: Option<String>,
+    plc_programming_error_notes: Option<String>,
+    hmi_configuration_error_notes: Option<String>,
+) -> Result<(), String> {
+    log::info!("💾 [CMD] 保存错误备注: instance_id={}, integration={:?}, plc={:?}, hmi={:?}", 
+        instance_id, integration_error_notes, plc_programming_error_notes, hmi_configuration_error_notes);
+
+    // 调用持久化服务更新错误备注
+    match state.persistence_service.update_instance_error_notes(
+        &instance_id,
+        integration_error_notes.as_deref(),
+        plc_programming_error_notes.as_deref(),
+        hmi_configuration_error_notes.as_deref(),
+    ).await {
+        Ok(_) => {
+            log::info!("✅ [CMD] 错误备注保存成功: {}", instance_id);
+            Ok(())
+        },
+        Err(e) => {
+            log::error!("❌ [CMD] 错误备注保存失败: {}: {}", instance_id, e);
+            Err(e.to_string())
+        }
+    }
+}

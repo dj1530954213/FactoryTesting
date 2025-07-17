@@ -115,6 +115,14 @@ pub struct Model {
     #[sea_orm(column_type = "Double", nullable)]
     pub test_result_100_percent: Option<f64>,
 
+    // 错误备注字段 - 用于人工记录测试失败原因
+    #[sea_orm(column_type = "Text", nullable)]
+    pub integration_error_notes: Option<String>, // 集成错误备注
+    #[sea_orm(column_type = "Text", nullable)]
+    pub plc_programming_error_notes: Option<String>, // PLC编程错误备注
+    #[sea_orm(column_type = "Text", nullable)]
+    pub hmi_configuration_error_notes: Option<String>, // 上位机组态错误备注
+
     // 复杂数据结构（JSON存储）
     #[sea_orm(column_type = "Text", nullable)]
     pub sub_test_results_json: Option<String>, // 子测试结果JSON
@@ -301,6 +309,11 @@ impl From<&crate::models::structs::ChannelTestInstance> for ActiveModel {
             test_result_100_percent: Set(original.transient_data.get("test_result_100_percent")
                 .and_then(|v| v.as_f64())),
 
+            // 错误备注字段
+            integration_error_notes: Set(original.integration_error_notes.clone()),
+            plc_programming_error_notes: Set(original.plc_programming_error_notes.clone()),
+            hmi_configuration_error_notes: Set(original.hmi_configuration_error_notes.clone()),
+
             sub_test_results_json: Set(sub_test_results_json),
             hardpoint_readings_json: Set(hardpoint_readings_json),
             digital_test_steps_json: Set(digital_test_steps_json),
@@ -382,6 +395,10 @@ impl From<&Model> for crate::models::structs::ChannelTestInstance {
             test_result_50_percent: model.test_result_50_percent,
             test_result_75_percent: model.test_result_75_percent,
             test_result_100_percent: model.test_result_100_percent,
+            // 错误备注字段
+            integration_error_notes: model.integration_error_notes.clone(),
+            plc_programming_error_notes: model.plc_programming_error_notes.clone(),
+            hmi_configuration_error_notes: model.hmi_configuration_error_notes.clone(),
             transient_data,
             test_plc_channel_tag: model.test_plc_channel_tag.clone(),
             test_plc_communication_address: model.test_plc_communication_address.clone(),
@@ -449,6 +466,10 @@ impl Model {
             test_result_50_percent: None,
             test_result_75_percent: None,
             test_result_100_percent: None,
+            // 错误备注字段默认值
+            integration_error_notes: None,
+            plc_programming_error_notes: None,
+            hmi_configuration_error_notes: None,
             sub_test_results_json: None,
             hardpoint_readings_json: None,
             digital_test_steps_json: None,
