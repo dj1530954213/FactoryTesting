@@ -151,6 +151,7 @@ pub async fn parse_excel_file(
             })
         }
         Err(e) => {
+            // 错误处理：返回失败响应
             error!("Excel文件解析失败: {}", e);
             Ok(ParseExcelResponse {
                 success: false,
@@ -164,12 +165,23 @@ pub async fn parse_excel_file(
 
 /// 创建测试批次
 ///
+/// 业务说明：
+/// 创建新的测试批次，包括保存批次信息和关联的通道定义
+/// 这是数据导入流程的第二步，将解析的数据持久化到数据库
+/// 
+/// 调用链：
+/// 前端 -> create_test_batch -> PersistenceService -> 数据库
+/// 
 /// # 参数
 /// * `batch_data` - 批次创建请求数据
 /// * `state` - 应用状态
 ///
 /// # 返回
 /// * `Result<CreateBatchResponse, String>` - 创建结果
+/// 
+/// Rust知识点：
+/// - Clone trait 用于复制数据，避免所有权转移
+/// - as u32 显式类型转换
 #[tauri::command]
 pub async fn create_test_batch(
     batch_data: CreateBatchRequest,
@@ -180,6 +192,7 @@ pub async fn create_test_batch(
           batch_data.batch_info.serial_number);
 
     // 创建测试批次信息
+    // 业务说明：TestBatchInfo::new 会自动生成唯一的批次ID
     let mut test_batch = TestBatchInfo::new(
         Some(batch_data.batch_info.product_model.clone()),
         Some(batch_data.batch_info.serial_number.clone()),
@@ -194,6 +207,7 @@ pub async fn create_test_batch(
     // test_batch.source_file_path = Some(batch_data.file_path.clone());
 
     // 获取持久化服务
+    // Rust知识点：&state 获取State的引用，避免所有权转移
     let persistence_service = &state.persistence_service;
 
     // 保存批次信息
@@ -202,6 +216,8 @@ pub async fn create_test_batch(
             info!("测试批次创建成功: {}", test_batch.batch_id);
 
             // 将批次ID添加到当前会话跟踪中
+            // 业务说明：会话跟踪用于区分不同用户的批次，避免数据混淆
+            // Rust知识点：作用域{}确保锁在使用后立即释放
             {
                 let mut session_batch_ids = state.session_batch_ids.lock().await;
                 session_batch_ids.insert(test_batch.batch_id.clone());
@@ -209,19 +225,23 @@ pub async fn create_test_batch(
             }
 
             // 🔥 保存通道定义（设置批次ID）
+            // 业务说明：通道定义必须关联到批次，建立一对多关系
             let mut saved_count = 0;
             let mut updated_definitions = batch_data.preview_data.clone();
 
             // 为每个通道定义设置批次ID
+            // Rust知识点：&mut 可变引用，允许修改数据
             for definition in &mut updated_definitions {
                 definition.batch_id = Some(test_batch.batch_id.clone());
                 info!("🔗 为通道定义 {} 设置批次ID: {}", definition.tag, test_batch.batch_id);
             }
 
+            // 批量保存通道定义
             for definition in &updated_definitions {
                 match persistence_service.save_channel_definition(definition).await {
                     Ok(_) => saved_count += 1,
                     Err(e) => {
+                        // 单个保存失败不影响整体流程，记录错误继续
                         error!("保存通道定义失败: {} - {}", definition.tag, e);
                     }
                 }
@@ -236,6 +256,7 @@ pub async fn create_test_batch(
             })
         }
         Err(e) => {
+            // 批次创建失败，返回错误信息
             error!("创建测试批次失败: {}", e);
             Ok(CreateBatchResponse {
                 success: false,
@@ -247,21 +268,28 @@ pub async fn create_test_batch(
 }
 
 /// 获取批次列表 - 用于测试区域，只返回当前会话的批次
+/// 
+/// 业务说明：
+/// 为了多用户隔离，只返回当前会话创建的批次
+/// 避免不同用户看到其他人的测试数据
+/// 
+/// 调用链：
+/// 前端测试区域 -> get_batch_list -> PersistenceService -> 过滤当前会话批次
 #[tauri::command]
 pub async fn get_batch_list(
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
-
-
     let persistence_service = &state.persistence_service;
 
     // 获取当前会话中的批次ID列表
+    // Rust知识点：使用作用域{}来控制锁的生命周期，避免死锁
     let session_batch_ids = {
         let session_batch_ids_guard = state.session_batch_ids.lock().await;
-        session_batch_ids_guard.clone()
+        session_batch_ids_guard.clone()  // 克隆数据后立即释放锁
     };
 
     // 如果当前会话中没有批次，直接返回空列表
+    // 业务说明：优化性能，避免不必要的数据库查询
     if session_batch_ids.is_empty() {
         return Ok(vec![]);
     }
@@ -269,10 +297,10 @@ pub async fn get_batch_list(
     match persistence_service.load_all_batch_info().await {
         Ok(batches) => {
             // 只返回当前会话中创建的批次
+            // Rust知识点：into_iter() 消费原集合，filter() 过滤，collect() 收集结果
             let current_session_batches: Vec<TestBatchInfo> = batches.into_iter()
                 .filter(|batch| session_batch_ids.contains(&batch.batch_id))
                 .collect();
-
 
             Ok(current_session_batches)
         }
@@ -284,15 +312,29 @@ pub async fn get_batch_list(
 }
 
 /// 仪表盘批次信息 - 包含是否为当前会话的标识
+/// 
+/// 业务说明：
+/// 仪表盘需要显示所有历史批次，但要区分当前会话和历史批次
+/// 
+/// Rust知识点：
+/// - #[serde(flatten)] 将嵌套结构体的字段平铺到当前层级
 #[derive(Debug, Serialize)]
 pub struct DashboardBatchInfo {
     #[serde(flatten)]
-    pub batch_info: TestBatchInfo,
-    pub is_current_session: bool,  // 是否为当前会话的批次
-    pub has_station_name: bool,    // 是否有站场名称（用于调试）
+    pub batch_info: TestBatchInfo,             // 批次基本信息
+    pub is_current_session: bool,              // 是否为当前会话的批次
+    pub has_station_name: bool,                // 是否有站场名称（用于调试）
 }
 
 /// 获取仪表盘批次列表 - 从数据库获取所有批次，并标识当前会话批次
+/// 
+/// 业务说明：
+/// 1. 加载所有历史批次数据
+/// 2. 尝试修复缺失的站场信息（历史数据修复）
+/// 3. 标识哪些是当前会话的批次
+/// 
+/// 调用链：
+/// 前端仪表盘 -> get_dashboard_batch_list -> PersistenceService -> 返回所有批次
 #[tauri::command]
 pub async fn get_dashboard_batch_list(
     state: State<'_, AppState>
@@ -308,9 +350,8 @@ pub async fn get_dashboard_batch_list(
     // 从数据库加载所有批次信息
     match persistence_service.load_all_batch_info().await {
         Ok(mut batches) => {
-
-
             // 🔧 修复：检查并修复缺失的站场信息
+            // 业务说明：早期版本可能没有保存站场信息，这里尝试从测试实例中恢复
             for batch in &mut batches {
                 if batch.station_name.is_none() {
                     // 尝试从关联的测试实例中恢复站场信息
@@ -322,6 +363,7 @@ pub async fn get_dashboard_batch_list(
                                     batch.station_name = Some(station_from_instance.clone());
 
                                     // 将恢复的站场信息保存回数据库
+                                    // Rust知识点：if let Err(e) 模式匹配错误情况
                                     if let Err(e) = persistence_service.save_batch_info(batch).await {
                                         warn!("保存恢复的站场信息失败: {}", e);
                                     }
@@ -336,12 +378,11 @@ pub async fn get_dashboard_batch_list(
             }
 
             // 转换为仪表盘批次信息，并标识当前会话批次
+            // Rust知识点：map() 转换每个元素，闭包 |batch| 捕获参数
             let dashboard_batches: Vec<DashboardBatchInfo> = batches.into_iter()
                 .map(|batch| {
                     let is_current_session = session_batch_ids.contains(&batch.batch_id);
                     let has_station_name = batch.station_name.is_some();
-
-
 
                     DashboardBatchInfo {
                         batch_info: batch,
@@ -351,12 +392,11 @@ pub async fn get_dashboard_batch_list(
                 })
                 .collect();
 
+            // 统计当前会话和历史批次数量（用于日志）
             let current_session_count = dashboard_batches.iter()
                 .filter(|b| b.is_current_session)
                 .count();
             let historical_count = dashboard_batches.len() - current_session_count;
-
-
 
             Ok(dashboard_batches)
         }
@@ -368,6 +408,14 @@ pub async fn get_dashboard_batch_list(
 }
 
 /// 从测试实例中提取站场信息的辅助函数
+/// 
+/// 业务说明：
+/// 尝试从多个来源提取站场信息，用于修复历史数据
+/// 
+/// 优先级：
+/// 1. 从批次名称中提取
+/// 2. 从实例ID中提取
+/// 3. 返回默认值
 fn extract_station_from_instance(instance: &crate::models::structs::ChannelTestInstance) -> Option<String> {
     // 尝试从测试批次名称中提取站场信息
     if let Some(station) = extract_station_from_description(&instance.test_batch_name) {
@@ -384,6 +432,10 @@ fn extract_station_from_instance(instance: &crate::models::structs::ChannelTestI
 }
 
 /// 从描述文本中提取站场信息
+/// 
+/// 业务说明：
+/// 使用预定义的站场名称模式进行匹配
+/// 这些是常见的电厂和能源集团名称
 fn extract_station_from_description(description: &str) -> Option<String> {
     // 常见的站场名称模式
     let station_patterns = [
@@ -391,6 +443,7 @@ fn extract_station_from_description(description: &str) -> Option<String> {
         "华电集团", "神华集团", "中煤集团", "国家电投"
     ];
 
+    // Rust知识点：&station_patterns 引用数组，避免所有权转移
     for pattern in &station_patterns {
         if description.contains(pattern) {
             return Some(pattern.to_string());
@@ -401,9 +454,14 @@ fn extract_station_from_description(description: &str) -> Option<String> {
 }
 
 /// 从标签中提取站场信息
+/// 
+/// 业务说明：
+/// 根据标签前缀判断站场，这是一种简化的站场识别规则
+/// ZY = 樟洋电厂, HN = 华能电厂, DT = 大唐电厂
 fn extract_station_from_tag(tag: &str) -> Option<String> {
     // 如果标签包含站场信息的前缀，尝试提取
     if tag.len() > 2 {
+        // Rust知识点：&tag[..2] 字符串切片，获取前两个字符
         let prefix = &tag[..2];
         match prefix {
             "ZY" => Some("樟洋电厂".to_string()),
@@ -417,6 +475,13 @@ fn extract_station_from_tag(tag: &str) -> Option<String> {
 }
 
 /// 获取批次的通道定义列表
+/// 
+/// 业务说明：
+/// 获取指定批次关联的所有通道定义
+/// 用于显示批次详情或进行测试准备
+/// 
+/// 调用链：
+/// 前端 -> get_batch_channel_definitions -> PersistenceService -> 返回通道定义
 #[tauri::command]
 pub async fn get_batch_channel_definitions(
     batch_id: String,
@@ -428,7 +493,7 @@ pub async fn get_batch_channel_definitions(
 
     match persistence_service.load_all_channel_definitions().await {
         Ok(definitions) => {
-            // 这里应该根据batch_id过滤，但目前的持久化服务接口还不支持
+            // TODO: 这里应该根据batch_id过滤，但目前的持久化服务接口还不支持
             // 暂时返回所有定义
             info!("成功获取{}个通道定义", definitions.len());
             Ok(definitions)
@@ -445,21 +510,24 @@ pub async fn get_batch_channel_definitions(
 // ============================================================================
 
 /// 导入Excel并准备批次的参数
+/// 
+/// 业务说明：
+/// 这是核心导入流程的请求参数
 #[derive(Debug, Deserialize)]
 pub struct ImportExcelAndPrepareBatchCmdArgs {
-    //文件地址
-    pub file_path_str: String,
-    //没有使用
-    pub product_model: Option<String>,
-    //没有使用
-    pub serial_number: Option<String>,
+    pub file_path_str: String,              // Excel文件路径
+    pub product_model: Option<String>,      // 产品型号（目前未使用）
+    pub serial_number: Option<String>,      // 序列号（目前未使用）
 }
 
 /// 导入Excel并准备批次的响应
+/// 
+/// 业务说明：
+/// 返回创建的批次信息、分配的测试实例和统计摘要
 #[derive(Debug, Serialize)]
 pub struct ImportAndPrepareBatchResponse {
-    pub batch_info: TestBatchInfo,
-    pub instances: Vec<crate::models::ChannelTestInstance>,
+    pub batch_info: TestBatchInfo,                      // 批次信息
+    pub instances: Vec<crate::models::ChannelTestInstance>, // 分配的测试实例
     /// 分配摘要（包含各模块类型点位数量等统计信息）
     pub allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary,
 }
@@ -467,50 +535,73 @@ pub struct ImportAndPrepareBatchResponse {
 /// 开始批次测试的参数
 #[derive(Debug, Deserialize)]
 pub struct StartTestsForBatchCmdArgs {
-    pub batch_id: String,
+    pub batch_id: String,                   // 要开始测试的批次ID
 }
 
 /// 获取批次状态的参数
 #[derive(Debug, Deserialize)]
 pub struct GetBatchStatusCmdArgs {
-    pub batch_id: String,
+    pub batch_id: String,                   // 要查询状态的批次ID
 }
 
 /// 批次详情载荷
+/// 
+/// 业务说明：
+/// 包含批次的完整信息，用于前端显示批次详情
 #[derive(Debug, Serialize)]
 pub struct BatchDetailsPayload {
-    pub batch_info: TestBatchInfo,
-    pub instances: Vec<crate::models::ChannelTestInstance>,
-    pub definitions: Vec<ChannelPointDefinition>,
-    pub allocation_summary: AllocationSummary,
-    pub progress: BatchProgressInfo,
+    pub batch_info: TestBatchInfo,                      // 批次基本信息
+    pub instances: Vec<crate::models::ChannelTestInstance>, // 测试实例列表
+    pub definitions: Vec<ChannelPointDefinition>,       // 通道定义列表
+    pub allocation_summary: AllocationSummary,          // 分配统计
+    pub progress: BatchProgressInfo,                    // 进度信息
 }
 
 /// 批次进度信息
+/// 
+/// 业务说明：
+/// 实时统计批次的测试进度
 #[derive(Debug, Serialize)]
 pub struct BatchProgressInfo {
-    pub total_points: u32,
-    pub tested_points: u32,
-    pub passed_points: u32,
-    pub failed_points: u32,
-    pub skipped_points: u32,
+    pub total_points: u32,                  // 总点位数
+    pub tested_points: u32,                 // 已测试点位数
+    pub passed_points: u32,                 // 通过的点位数
+    pub failed_points: u32,                 // 失败的点位数
+    pub skipped_points: u32,                // 跳过的点位数
 }
 
 /// 导入Excel文件并自动分配批次(核心逻辑，前端调用的入口点)
+/// 
+/// 业务说明：
+/// 这是整个数据导入流程的核心入口，执行以下步骤：
+/// 1. 清理旧数据和状态
+/// 2. 解析Excel文件
+/// 3. 初始化全局功能测试
+/// 4. 创建批次和分配通道
+/// 5. 保存所有数据到数据库
+/// 
+/// 调用链：
+/// 前端 -> import_excel_and_prepare_batch_cmd -> ExcelImporter -> BatchAllocationService -> PersistenceService
+/// 
+/// Rust知识点：
+/// - async/await 异步编程模式
+/// - Result<T, E> 错误处理
+/// - 作用域 {} 控制锁的生命周期
 #[tauri::command]
 pub async fn import_excel_and_prepare_batch_cmd(
     args: ImportExcelAndPrepareBatchCmdArgs,
     state: State<'_, AppState>
 ) -> Result<ImportAndPrepareBatchResponse, String> {
-    //State<'_, AppState>AppState 是全局状态结构体，它包含了整个应用共享的数据和服务(依赖注入)
+    // State<'_, AppState>AppState 是全局状态结构体，它包含了整个应用共享的数据和服务(依赖注入)
+    
     // ===== 先行清空旧的内存状态 & 会话批次 =====
+    // 业务说明：确保每次导入都是干净的状态，避免数据混乱
     state.channel_state_manager.clear_caches().await;
     {
+        // Rust知识点：使用作用域{}来限制锁的生命周期
         let mut ids = state.session_batch_ids.lock().await;
         ids.clear();
     }
-
-    // 1. 解析Excel文件
 
     // 1. 解析Excel文件
     let definitions = match ExcelImporter::parse_excel_file(&args.file_path_str).await {
@@ -522,18 +613,21 @@ pub async fn import_excel_and_prepare_batch_cmd(
     };
 
     // === 为新站场初始化全局功能测试状态 ===
+    // 业务说明：每个站场都需要进行全局功能测试（如报警测试、通信测试等）
     {
         use std::collections::HashSet;
         use crate::models::structs::{GlobalFunctionTestStatus, GlobalFunctionKey, default_id};
         use crate::models::enums::OverallTestStatus;
-        //使用HashSet来存储站场名称，避免重复
+        
+        // 使用HashSet来存储站场名称，避免重复
         let mut stations: HashSet<String> = HashSet::new();
         for def in &definitions {
             stations.insert(def.station_name.clone());
         }
+        
         let import_time = chrono::Utc::now().to_rfc3339();
         for station in stations {
-            //根据站场名和时间查询数据库，但是导入的时候肯定是新的记录，所以这部分应该永远都是空的
+            // 根据站场名和时间查询数据库，但是导入的时候肯定是新的记录，所以这部分应该永远都是空的
             let existing = match state.persistence_service.load_global_function_test_statuses_by_station_time(&station, &import_time).await {
                 Ok(v) => v,
                 Err(e) => {
@@ -541,21 +635,25 @@ pub async fn import_excel_and_prepare_batch_cmd(
                     Vec::new()
                 }
             };
-            //如果查询结果为空，说明是新的站场，需要初始化
+            
+            // 如果查询结果为空，说明是新的站场，需要初始化
             if existing.is_empty() {
-                                    // 先调用确保批次默认记录存在（幂等）
+                // 先调用确保批次默认记录存在（幂等）
+                    // 确保全局功能测试记录存在（幂等操作）
                     if let Err(e) = state.persistence_service.ensure_global_function_tests(&station, &import_time).await {
                         error!("初始化全局功能测试状态失败: {}", e);
                     }
-                //TODO!:这里加载的是上位机功能检查的5个项
-                // `ensure_global_function_tests` 已确保数据库存在 5 条默认记录，这里仅同步到内存缓存
-                if let Ok(list) = state
-                    .persistence_service
-                    .load_global_function_test_statuses_by_station_time(&station, &import_time)
-                    .await {
-                    //将数据库中的上位机功能检查状态填充至内存中
-                    let mut guard = state.global_function_tests.lock().await;
-                    guard.extend(list);
+                    
+                    // TODO: 这里加载的是上位机功能检查的5个项
+                    // `ensure_global_function_tests` 已确保数据库存在 5 条默认记录，这里仅同步到内存缓存
+                    if let Ok(list) = state
+                        .persistence_service
+                        .load_global_function_test_statuses_by_station_time(&station, &import_time)
+                        .await {
+                        // 将数据库中的上位机功能检查状态填充至内存中
+                        let mut guard = state.global_function_tests.lock().await;
+                        guard.extend(list);
+                    }
                 }
             }
         }
@@ -567,6 +665,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 2. 立即执行批次分配 - 这是关键步骤
+    // 业务说明：BatchAllocationService负责将点位分配到物理测试通道
     let mut allocation_result = match execute_batch_allocation(&definitions, &args, &state).await {
         Ok(result) => result,
         Err(e) => {
@@ -576,8 +675,10 @@ pub async fn import_excel_and_prepare_batch_cmd(
     };
 
     // === 回填站场名称（功能检查用） ===
+    // 业务说明：确保批次信息中包含站场名称，用于后续的功能检查
     if let Some(first_def) = definitions.first() {
         let primary_station = first_def.station_name.clone();
+        // Rust知识点：iter_mut() 获取可变迭代器，允许修改元素
         for b in allocation_result.batches.iter_mut() {
             if b.station_name.is_none() || b.station_name.as_ref().unwrap().is_empty() {
                 b.station_name = Some(primary_station.clone());
@@ -586,6 +687,7 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 3. 将分配结果存储到状态管理器
+    // 业务说明：状态管理器维护内存中的测试状态，提供快速访问
     match store_allocation_to_state_manager(&allocation_result, &state).await {
         Ok(_) => {},
         Err(e) => {
@@ -595,8 +697,8 @@ pub async fn import_excel_and_prepare_batch_cmd(
     }
 
     // 4. 构建响应数据
-
     // 从分配结果中获取第一个批次作为主要批次信息
+    // Rust知识点：ok_or_else() 将 Option 转换为 Result，None时执行闭包
     let primary_batch = allocation_result.batches.first()
         .ok_or_else(|| "批次分配失败：没有生成任何批次".to_string())?;
 
@@ -606,12 +708,17 @@ pub async fn import_excel_and_prepare_batch_cmd(
         allocation_summary: allocation_result.allocation_summary.clone(),
     };
 
-
-
     Ok(response)
 }
 
 /// 开始批次测试
+/// 
+/// 业务说明：
+/// 触发批次的自动测试流程
+/// 测试协调服务会依次执行每个测试实例
+/// 
+/// 调用链：
+/// 前端 -> start_tests_for_batch_cmd -> TestCoordinationService -> 测试引擎
 #[tauri::command]
 pub async fn start_tests_for_batch_cmd(
     args: StartTestsForBatchCmdArgs,
@@ -619,6 +726,8 @@ pub async fn start_tests_for_batch_cmd(
 ) -> Result<(), String> {
     info!("开始批次测试: {}", args.batch_id);
 
+    // 委托给测试协调服务执行
+    // Rust知识点：map_err() 转换错误类型
     state.test_coordination_service
         .start_batch_testing(&args.batch_id)
         .await
@@ -629,6 +738,21 @@ pub async fn start_tests_for_batch_cmd(
 }
 
 /// 获取批次状态
+/// 
+/// 业务说明：
+/// 获取批次的详细状态信息，包括：
+/// 1. 批次基本信息
+/// 2. 测试实例列表（优先从内存获取最新状态）
+/// 3. 通道定义列表
+/// 4. 测试进度统计
+/// 
+/// 调用链：
+/// 前端轮询 -> get_batch_status_cmd -> ChannelStateManager/PersistenceService -> 返回状态
+/// 
+/// 性能优化：
+/// - 优先从内存缓存获取数据
+/// - 减少日志输出
+/// - 按标签排序保证顺序一致性
 #[tauri::command]
 pub async fn get_batch_status_cmd(
     args: GetBatchStatusCmdArgs,
@@ -674,6 +798,7 @@ pub async fn get_batch_status_cmd(
                 let def_b = state.channel_state_manager.get_channel_definition(&b.definition_id);
 
                 // 使用 futures::executor::block_on 来等待异步操作
+                // Rust知识点：block_on 在同步上下文中执行异步代码
                 let tag_a = match futures::executor::block_on(def_a) {
                     Some(def) => def.tag.clone(),
                     None => String::new(),
@@ -723,6 +848,7 @@ pub async fn get_batch_status_cmd(
     // 从状态管理器获取通道定义，并按照导入时的顺序排序
     let definitions = {
         let state_manager = &state.channel_state_manager;
+        // Rust知识点：HashSet 用于去重
         let instance_definition_ids: std::collections::HashSet<String> = instances
             .iter()
             .map(|instance| instance.definition_id.clone())
@@ -1995,14 +2121,27 @@ pub async fn import_excel_and_create_batch_cmd(
 
 /// 执行批次分配的核心逻辑
 ///
-/// 这个函数使用已经验证过的通道分配服务来执行批次分配
+/// 业务说明：
+/// 这个函数负责协调整个批次分配流程：
+/// 1. 保存通道定义到数据库
+/// 2. 获取测试PLC配置
+/// 3. 执行通道分配算法
+/// 4. 转换结果格式
+/// 
+/// 调用链：
+/// import_excel_and_prepare_batch_cmd -> execute_batch_allocation -> ChannelAllocationService
+/// 
+/// Rust知识点：
+/// - async fn 异步函数
+/// - &[T] 切片引用，避免所有权转移
+/// - Result<T, E> 错误处理
 async fn execute_batch_allocation(
     definitions: &[ChannelPointDefinition],
     args: &ImportExcelAndPrepareBatchCmdArgs,
     state: &AppState,
 ) -> Result<AllocationResult, String> {
     // 1. 首先保存通道定义到数据库
-
+    // 业务说明：确保所有通道定义都持久化，即使后续分配失败也能保留数据
     let mut saved_definitions_count = 0;
     let mut failed_definitions_count = 0;
 
@@ -2019,6 +2158,7 @@ async fn execute_batch_allocation(
     }
 
     // 2. 获取测试PLC配置
+    // 业务说明：测试PLC配置定义了物理测试通道的能力和约束
     let test_plc_config = match state.test_plc_config_service.get_test_plc_config().await {
         Ok(config) => config,
         Err(e) => {
@@ -2028,10 +2168,11 @@ async fn execute_batch_allocation(
     };
 
     // 3. 执行通道分配
+    // 业务说明：ChannelAllocationService实现了智能分配算法
     let allocation_service = ChannelAllocationService::new();
     let batch_allocation_result = allocation_service
         .allocate_channels(
-            definitions.to_vec(),
+            definitions.to_vec(),  // Rust知识点：to_vec() 从切片创建Vec
             test_plc_config,
             args.product_model.clone(),
             args.serial_number.clone(),
@@ -2043,11 +2184,14 @@ async fn execute_batch_allocation(
         })?;
 
     // 4. 转换为期望的AllocationResult格式
+    // 业务说明：将服务层的结果转换为命令层的格式
+    // Rust知识点：HashMap的get()返回Option<&V>，需要处理None情况
     let allocation_result = AllocationResult {
         batches: batch_allocation_result.batches,
         allocated_instances: batch_allocation_result.allocated_instances,
         allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary {
             total_channels: batch_allocation_result.allocation_summary.total_definitions as usize,
+            // 统计各模块类型的通道数
             ai_channels: batch_allocation_result.allocation_summary.by_module_type
                 .get(&crate::models::ModuleType::AI)
                 .map(|stats| stats.allocated_count as usize)
@@ -2075,7 +2219,15 @@ async fn execute_batch_allocation(
 
 /// 将分配结果存储到状态管理器
 ///
-/// 这个函数负责将批次分配的结果存储到内存状态管理器中
+/// 业务说明：
+/// 负责将批次分配的结果存储到内存状态管理器中
+/// 包括：
+/// 1. 保存通道定义（如果还未保存）
+/// 2. 存储分配结果到状态管理器
+/// 3. 更新会话批次跟踪
+/// 
+/// Rust知识点：
+/// - if let Some(ref x) 模式匹配，ref避免移动所有权
 async fn store_allocation_to_state_manager(
     allocation_result: &AllocationResult,
     state: &AppState,
@@ -2106,6 +2258,7 @@ async fn store_allocation_to_state_manager(
     }
 
     // 1. 存储批次分配结果到状态管理器
+    // 业务说明：状态管理器维护测试状态的内存缓存
     match state.channel_state_manager.store_batch_allocation_result(allocation_result.clone()).await {
         Ok(_) => {
             // 存储成功
@@ -2117,6 +2270,7 @@ async fn store_allocation_to_state_manager(
     }
 
     // 2. 将批次ID添加到会话跟踪
+    // 业务说明：会话跟踪用于区分不同用户的批次
     for batch in &allocation_result.batches {
         let mut session_batch_ids = state.session_batch_ids.lock().await;
         session_batch_ids.insert(batch.batch_id.clone());
@@ -2128,10 +2282,41 @@ async fn store_allocation_to_state_manager(
 // 会话恢复命令
 // ============================================================================
 
-/// 恢复会话：可传 `batch_id` 或 `session_key`，两者择一。
+/// 恢复会话命令
+/// 
+/// 业务说明：
+/// 支持三种恢复方式：
 /// 1. 传 `batch_id` → 自动推导其所属会话（同秒级 creation_time）
-/// 2. 传 `session_key` → 直接使用
+/// 2. 传 `session_key` → 直接使用指定会话
 /// 3. 均为空 → 恢复最新会话
+/// 
+/// 会话概念：
+/// - 同一秒内创建的批次属于同一个会话
+/// - 会话键格式：YYYY-MM-DDTHH:MM:SS
+/// 
+/// 调用链：
+/// 前端恢复会话 -> restore_session_cmd -> ChannelStateManager -> 恢复批次数据
+
+/// 恢复会话命令（从数据库恢复批次数据到内存）
+/// 
+/// 业务说明：
+/// 这是系统重启后恢复上次工作状态的核心功能
+/// 支持三种恢复模式：
+/// 1. 指定批次ID恢复：精确恢复特定批次
+/// 2. 指定会话键恢复：恢复某个时间点的所有批次
+/// 3. 自动恢复最新会话：恢复最近创建的批次
+/// 
+/// 参数说明：
+/// - batch_id: 可选的批次ID，指定恢复特定批次
+/// - session_key: 可选的会话键（时间戳），指定恢复特定时间点的批次
+/// - state: 应用状态，包含持久化服务和状态管理器
+/// 
+/// Rust知识点：
+/// - HashMap 用于组织会话数据
+/// - Option::as_ref() 避免移动所有权
+/// - remove() 从HashMap中取出值并获得所有权
+/// 
+/// 调用链：前端启动/刷新 -> restore_session_cmd -> ChannelStateManager -> PersistenceService
 #[tauri::command]
 pub async fn restore_session_cmd(
     batch_id: Option<String>,
@@ -2139,20 +2324,25 @@ pub async fn restore_session_cmd(
     state: State<'_, AppState>
 ) -> Result<Vec<TestBatchInfo>, String> {
     // 1. 同步加载全局功能测试状态
+    // 业务说明：全局功能测试（如报警测试）的状态需要首先恢复
     match state.persistence_service.load_all_global_function_test_statuses().await {
         Ok(list) => {
+            // Rust知识点：使用Mutex guard确保线程安全地更新共享状态
             let mut guard = state.global_function_tests.lock().await;
             *guard = list;
         }
         Err(e) => {
+            // 非致命错误，记录日志但继续执行
             error!("加载全局功能测试状态失败: {}", e);
         }
     }
 
     // 2. 清空 ChannelStateManager 缓存
+    // 业务说明：确保从数据库加载最新数据，避免缓存不一致
     state.channel_state_manager.clear_caches().await;
 
     // 3. 恢复所有批次（先全部加载到缓存，便于后续使用）
+    // 业务说明：从数据库加载所有批次及其关联的测试实例
     let all_batches = match state.channel_state_manager.restore_all_batches().await {
         Ok(list) => list,
         Err(e) => {
@@ -2163,12 +2353,17 @@ pub async fn restore_session_cmd(
 
     // === 4. 根据 session_key 选择需要恢复的批次 ===
     // 组织到秒级 creation_time 作为会话分组
+    // 业务说明：同一秒创建的批次属于同一个会话
+    // Rust知识点：HashMap的entry API提供了便捷的插入或更新操作
     let mut session_map: std::collections::HashMap<String, Vec<TestBatchInfo>> = std::collections::HashMap::new();
     for b in &all_batches {
+        // 生成两种格式的键，兼容不同的输入格式
         let ts_iso = crate::utils::time_utils::format_bj(b.creation_time, "%Y-%m-%dT%H:%M:%S");
         let ts_space = ts_iso.replace('T', " ");
+        // 截取前19位确保格式统一（YYYY-MM-DDTHH:MM:SS）
         let key_iso = ts_iso.chars().take(19).collect::<String>();
         let key_space = ts_space.chars().take(19).collect::<String>();
+        // 同一批次用两种键存储，提高命中率
         session_map.entry(key_iso).or_default().push(b.clone());
         session_map.entry(key_space).or_default().push(b.clone());
     }
@@ -2177,6 +2372,7 @@ pub async fn restore_session_cmd(
     // === 对 session_key 进行规范化，统一成 "YYYY-MM-DDTHH:MM:SS" 格式（无空格、19 位） ===
     let canonical_session_key = session_key.as_ref().map(|k| {
         // 替换空格为 T，截取前 19 位
+        // Rust知识点：chars().take() 是Unicode安全的字符串截取方式
         let mut s = k.replace(' ', "T");
         if s.len() > 19 { s = s.chars().take(19).collect(); }
         s
@@ -2184,6 +2380,8 @@ pub async fn restore_session_cmd(
 
     log::info!("[RESTORE] 入参 batch_id={:?}, session_key={:?}, canonical={:?}", batch_id, session_key, canonical_session_key);
 
+    // 确定要恢复的目标会话键
+    // 业务逻辑优先级：batch_id > session_key > 最新会话
     let mut target_key = if let Some(id) = batch_id {
         // 根据 batch_id 找对应 creation_time 秒级键
         if let Some(batch) = all_batches.iter().find(|b| b.batch_id == id) {
@@ -2191,6 +2389,7 @@ pub async fn restore_session_cmd(
         } else {
             warn!("未找到 batch_id={}, 回退到 session_key/最新会话", id);
             // 如果 batch_id 无效，则继续使用 session_key 或最新
+            // Rust知识点：unwrap_or_else 提供延迟计算的默认值
             canonical_session_key.clone().unwrap_or_else(|| session_map.keys().max().cloned().unwrap_or_default())
         }
     } else if let Some(k) = canonical_session_key.clone() {
@@ -2199,6 +2398,7 @@ pub async fn restore_session_cmd(
             k
         } else {
             // 尝试分钟级前缀匹配（前16位：YYYY-MM-DDTHH:MM）
+            // 业务说明：支持模糊匹配，提高用户体验
             let minute_prefix: String = k.chars().take(16).collect();
             let mut candidate: Option<String> = None;
             for key in session_map.keys() {
@@ -2216,14 +2416,18 @@ pub async fn restore_session_cmd(
         }
     } else {
         // 均为空 → 最新会话
+        // Rust知识点：keys().max() 利用字符串的字典序找到最新时间
         session_map.keys().max().cloned().unwrap_or_default()
     };
 
     log::info!("[RESTORE] 最终 target_key = {}", target_key);
 
+    // 从映射中移除并获取目标批次
+    // Rust知识点：remove() 转移所有权，避免后续克隆
     let target_batches = session_map.remove(&target_key).unwrap_or_default();
 
     // 4. 更新 session_batch_ids（先清空再插入目标批次）
+    // 业务说明：session_batch_ids 用于标识当前会话中的活跃批次
     {
         let mut ids = state.session_batch_ids.lock().await;
         ids.clear();
@@ -2233,14 +2437,17 @@ pub async fn restore_session_cmd(
     }
 
     // 为前端增加北京时间字段，避免时区误差
+    // 业务说明：确保前端显示正确的本地时间
     let target_batches: Vec<TestBatchInfo> = target_batches
         .into_iter()
         .map(|mut b| {
             let bj_str = crate::utils::time_utils::format_bj(b.creation_time, "%Y-%m-%d %H:%M:%S");
+            // 在custom_data中存储北京时间
             b.custom_data.insert(
                 "creation_time_bj".to_string(),
                 bj_str.clone(),
             );
+            // 同时更新import_time字段
             b.import_time = Some(bj_str);
             b
         })

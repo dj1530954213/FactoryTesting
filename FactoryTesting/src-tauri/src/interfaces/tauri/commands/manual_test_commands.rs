@@ -1,35 +1,99 @@
+/// 手动测试命令模块（新版）
+/// 
+/// 业务说明：
+/// 本模块提供更加细粒度的手动测试功能，支持分步骤的测试流程
+/// 主要功能包括：
+/// - 手动测试生命周期管理（启动、更新、查询状态）
+/// - PLC监控功能（实时监控通道数据）
+/// - AI手动测试专用功能（显示值核对、报警测试、维护功能）
+/// - AO手动采集功能（五点采集：0%、25%、50%、75%、100%）
+/// - DI手动测试功能（信号下发）
+/// 
+/// 架构定位：
+/// - 属于接口层，直接对接前端调用
+/// - 调用应用层的TestCoordinationService进行测试管理
+/// - 使用PlcMonitoringService进行实时监控
+/// - 直接调用PlcCommunicationService进行PLC读写
+/// 
+/// 调用链：
+/// 前端 -> Tauri命令 -> TestCoordinationService/PlcMonitoringService -> PlcCommunicationService
+
+// === 标准库导入 ===
 use std::sync::Arc;
-use tauri::State;
-use log::{info, error, warn};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+// === Tauri相关导入 ===
+use tauri::State;
+
+// === 日志相关导入 ===
+use log::{info, error, warn};
+
+// === 序列化相关导入 ===
+use serde::{Deserialize, Serialize};
+
+// === 随机数生成器 ===
 use rand::Rng;
-use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;
-use crate::domain::services::plc_communication_service::IPlcCommunicationService;
+
+// === 领域服务导入 ===
+use crate::domain::services::plc_comm_extension::PlcServiceLegacyExt;  // PLC服务遗留扩展
+use crate::domain::services::plc_communication_service::IPlcCommunicationService; // PLC通信服务接口
 
 // ==================== 常量 ====================
 /// AO 手动采集允许的百分比偏差
+/// 
+/// 业务说明：
+/// AO测试时，测试PLC读取的实际值与期望值之间的偏差不得超过5%
+/// 超出此范围则认为AO输出不准确，测试失败
+/// 
+/// Rust知识点：
+/// const 声明编译时常量，必须指定类型
 const AO_TOLERANCE_PERCENT: f64 = 5.0;
 
+// === 数据模型导入 ===
+// 业务说明：这些结构体定义了前后端交互的数据格式
 use crate::models::structs::{
-    StartManualTestRequest,
-    StartManualTestResponse,
-    UpdateManualTestSubItemRequest,
-    UpdateManualTestSubItemResponse,
-    StartPlcMonitoringRequest,
-    StartPlcMonitoringResponse,
-    StopPlcMonitoringRequest,
-    ManualTestStatus,
+    StartManualTestRequest,          // 启动手动测试请求
+    StartManualTestResponse,         // 启动手动测试响应
+    UpdateManualTestSubItemRequest,  // 更新测试子项请求
+    UpdateManualTestSubItemResponse, // 更新测试子项响应
+    StartPlcMonitoringRequest,       // 启动PLC监控请求
+    StartPlcMonitoringResponse,      // 启动PLC监控响应
+    StopPlcMonitoringRequest,        // 停止PLC监控请求
+    ManualTestStatus,                // 手动测试状态
 };
 // 注意：ManualTestSubItem 需要在 models 中定义
 // 暂时使用字符串代替，后续需要定义正确的枚举
-use crate::application::services::ITestCoordinationService;
-use crate::infrastructure::IPlcMonitoringService;
+
+// === 应用层服务导入 ===
+use crate::application::services::ITestCoordinationService;  // 测试协调服务接口
+
+// === 基础设施层服务导入 ===
+use crate::infrastructure::IPlcMonitoringService;            // PLC监控服务接口
+use crate::infrastructure::plc_communication::global_plc_service; // 全局PLC服务实例
+
+// === PLC配置相关导入 ===
 use crate::domain::services::plc_communication_service::{PlcConnectionConfig, PlcProtocol};
-use crate::infrastructure::plc_communication::global_plc_service;
-//use crate::infrastructure::extra::infrastructure::plc::plc_communication_service::PlcCommunicationService;
 
 /// 开始手动测试命令
+/// 
+/// 业务说明：
+/// 启动指定通道的手动测试流程，初始化测试状态并创建测试任务
+/// 这是手动测试的入口点，前端点击“开始手动测试”时调用
+/// 
+/// 参数说明：
+/// - request: 包含测试实例ID、模块类型等信息
+/// - app_state: 应用状态，提供访问测试协调服务
+/// 
+/// 返回值：
+/// - Ok(StartManualTestResponse): 测试启动成功，返回测试状态
+/// - Err(String): 启动失败，返回错误信息
+/// 
+/// 调用链：
+/// 前端手动测试界面 -> start_manual_test_cmd -> TestCoordinationService -> 初始化测试状态
+/// 
+/// Rust知识点：
+/// - #[tauri::command] 宏标记为Tauri命令
+/// - {:?} 使用Debug trait输出结构体信息
 #[tauri::command]
 pub async fn start_manual_test_cmd(
     request: StartManualTestRequest,
@@ -37,6 +101,8 @@ pub async fn start_manual_test_cmd(
 ) -> Result<StartManualTestResponse, String> {
     info!("🔧 [MANUAL_TEST_CMD] 开始手动测试: {:?}", request);
 
+    // 调用测试协调服务启动手动测试
+    // 业务说明：测试协调服务负责管理所有测试任务的生命周期
     match app_state.test_coordination_service.start_manual_test(request).await {
         Ok(response) => {
             info!("✅ [MANUAL_TEST_CMD] 手动测试启动成功");
@@ -50,6 +116,21 @@ pub async fn start_manual_test_cmd(
 }
 
 /// 更新手动测试子项状态命令
+/// 
+/// 业务说明：
+/// 更新具体测试子项的状态（如显示值核对、报警测试等）
+/// 每个手动测试可能包含多个子项，每个子项完成后调用此命令更新状态
+/// 
+/// 参数说明：
+/// - request: 包含实例ID、子项名称、状态等信息
+/// - app_state: 应用状态
+/// 
+/// 返回值：
+/// - Ok(UpdateManualTestSubItemResponse): 更新成功，返回新状态
+/// - Err(String): 更新失败，返回错误信息
+/// 
+/// 调用链：
+/// 前端完成子项测试 -> update_manual_test_subitem_cmd -> TestCoordinationService -> 更新状态
 #[tauri::command]
 pub async fn update_manual_test_subitem_cmd(
     request: UpdateManualTestSubItemRequest,
@@ -70,6 +151,25 @@ pub async fn update_manual_test_subitem_cmd(
 }
 
 /// 获取手动测试状态命令
+/// 
+/// 业务说明：
+/// 查询指定测试实例的当前手动测试状态
+/// 前端可以定期调用此命令获取最新状态，更新测试进度显示
+/// 
+/// 参数说明：
+/// - instance_id: 测试实例的唯一标识符
+/// - app_state: 应用状态
+/// 
+/// 返回值：
+/// - Ok(serde_json::Value): 返回JSON格式的测试状态
+/// - Err(String): 查询失败，返回错误信息
+/// 
+/// 调用链：
+/// 前端定时查询 -> get_manual_test_status_cmd -> TestCoordinationService -> 返回状态
+/// 
+/// Rust知识点：
+/// - serde_json::Value 可以表示任意JSON结构
+/// - serde_json::json! 宏便于构建JSON对象
 #[tauri::command]
 pub async fn get_manual_test_status_cmd(
     instance_id: String,
@@ -93,12 +193,34 @@ pub async fn get_manual_test_status_cmd(
 }
 
 /// 开始PLC监控命令
+/// 
+/// 业务说明：
+/// 启动对指定PLC地址的实时监控，用于在手动测试过程中实时显示通道数据
+/// 根据模块类型自动选择监控的PLC：
+/// - AI/DI模块：监控被测PLC（因为要看被测设备的输入信号）
+/// - AO/DO模块：监控测试PLC（因为要看测试台接收到的输出信号）
+/// 
+/// 参数说明：
+/// - request: 监控请求，包含模块类型、监控地址等
+/// - app_state: 应用状态
+/// 
+/// 特殊处理：
+/// 1. 自动根据模块类型选择PLC连接
+/// 2. 如果前端未提供监控地址，会从测试实例中获取
+/// 
+/// 调用链：
+/// 前端手动测试界面 -> start_plc_monitoring_cmd -> PlcMonitoringService -> PLC实时读取
+/// 
+/// Rust知识点：
+/// - mut request 允许修改参数
+/// - match 语句的多模式匹配使用 |
 #[tauri::command]
 pub async fn start_plc_monitoring_cmd(
     mut request: StartPlcMonitoringRequest,
     app_state: State<'_, crate::tauri_commands::AppState>,
 ) -> Result<StartPlcMonitoringResponse, String> {
     // 根据模块类型补充 connection_id
+    // 业务逻辑：不同类型的模块需要监控不同的PLC
     if request.connection_id.is_none() {
         let conn_id = match request.module_type {
             // DI/AI 模块监控被测对象，使用 target_connection_id
@@ -114,11 +236,14 @@ pub async fn start_plc_monitoring_cmd(
     }
 
     // ===== 兜底：若前端未提供监控地址，根据模块类型智能填充 =====
+    // 业务说明：为了提高前端使用便利性，如果前端未提供监控地址，
+    // 系统会根据模块类型自动从测试实例中获取合适的地址
     if request.monitoring_addresses.is_empty() {
         use crate::models::enums::ModuleType;
         match app_state.persistence_service.load_test_instance(&request.instance_id).await {
             Ok(Some(inst)) => {
                 // 仅 DO/AO 等需要测试 PLC 的模块才兜底使用 test_plc_communication_address
+                // 业务逻辑：DO/AO输出模块需要监控测试PLC的接收情况
                 let need_test_plc_addr = matches!(
                     request.module_type,
                     ModuleType::DO | ModuleType::AO | ModuleType::DONone | ModuleType::AONone
@@ -129,11 +254,13 @@ pub async fn start_plc_monitoring_cmd(
                         request.monitoring_addresses.push(addr.clone());
 
                         // 若未提供 address_key_map，则自动生成
+                        // Rust知识点：使用Option的is_none()方法判断是否为None
                         if request.address_key_map.is_none() {
+                            // 根据模块类型选择合适的键名
                             let key = if matches!(request.module_type, ModuleType::AO | ModuleType::AONone) {
-                                "currentOutput"
+                                "currentOutput"  // AO模块使用“当前输出”
                             } else {
-                                "currentState"
+                                "currentState"   // DO模块使用“当前状态”
                             };
                             let mut map = std::collections::HashMap::new();
                             map.insert(addr.clone(), key.to_string());
@@ -144,6 +271,7 @@ pub async fn start_plc_monitoring_cmd(
                         warn!("⚠️ [MANUAL_TEST_CMD] 实例缺少 test_plc_communication_address，无法填充监控地址");
                     }
                 } else {
+                    // DI/AI模块不应使用测试PLC地址
                     warn!("⚠️ [MANUAL_TEST_CMD] DI 等模块未提供监控地址，且不应使用测试PLC地址兜底");
                 }
             }
@@ -176,6 +304,21 @@ pub async fn start_plc_monitoring_cmd(
 }
 
 /// 停止PLC监控命令
+/// 
+/// 业务说明：
+/// 停止指定测试实例的PLC实时监控
+/// 通常在手动测试完成或切换到其他测试项时调用
+/// 
+/// 参数说明：
+/// - request: 停止监控请求，包含实例ID
+/// - app_state: 应用状态
+/// 
+/// 返回值：
+/// - Ok(serde_json::Value): 停止成功，返回成功消息
+/// - Err(String): 停止失败，返回错误信息
+/// 
+/// 调用链：
+/// 前端结束监控 -> stop_plc_monitoring_cmd -> PlcMonitoringService -> 停止监控任务
 #[tauri::command]
 pub async fn stop_plc_monitoring_cmd(
     request: StopPlcMonitoringRequest,
@@ -199,15 +342,40 @@ pub async fn stop_plc_monitoring_cmd(
 }
 
 // ==================== AI手动测试专用命令 ====================
+// 业务说明：AI（模拟量输入）模块的手动测试需要特殊的功能：
+// 1. 显示值核对：下发测试值到测试PLC，验证被测设备显示正确
+// 2. 报警测试：下发触发报警的值，验证报警功能
+// 3. 维护功能：启用/禁用维护模式
 
-/// AI手动测试显示值核对请求
+/// AI手动测试显示值核对请求结构体
+/// 
+/// 业务说明：
+/// 用于验证AI通道的显示值是否准确
+/// 测试流程：测试PLC模拟传感器信号 -> 被测设备读取 -> 显示在HMI上
+/// 
+/// 字段说明：
+/// - instance_id: 测试实例标识符
+/// - test_value: 要测试的工程值（如温度、压力等实际物理量）
+/// 
+/// Rust知识点：
+/// - #[derive(Debug, Clone, Serialize, Deserialize)] 自动派生常用trait
+/// - f64 双精度浮点数，用于精确表示模拟量
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiShowValueTestRequest {
     pub instance_id: String,
     pub test_value: f64,  // 用户输入或随机生成的测试值（工程值）
 }
 
-/// AI手动测试显示值核对响应
+/// AI手动测试显示值核对响应结构体
+/// 
+/// 业务说明：
+/// 返回显示值测试的执行结果
+/// 
+/// 字段说明：
+/// - success: 测试是否成功
+/// - message: 结果消息
+/// - sent_percentage: 发送到测试PLC的百分比值（0-100%）
+/// - test_plc_address: 使用的测试PLC地址，方便排查问题
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiShowValueTestResponse {
     pub success: bool,
@@ -264,7 +432,29 @@ pub struct GenerateRandomValueResponse {
     pub high_limit: f64,    // 高限
 }
 
-/// AI手动测试 - 生成随机显示值
+/// AI手动测试 - 生成随机显示值命令
+/// 
+/// 业务说明：
+/// 为AI测试生成一个在量程范围内的随机值
+/// 方便测试人员快速选择不同的测试值，避免手动输入
+/// 
+/// 参数说明：
+/// - request: 包含测试实例ID
+/// - app_state: 应用状态
+/// 
+/// 返回值：
+/// - Ok(GenerateRandomValueResponse): 生成成功，返回随机值及量程范围
+/// - Err(String): 生成失败，返回错误信息
+/// 
+/// 算法说明：
+/// 随机值 = 低限 + rand() * (高限 - 低限)
+/// 
+/// 调用链：
+/// 前端点击随机值按钮 -> generate_random_display_value_cmd -> 获取通道定义 -> 计算随机值
+/// 
+/// Rust知识点：
+/// - rand::thread_rng() 创建线程局部的随机数生成器
+/// - gen::<f64>() 生成[0, 1)范围内的浮点数
 #[tauri::command]
 pub async fn generate_random_display_value_cmd(
     request: GenerateRandomValueRequest,
@@ -298,17 +488,21 @@ pub async fn generate_random_display_value_cmd(
     };
 
     // 生成随机值（在低限和高限之间）
+    // 业务说明：从通道定义中获取量程范围，确保随机值在有效范围内
+    // Rust知识点：unwrap_or() 提供默认值，避免Option为None时程序崩溃
     let low_limit = definition.range_low_limit.unwrap_or(0.0) as f64;
     let high_limit = definition.range_high_limit.unwrap_or(100.0) as f64;
 
+    // 验证量程范围的有效性
     if high_limit <= low_limit {
         error!("❌ [AI_MANUAL_TEST] 无效的限值范围: 低限={}, 高限={}", low_limit, high_limit);
         return Err("无效的限值范围".to_string());
     }
 
+    // 计算随机值
     let range = high_limit - low_limit;
-    let mut rng = rand::thread_rng();
-    let random_value = low_limit + (rng.gen::<f64>() * range);
+    let mut rng = rand::thread_rng();  // 创建随机数生成器
+    let random_value = low_limit + (rng.gen::<f64>() * range);  // 生成在范围内的随机值
 
     info!("✅ [AI_MANUAL_TEST] 生成随机值成功: {:.2} (范围: {:.2} - {:.2})",
           random_value, low_limit, high_limit);
@@ -322,7 +516,24 @@ pub async fn generate_random_display_value_cmd(
     })
 }
 
-/// AI手动测试 - 显示值核对测试
+/// AI手动测试 - 显示值核对测试命令
+/// 
+/// 业务说明：
+/// 将指定的工程值转换为百分比并下发到测试PLC
+/// 测试PLC模拟传感器信号，被测设备应显示对应的工程值
+/// 
+/// 测试流程：
+/// 1. 获取测试实例和通道定义
+/// 2. 查询测试PLC地址
+/// 3. 将工程值转换为百分比
+/// 4. 写入到测试PLC
+/// 
+/// 参数说明：
+/// - request: 包含实例ID和测试值
+/// - app_state: 应用状态
+/// 
+/// 调用链：
+/// 前端输入测试值 -> ai_show_value_test_cmd -> 获取PLC地址 -> 写入PLC
 #[tauri::command]
 pub async fn ai_show_value_test_cmd(
     request: AiShowValueTestRequest,
@@ -344,6 +555,8 @@ pub async fn ai_show_value_test_cmd(
     };
 
     // 将工程值转换为百分比 (0.0-100.0)
+    // 业务说明：测试PLC使用百分比表示模拟量，需要将工程值转换
+    // 转换公式：百分比 = (工程值 - 低限) / (高限 - 低限) * 100
     let percentage = convert_engineering_to_percentage(
         request.test_value,
         definition.range_low_limit.unwrap_or(0.0) as f64,
@@ -351,6 +564,7 @@ pub async fn ai_show_value_test_cmd(
     );
 
     // 实际执行PLC写入操作
+    // 业务说明：调用辅助函数将百分比值写入到测试PLC
     match write_to_test_plc(&app_state, &test_plc_address, percentage).await {
         Ok(_) => {
             info!("✅ [AI_MANUAL_TEST] 显示值下发成功: {:.2} -> {:.2}% -> {}",
@@ -370,7 +584,24 @@ pub async fn ai_show_value_test_cmd(
     }
 }
 
-/// AI手动测试 - 报警测试
+/// AI手动测试 - 报警测试命令
+/// 
+/// 业务说明：
+/// 下发触发各类报警的测试值，验证被测设备的报警功能
+/// 支持四种报警类型：LL（低低）、L（低）、H（高）、HH（高高）
+/// 
+/// 测试策略：
+/// - 低低报警：SLL设定值 - 1%量程
+/// - 低报警：SL设定值 - 1%量程
+/// - 高报警：SH设定值 + 1%量程
+/// - 高高报警：SHH设定值 + 1%量程
+/// 
+/// 参数说明：
+/// - request: 包含实例ID和报警类型
+/// - app_state: 应用状态
+/// 
+/// 调用链：
+/// 前端选择报警类型 -> ai_alarm_test_cmd -> 计算测试值 -> 写入PLC
 #[tauri::command]
 pub async fn ai_alarm_test_cmd(
     request: AiAlarmTestRequest,
@@ -392,14 +623,17 @@ pub async fn ai_alarm_test_cmd(
     };
 
     // 根据报警类型计算测试值（量程的1%偏移）
+    // 业务说明：为了确保触发报警，测试值需要超过报警设定值一定偏移量
     let range = definition.range_high_limit.unwrap_or(100.0) - definition.range_low_limit.unwrap_or(0.0);
-    let offset = range * 0.01; // 1%偏移
+    let offset = range * 0.01; // 1%偏移，确保可靠触发报警
 
+    // 根据报警类型选择对应的测试值
+    // Rust知识点：as_str() 将String转换为&str便于match匹配
     let test_value = match request.alarm_type.as_str() {
-        "LL" => definition.sll_set_value.unwrap_or(0.0) as f64 - offset as f64,
-        "L" => definition.sl_set_value.unwrap_or(10.0) as f64 - offset as f64,
-        "H" => definition.sh_set_value.unwrap_or(90.0) as f64 + offset as f64,
-        "HH" => definition.shh_set_value.unwrap_or(100.0) as f64 + offset as f64,
+        "LL" => definition.sll_set_value.unwrap_or(0.0) as f64 - offset as f64,    // 低低报警
+        "L" => definition.sl_set_value.unwrap_or(10.0) as f64 - offset as f64,     // 低报警
+        "H" => definition.sh_set_value.unwrap_or(90.0) as f64 + offset as f64,     // 高报警
+        "HH" => definition.shh_set_value.unwrap_or(100.0) as f64 + offset as f64,  // 高高报警
         _ => {
             error!("❌ [AI_MANUAL_TEST] 无效的报警类型: {}", request.alarm_type);
             return Err("无效的报警类型".to_string());
@@ -435,7 +669,22 @@ pub async fn ai_alarm_test_cmd(
     }
 }
 
-/// AI手动测试 - 维护功能测试
+/// AI手动测试 - 维护功能测试命令
+/// 
+/// 业务说明：
+/// 测试AI通道的维护功能，包括启用和复位维护模式
+/// 维护模式通常用于临时禁用报警或锁定输出值
+/// 
+/// 注意事项：
+/// - 维护功能写入到被测PLC，不是测试PLC
+/// - 使用布尔值控制维护状态
+/// 
+/// 参数说明：
+/// - request: 包含实例ID和启用/禁用标志
+/// - app_state: 应用状态
+/// 
+/// 调用链：
+/// 前端点击维护按钮 -> ai_maintenance_test_cmd -> 获取维护地址 -> 写入被测PLC
 #[tauri::command]
 pub async fn ai_maintenance_test_cmd(
     request: AiMaintenanceTestRequest,
@@ -451,6 +700,8 @@ pub async fn ai_maintenance_test_cmd(
     };
 
     // 获取维护使能开关地址，并进行规范化（长度不足 5 位时左补 0）
+    // 业务说明：维护开关地址从通道定义中获取
+    // Modbus地址规范化：确保地址格式一致，避免通信错误
     let mut maintenance_address = match definition.maintenance_enable_switch_point_communication_address {
         Some(addr) => normalize_modbus_address(&addr),
         None => {
@@ -480,7 +731,18 @@ pub async fn ai_maintenance_test_cmd(
     }
 }
 
-/// AI手动测试 - 复位到显示值
+/// AI手动测试 - 复位到显示值命令
+/// 
+/// 业务说明：
+/// 在报警测试后，将AI通道复位到正常显示值
+/// 本质上与显示值核对测试相同，只是用途不同
+/// 
+/// 参数说明：
+/// - request: 与显示值测试相同的请求结构
+/// - app_state: 应用状态
+/// 
+/// Rust知识点：
+/// - 函数复用：直接调用现有函数避免代码重复
 #[tauri::command]
 pub async fn ai_reset_to_display_value_cmd(
     request: AiShowValueTestRequest,
@@ -493,7 +755,29 @@ pub async fn ai_reset_to_display_value_cmd(
     ai_show_value_test_cmd(request, app_state).await
 }
 
-/// 手动测试子项完成确认
+/// 手动测试子项完成确认命令
+/// 
+/// 业务说明：
+/// 当测试人员完成某个手动测试子项后，调用此命令记录测试结果
+/// 会创建一个成功的测试结果并更新到状态管理器
+/// 
+/// 参数说明：
+/// - instance_id: 测试实例标识符
+/// - sub_item: 子项名称字符串（如"ShowValueCheck"、"LowAlarmTest"等）
+/// - app_state: 应用状态
+/// 
+/// 字符串与枚举映射：
+/// - ShowValueCheck -> HardPoint
+/// - LowLowAlarmTest -> LowLowAlarm
+/// - LowAlarmTest -> LowAlarm
+/// - HighAlarmTest -> HighAlarm
+/// - HighHighAlarmTest -> HighHighAlarm
+/// - TrendCheck -> Trend
+/// - ReportCheck -> Report
+/// - MaintenanceFunction -> Maintenance
+/// 
+/// 调用链：
+/// 前端确认完成 -> complete_manual_test_subitem_cmd -> 创建RawTestOutcome -> ChannelStateManager
 #[tauri::command]
 pub async fn complete_manual_test_subitem_cmd(
     instance_id: String,
@@ -539,8 +823,24 @@ pub async fn complete_manual_test_subitem_cmd(
 }
 
 // ==================== 辅助函数 ====================
+// 业务说明：以下是一系列辅助函数，用于支持上述命令的实现
+// 这些函数封装了常用的业务逻辑，提高代码复用性
 
-/// 将采集百分比映射到 SubTestItem
+/// 将采集百分比映射到 SubTestItem 枚举
+/// 
+/// 业务说明：
+/// AO测试需要在五个固定点进行采集（0%、25%、50%、75%、100%）
+/// 每个采集点对应一个特定的测试子项
+/// 
+/// 参数：
+/// - percent: 采集点百分比（只能是0、25、50、75、100）
+/// 
+/// 返回值：
+/// 对应的SubTestItem枚举值
+/// 
+/// Rust知识点：
+/// - use SubTestItem::* 可以省略枚举前缀
+/// - match 必须覆盖所有情况，_ 处理其他情况
 fn percent_to_sub_test(percent: u8) -> crate::models::enums::SubTestItem {
     use crate::models::enums::SubTestItem::*;
     match percent {
@@ -549,7 +849,7 @@ fn percent_to_sub_test(percent: u8) -> crate::models::enums::SubTestItem {
         50 => Output50Percent,
         75 => Output75Percent,
         100 => Output100Percent,
-        _ => HardPoint, // 不应发生
+        _ => HardPoint, // 不应发生，但需要处理以满足编译器要求
     }
 }
 
@@ -799,6 +1099,20 @@ async fn write_to_test_plc(
 }
 
 /// 写入布尔值到被测PLC（用于维护功能）
+/// 
+/// 业务说明：
+/// - 用于AI测试的维护功能，写入布尔值到被测PLC
+/// - 主要用于触发报警、维护等状态
+/// - 使用已建立的被测PLC连接
+/// 
+/// 参数：
+/// - app_state: 应用状态，包含PLC服务
+/// - address: Modbus地址（会自动规范化）
+/// - value: 要写入的布尔值
+/// 
+/// Rust知识点：
+/// - async fn 声明异步函数，返回Future
+/// - &State<'_, T> 是Tauri的状态管理类型
 async fn write_bool_to_target_plc(
     app_state: &State<'_, crate::tauri_commands::AppState>,
     address: &str,
@@ -879,6 +1193,23 @@ async fn write_bool_to_target_plc(
     }
 }
 /// 规范化 Modbus 地址：不足 5 位时在左侧补零至 5 位
+/// 
+/// 业务说明：
+/// - Modbus地址需要规范化为5位数字格式
+/// - 例如："123" -> "00123"，"0X456" -> "00456"
+/// - 仅保留数字部分，忽略前缀
+/// 
+/// 参数：
+/// - address: 原始地址字符串
+/// 
+/// 返回：
+/// - 规范化后的5位地址字符串
+/// 
+/// Rust知识点：
+/// - chars() 将字符串转换为字符迭代器
+/// - filter() 过滤满足条件的元素
+/// - collect() 将迭代器收集为指定类型
+/// - format! 宏用于格式化字符串，{:0>5} 表示右对齐，左侧补0，总宽度5
 fn normalize_modbus_address(address: &str) -> String {
     // 仅保留数字字符
     let digits: String = address.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -889,23 +1220,59 @@ fn normalize_modbus_address(address: &str) -> String {
 }
 
 /// ==================== DI 手动测试专用命令 ====================
+/// 
+/// 业务说明：
+/// DI（数字量输入）测试需要测试PLC的DO（数字量输出）来模拟信号
+/// 测试流程：测试PLC DO -> 被测PLC DI -> 验证被测系统响应
 
 /// DI 信号下发请求（将测试 PLC DO 通道置位或复位）
+/// 
+/// 业务说明：
+/// - 用于触发DI测试信号
+/// - 通过测试PLC的DO输出来模拟DI输入
+/// 
+/// Rust知识点：
+/// - #[derive] 自动实现指定的trait
+/// - Serialize/Deserialize 用于JSON序列化
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiSignalTestRequest {
-    pub instance_id: String,
-    pub enable: bool, // true = 置位 (ON), false = 复位 (OFF)
+    pub instance_id: String,      // 测试实例ID
+    pub enable: bool,             // true = 置位 (ON), false = 复位 (OFF)
 }
 
 /// DI 信号下发响应
+/// 
+/// 业务说明：
+/// - 返回信号下发的执行结果
+/// - 包含实际使用的PLC地址，便于调试
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiSignalTestResponse {
-    pub success: bool,
-    pub message: String,
-    pub test_plc_address: String,
+    pub success: bool,            // 操作是否成功
+    pub message: String,          // 结果消息
+    pub test_plc_address: String, // 实际使用的测试PLC地址
 }
 
 /// DI 手动测试 - 信号下发
+/// 
+/// 业务说明：
+/// - 前端调用此命令进行DI测试的信号下发
+/// - 通过测试PLC的DO输出来触发被测PLC的DI输入
+/// - 支持置位（ON）和复位（OFF）操作
+/// 
+/// 参数：
+/// - request: DI信号测试请求，包含实例ID和信号状态
+/// - app_state: 应用状态
+/// 
+/// 返回：
+/// - Ok: 信号下发响应，包含操作结果
+/// - Err: 错误信息
+/// 
+/// 调用链：
+/// 前端DI测试界面 -> di_signal_test_cmd -> write_bool_to_test_plc -> 测试PLC
+/// 
+/// Rust知识点：
+/// - #[tauri::command] 标记为Tauri命令
+/// - State<'_, T> 是Tauri的状态管理类型
 #[tauri::command]
 pub async fn di_signal_test_cmd(
     request: DiSignalTestRequest,
@@ -956,6 +1323,24 @@ pub async fn di_signal_test_cmd(
 }
 
 /// 写入布尔值到测试 PLC（用于 DI 点位手动测试）
+/// 
+/// 业务说明：
+/// - 用于DI测试时控制测试PLC的DO输出
+/// - 测试PLC的DO连接到被测PLC的DI，实现信号模拟
+/// - 使用独立的连接ID避免与其他测试冲突
+/// 
+/// 参数：
+/// - app_state: 应用状态，包含PLC配置服务
+/// - address: Modbus地址（会自动规范化为5位）
+/// - value: 要写入的布尔值（true=ON, false=OFF）
+/// 
+/// 返回：
+/// - Ok(()): 写入成功
+/// - Err: 错误信息
+/// 
+/// Rust知识点：
+/// - async/await 异步编程
+/// - Result<T, E> 错误处理
 async fn write_bool_to_test_plc(
     app_state: &State<'_, crate::tauri_commands::AppState>,
     address: &str,
