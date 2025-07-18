@@ -54,7 +54,7 @@ import { save as saveDialog } from '@tauri-apps/plugin-dialog';
           </nz-space>
         </nz-card>
 
-        <nz-card nzTitle="PDF报告" class="export-card">
+        <!--nz-card nzTitle="PDF报告" class="export-card">
           <p>生成格式化的PDF测试报告，适合打印和存档。</p>
           <nz-space>
             <button *nzSpaceItem nz-button nzType="primary" (click)="exportPdf()">
@@ -62,7 +62,7 @@ import { save as saveDialog } from '@tauri-apps/plugin-dialog';
               生成PDF报告
             </button>
           </nz-space>
-        </nz-card>
+        </nz-card-->
       </div>
     </div>
   `,

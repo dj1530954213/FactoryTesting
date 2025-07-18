@@ -124,22 +124,22 @@ import { PlcAdvancedTestWindowComponent } from './plc-advanced-test-window.compo
               </td>
               <td>
                 <nz-space>
-                  <button *nzSpaceItem nz-button nzType="primary" nzSize="small" 
+                  <!--button *nzSpaceItem nz-button nzType="primary" nzSize="small" 
                           [nzLoading]="testingConnections.has(connection.id)"
                           (click)="testConnection(connection.id)">
                     <span nz-icon nzType="api" nzTheme="outline"></span>
                     测试连接
-                  </button>
+                  </button-->
                   <button *nzSpaceItem nz-button nzType="default" nzSize="small" 
                           (click)="openAdvancedTestWindow(connection)">
                     <span nz-icon nzType="experiment" nzTheme="outline"></span>
                     高级测试
                   </button>
-                  <button *nzSpaceItem nz-button nzType="default" nzSize="small" 
+                  <!--button *nzSpaceItem nz-button nzType="default" nzSize="small" 
                           (click)="editConnection(connection)">
                     <span nz-icon nzType="edit" nzTheme="outline"></span>
                     编辑
-                  </button>
+                  </button-->
                 </nz-space>
               </td>
             </tr>
