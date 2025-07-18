@@ -1,6 +1,15 @@
 /// 数据管理相关的Tauri命令
 ///
-/// 包括Excel文件解析、批次创建等功能
+/// 业务说明：
+/// 本模块处理所有与测试数据管理相关的前端请求
+/// 主要功能包括：
+/// 1. Excel文件解析 - 从Excel导入测试点位定义
+/// 2. 批次管理 - 创建、查询、删除测试批次
+/// 3. 通道分配 - 将测试点位分配到物理测试通道
+/// 4. 会话管理 - 管理临时测试数据
+/// 
+/// 调用链：
+/// 前端 -> Tauri命令 -> 应用层服务 -> 领域层 -> 基础设施层
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
@@ -16,81 +25,119 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// 通道分配结果（用于命令层）
+/// 
+/// 业务说明：
+/// 封装通道分配的完整结果，包括批次信息、分配的测试实例和分配统计
+/// 这是返回给前端的数据结构
+/// 
+/// Rust知识点：
+/// - #[derive(Debug, Clone, Serialize)] 自动实现调试、克隆和序列化trait
+/// - Serialize trait 允许结构体被序列化为JSON返回给前端
 #[derive(Debug, Clone, Serialize)]
 pub struct AllocationResult {
-    pub batches: Vec<TestBatchInfo>,
-    pub allocated_instances: Vec<crate::models::structs::ChannelTestInstance>,
-    pub allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary,
+    pub batches: Vec<TestBatchInfo>,                    // 创建的批次列表
+    pub allocated_instances: Vec<crate::models::structs::ChannelTestInstance>, // 分配的测试实例
+    pub allocation_summary: crate::application::services::batch_allocation_service::AllocationSummary, // 分配统计摘要
     /// 🔧 修复：添加通道定义字段，用于保存到数据库
-    pub channel_definitions: Option<Vec<ChannelPointDefinition>>,
+    pub channel_definitions: Option<Vec<ChannelPointDefinition>>, // 原始通道定义，可选字段
 }
 
 /// Excel文件解析请求
+/// 
+/// 业务说明：前端请求解析Excel文件时的参数
+/// Rust知识点：Deserialize trait 允许从JSON反序列化为Rust结构体
 #[derive(Debug, Deserialize)]
 pub struct ParseExcelRequest {
-    pub file_path: String,
+    pub file_path: String,  // Excel文件的完整路径
 }
 
 /// Excel文件解析响应
+/// 
+/// 业务说明：返回Excel解析结果，包括解析状态和通道定义数据
 #[derive(Debug, Serialize)]
 pub struct ParseExcelResponse {
-    pub success: bool,
-    pub message: String,
-    pub data: Option<Vec<ChannelPointDefinition>>,
-    pub total_count: usize,
+    pub success: bool,                                    // 解析是否成功
+    pub message: String,                                  // 结果消息
+    pub data: Option<Vec<ChannelPointDefinition>>,      // 解析出的通道定义列表
+    pub total_count: usize,                             // 总通道数
 }
 
 /// Excel解析响应（用于allocate_channels_cmd）
+/// 
+/// 业务说明：增强版的Excel解析响应，包含了批次建议和分配预览信息
+/// 用于一步完成Excel解析和通道分配预览
 #[derive(Debug, Serialize)]
 pub struct ExcelParseResponse {
-    pub success: bool,
-    pub message: Option<String>,
-    pub definitions: Vec<ChannelPointDefinition>,
-    pub suggested_batch_info: Option<TestBatchInfo>,
-    pub allocation_summary: Option<crate::application::services::batch_allocation_service::AllocationSummary>,
+    pub success: bool,                                    // 解析是否成功
+    pub message: Option<String>,                          // 错误消息（如果有）
+    pub definitions: Vec<ChannelPointDefinition>,         // 通道定义列表
+    pub suggested_batch_info: Option<TestBatchInfo>,      // 建议的批次信息
+    pub allocation_summary: Option<crate::application::services::batch_allocation_service::AllocationSummary>, // 分配预览统计
 }
 
 /// 创建批次请求
+/// 
+/// 业务说明：创建测试批次时的完整请求参数
+/// 包含了文件信息、预览数据和批次元数据
 #[derive(Debug, Deserialize)]
 pub struct CreateBatchRequest {
-    pub file_name: String,
-    pub file_path: String,
-    pub preview_data: Vec<ChannelPointDefinition>,
-    pub batch_info: BatchInfo,
+    pub file_name: String,                                // 原始文件名
+    pub file_path: String,                                // 文件路径
+    pub preview_data: Vec<ChannelPointDefinition>,        // 预览的通道数据
+    pub batch_info: BatchInfo,                            // 批次信息
 }
 
 /// 批次信息
+/// 
+/// 业务说明：测试批次的元数据，记录产品型号、序列号等信息
+/// Option<T> 表示可选字段，前端可以不传
 #[derive(Debug, Deserialize)]
 pub struct BatchInfo {
-    pub product_model: String,
-    pub serial_number: String,
-    pub customer_name: Option<String>,
-    pub operator_name: Option<String>,
+    pub product_model: String,                            // 产品型号（必填）
+    pub serial_number: String,                            // 序列号（必填）
+    pub customer_name: Option<String>,                    // 客户名称（可选）
+    pub operator_name: Option<String>,                    // 操作员名称（可选）
 }
 
 /// 创建批次响应
+/// 
+/// 业务说明：返回批次创建结果
 #[derive(Debug, Serialize)]
 pub struct CreateBatchResponse {
-    pub success: bool,
-    pub message: String,
-    pub batch_id: Option<String>,
+    pub success: bool,                                    // 创建是否成功
+    pub message: String,                                  // 结果消息
+    pub batch_id: Option<String>,                         // 创建成功后的批次ID
 }
 
 /// 解析Excel文件
 ///
+/// 业务说明：
+/// 解析Excel文件中的测试点位定义数据
+/// 这是数据导入流程的第一步，只解析不保存
+/// 
+/// 调用链：
+/// 前端调用 -> parse_excel_file -> ExcelImporter::parse_excel_file -> 返回解析结果
+/// 
 /// # 参数
 /// * `file_path` - Excel文件路径
-/// * `state` - 应用状态
+/// * `state` - 应用状态（这里未使用，但Tauri要求保留）
 ///
 /// # 返回
-/// * `Result<ParseExcelResponse, String>` - 解析结果
+/// * `Result<ParseExcelResponse, String>` - 解析结果或错误信息
+/// 
+/// Rust知识点：
+/// - #[tauri::command] 宏将函数暴露为Tauri命令
+/// - State<'_, T> 是Tauri的状态管理机制，'_ 表示生命周期由编译器推断
+/// - Result<T, E> 是Rust的错误处理机制
 #[tauri::command]
 pub async fn parse_excel_file(
     file_path: String,
-    state: State<'_, AppState>
+    state: State<'_, AppState>  // Tauri状态，包含全局服务实例
 ) -> Result<ParseExcelResponse, String> {
     info!("收到Excel文件解析请求: {}", file_path);
 
+    // 调用Excel导入器解析文件
+    // Rust知识点：match 表达式用于模式匹配Result
     match ExcelImporter::parse_excel_file(&file_path).await {
         Ok(definitions) => {
             let total_count = definitions.len();
