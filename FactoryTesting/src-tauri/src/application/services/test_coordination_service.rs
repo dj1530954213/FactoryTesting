@@ -1068,6 +1068,7 @@ impl ITestCoordinationService for TestCoordinationService {
                         need_update = true;
                     }
                 }
+                info!("预留点位被检测{}",definition.tag.clone());
             } else {
                 // 非预留点位，根据SLL/SL/SH/SHH设定值决定测试项跳过策略
                 let sll_empty = definition.sll_set_value.is_none();
@@ -1086,6 +1087,7 @@ impl ITestCoordinationService for TestCoordinationService {
                             need_update = true;
                         }
                     }
+                    info!("全空点位被检测{}",definition.tag.clone());
                 } else {
                     // 部分设定值为空时，跳过对应的测试项
                     for (item, result) in instance.sub_test_results.iter_mut() {
@@ -1160,6 +1162,7 @@ impl ITestCoordinationService for TestCoordinationService {
                 // 追加：若预留点位且仍存在未跳过项，再次修正
                 if let Some(definition) = self.channel_state_manager.get_channel_definition(&instance.definition_id).await {
                     if definition.tag.to_uppercase().contains("YLDW") {
+                        info!("YLDW被检测{}",definition.tag.clone());
                         let mut changed = false;
                         for (item, result) in instance.sub_test_results.iter_mut() {
                             if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {

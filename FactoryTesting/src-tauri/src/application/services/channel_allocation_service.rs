@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use log::{info, debug};
+use crate::models::{SubTestItem, SubTestStatus, SubTestExecutionResult};
 use crate::models::{
     ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, ModuleType, OverallTestStatus
 };
 use crate::models::test_plc_config::TestPlcChannelConfig;
 use crate::error::AppError;
 use chrono::Utc;
-use log::log;
+use uuid::Uuid;
 
 /// 测试PLC通道映射表
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -351,7 +353,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  AI无源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -386,7 +388,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  AO有源(被测)[{}]: {} → {}(测试PLC)", i + 1, def.tag, test_channel.channel_address);
+
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -708,8 +710,8 @@ impl ChannelAllocationService {
     ) -> Result<ChannelTestInstance, AppError> {
         let batch_name = format!("批次{}", batch_number);
 
-        Ok(ChannelTestInstance {
-            instance_id: uuid::Uuid::new_v4().to_string(),
+        let mut instance = ChannelTestInstance {
+            instance_id: Uuid::new_v4().to_string(),
             definition_id: definition.id.clone(),
             test_batch_id: batch_id.to_string(),
             test_batch_name: batch_name,
@@ -740,7 +742,38 @@ impl ChannelAllocationService {
             plc_programming_error_notes: None,
             hmi_configuration_error_notes: None,
             transient_data: HashMap::new(),
-        })
+        };
+
+        // ========= 初始化子测试结果 =========
+        if matches!(definition.module_type, ModuleType::AI) {
+            // AI 模块默认子测试项
+            use SubTestItem::*;
+            let mut results: HashMap<SubTestItem, SubTestExecutionResult> = HashMap::new();
+            for item in [HardPoint, LowLowAlarm, LowAlarm, HighAlarm, HighHighAlarm, Maintenance, StateDisplay].iter() {
+                 results.insert(item.clone(), SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
+             }
+
+            // 预留点位(YLDW) 跳过逻辑
+            if definition.tag.to_uppercase().contains("YLDW") {
+                debug!("[ALLOC] 识别为预留点位(YLDW): {}", definition.tag);
+                for (item, result) in results.iter_mut() {
+                    match item {
+                        SubTestItem::HardPoint | SubTestItem::StateDisplay => {}
+                        _ => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("预留点位测试".to_string());
+                        }
+                    }
+                }
+            }
+
+            instance.sub_test_results = results;
+        }
+
+        // 设置日志
+        info!("[ALLOC] 创建测试实例: {} (Tag={})", instance.instance_id, definition.tag);
+
+        Ok(instance)
     }
 
     /// 创建批次信息

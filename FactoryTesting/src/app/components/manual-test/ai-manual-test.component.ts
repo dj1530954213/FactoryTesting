@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -496,13 +496,22 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
     private manualTestService: ManualTestService,
     private plcMonitoringService: PlcMonitoringService,
     private message: NzMessageService,
-    private modal: NzModalService
+    private modal: NzModalService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     // 初始化显示值
     this.updateRealtimeValues();
     
+    // 订阅PLC监控数据
+    this.subscriptions.add(
+      this.manualTestService.testStatusUpdated$.subscribe(() => {
+        // 后端测试状态更新后刷新视图，确保按钮禁用状态及时生效
+        this.cdr.markForCheck();
+      })
+    );
+
     // 订阅PLC监控数据
     this.subscriptions.add(
       this.plcMonitoringService.currentMonitoringData$.subscribe(data => {
