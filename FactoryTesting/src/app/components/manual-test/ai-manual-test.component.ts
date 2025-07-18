@@ -388,7 +388,7 @@ import { ModuleType } from '../../models';
           </nz-card>
 
           <!-- 维护功能测试 -->
-          <nz-card nzSize="small" class="test-item-card">
+          <nz-card nzSize="small" class="test-item-card" *ngIf="shouldShowSubItem(ManualTestSubItem.MaintenanceFunction)">
             <div class="test-item-header">
               <span class="test-item-title">维护功能测试</span>
               <nz-tag [nzColor]="getSubItemStatusColor(ManualTestSubItem.MaintenanceFunction)">
