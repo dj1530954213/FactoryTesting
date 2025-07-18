@@ -753,8 +753,9 @@ impl ChannelAllocationService {
                  results.insert(item.clone(), SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
              }
 
-            // 预留点位(YLDW) 跳过逻辑
+            // 跳过逻辑处理
             if definition.tag.to_uppercase().contains("YLDW") {
+                // 预留点位统一跳过
                 debug!("[ALLOC] 识别为预留点位(YLDW): {}", definition.tag);
                 for (item, result) in results.iter_mut() {
                     match item {
@@ -762,6 +763,45 @@ impl ChannelAllocationService {
                         _ => {
                             result.status = SubTestStatus::Skipped;
                             result.details = Some("预留点位测试".to_string());
+                        }
+                    }
+                }
+            } else {
+                // 非预留点位，根据报警设定值缺失情况决定跳过
+                let sll_missing = definition.sll_set_value.is_none();
+                let sl_missing = definition.sl_set_value.is_none();
+                let sh_missing = definition.sh_set_value.is_none();
+                let shh_missing = definition.shh_set_value.is_none();
+
+                let all_missing = sll_missing && sl_missing && sh_missing && shh_missing;
+
+                if all_missing {
+                    debug!(
+                        "[ALLOC] 报警设定值全部缺失，跳过报警测试: {}",
+                        definition.tag
+                    );
+                    for (item, result) in results.iter_mut() {
+                        match item {
+                            SubTestItem::HardPoint | SubTestItem::StateDisplay => {}
+                            _ => {
+                                result.status = SubTestStatus::Skipped;
+                                result.details = Some("无报警设定值".to_string());
+                            }
+                        }
+                    }
+                } else {
+                    // 单独检查每个报警级别
+                    for (item, result) in results.iter_mut() {
+                        let should_skip = match item {
+                            SubTestItem::LowLowAlarm => sll_missing,
+                            SubTestItem::LowAlarm => sl_missing,
+                            SubTestItem::HighAlarm => sh_missing,
+                            SubTestItem::HighHighAlarm => shh_missing,
+                            _ => false,
+                        };
+                        if should_skip {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("无报警设定值".to_string());
                         }
                     }
                 }
