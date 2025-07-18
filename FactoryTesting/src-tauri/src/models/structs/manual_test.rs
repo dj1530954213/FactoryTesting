@@ -176,7 +176,6 @@ impl ManualTestConfig {
                 module_type: ModuleType::AO,
                 applicable_sub_items: vec![
                     ManualTestSubItem::ShowValueCheck,
-                    ManualTestSubItem::MaintenanceFunction,
                 ],
                 plc_monitoring_required: true,
                 monitoring_interval: 500,

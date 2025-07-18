@@ -109,7 +109,7 @@ import { ModuleType } from '../../models';
                       [(ngModel)]="displayTestValue"
                       [placeholder]="getDisplayValuePlaceholder()"
                       type="number"
-                      step="0.01">
+                      step="0.001">
                     <button
                       nz-button
                       nzType="default"
@@ -749,8 +749,8 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
     try {
       const response = await this.manualTestService.generateRandomDisplayValue(this.instance.instance_id);
       if (response.success) {
-        this.displayTestValue = response.randomValue;
-        this.message.success(`已生成随机值: ${response.randomValue.toFixed(2)}`);
+        this.displayTestValue = parseFloat(response.randomValue.toFixed(3));
+        this.message.success(`已生成随机值: ${response.randomValue.toFixed(3)}`);
         console.log('✅ [前端] 生成随机值成功:', response.randomValue);
       } else {
         this.message.error(response.message || '生成随机值失败');
@@ -858,7 +858,7 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
       );
 
       if (response.success) {
-        this.message.success(`${alarmType}报警复位成功，已恢复到显示值: ${this.displayTestValue.toFixed(2)}`);
+        this.message.success(`${alarmType}报警复位成功，已恢复到显示值: ${this.displayTestValue.toFixed(3)}`);
       } else {
         this.message.error(response.message || `${alarmType}报警复位失败`);
       }

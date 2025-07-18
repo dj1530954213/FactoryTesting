@@ -196,8 +196,7 @@ export function getManualTestConfig(moduleType: ModuleType): ManualTestConfig {
       return {
         moduleType: ModuleType.AO,
         applicableSubItems: [
-          ManualTestSubItem.ShowValueCheck,
-          ManualTestSubItem.MaintenanceFunction
+          ManualTestSubItem.ShowValueCheck
         ],
         plcMonitoringRequired: true,
         monitoringInterval: 500
