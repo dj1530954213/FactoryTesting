@@ -83,7 +83,10 @@ export class PlcMonitoringService {
     try {
       console.log('🔧 [PLC_MONITORING_SERVICE] 开始PLC监控:', request);
 
-      // 如果已有监控在运行，先停止
+            // 启动前保险：先尝试停止所有可能存在的监控（即使本地认为未监控）
+      await this.forceStopMonitoring(request.instanceId);
+
+      // 如果已有监控在运行，先停止（包含其他实例）
       if (this.isMonitoring.value) {
         await this.stopMonitoring();
       }
@@ -109,6 +112,19 @@ export class PlcMonitoringService {
   /**
    * 停止PLC监控
    */
+  /**
+   * 强制停止指定实例的所有监控（不携带 monitoringId）。
+   * 后端应当根据 instanceId 清理全部相关任务。
+   */
+  private async forceStopMonitoring(instanceId: string): Promise<void> {
+    try {
+      const request: StopPlcMonitoringRequest = { instanceId };
+      await invoke('stop_plc_monitoring_cmd', { request });
+    } catch (error) {
+      console.warn('⚠️ [PLC_MONITORING_SERVICE] 强制停止监控失败(可以忽略):', error);
+    }
+  }
+
   async stopMonitoring(): Promise<void> {
     try {
       if (!this.currentInstanceId) {
@@ -124,6 +140,9 @@ export class PlcMonitoringService {
       };
 
       await invoke('stop_plc_monitoring_cmd', { request });
+
+      // 额外保险：再发一次不带 monitoringId 的停止请求，防止之前启动失败导致 id 不匹配
+      await this.forceStopMonitoring(this.currentInstanceId);
 
       this.stopMonitoringInternal();
       console.log('✅ [PLC_MONITORING_SERVICE] PLC监控已停止');
