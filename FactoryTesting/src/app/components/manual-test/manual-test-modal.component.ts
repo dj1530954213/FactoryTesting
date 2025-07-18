@@ -199,15 +199,26 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
       this.isLoading = true;
       console.log('🔧 [MANUAL_TEST_MODAL] 初始化手动测试:', this.instance.instance_id);
 
-      // 启动手动测试
-      const response = await this.manualTestService.startManualTest({
-        instanceId: this.instance.instance_id,
-        moduleType: this.definition.module_type as ModuleType,
-        operatorName: '当前操作员' // TODO: 从用户服务获取
-      });
+      // 先尝试获取现有的手动测试状态（Excel导入时可能已设置跳过状态）
+      console.log('🔍 [MANUAL_TEST_MODAL] 检查现有手动测试状态...');
+      const existingStatus = await this.manualTestService.getManualTestStatus(this.instance.instance_id);
+      
+      if (existingStatus) {
+        console.log('✅ [MANUAL_TEST_MODAL] 找到现有手动测试状态，使用现有状态:', existingStatus);
+        // 已有状态，直接使用不创建新状态
+      } else {
+        console.log('🔧 [MANUAL_TEST_MODAL] 未找到现有状态，创建新的手动测试状态...');
+        // 没有现有状态，创建新的手动测试
+        const response = await this.manualTestService.startManualTest({
+          instanceId: this.instance.instance_id,
+          moduleType: this.definition.module_type as ModuleType,
+          operatorName: '当前操作员' // TODO: 从用户服务获取
+        });
 
-      if (!response.success) {
-        throw new Error(response.message || '启动手动测试失败');
+        if (!response.success) {
+          throw new Error(response.message || '启动手动测试失败');
+        }
+        console.log('✅ [MANUAL_TEST_MODAL] 新手动测试状态创建成功');
       }
 
       // 启动PLC监控
@@ -248,29 +259,25 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
 
-      const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address;
-      if (sllAddr) {
-        addressKeyMap[sllAddr] = 'sllSetPoint';
-        console.log('📊 [MANUAL_TEST_MODAL] 添加SLL设定值地址:', this.definition.sll_set_point_communication_address);
-      }
-      const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address;
-      if (slAddr) {
-        addressKeyMap[slAddr] = 'slSetPoint';
-        console.log('📊 [MANUAL_TEST_MODAL] 添加SL设定值地址:', this.definition.sl_set_point_communication_address);
-      }
-      const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address;
-      if (shAddr) {
-        addressKeyMap[shAddr] = 'shSetPoint';
-        console.log('📊 [MANUAL_TEST_MODAL] 添加SH设定值地址:', this.definition.sh_set_point_communication_address);
-      }
-      const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address;
-      if (shhAddr) {
-        addressKeyMap[shhAddr] = 'shhSetPoint';
-        console.log('📊 [MANUAL_TEST_MODAL] 添加SHH设定值地址:', this.definition.shh_set_point_communication_address);
-      }
-
+      // 为AI点位构建地址映射关系
       if (moduleType === ModuleType.AI) {
         addressKeyMap[baseAddress] = 'currentValue';
+        
+        // 为报警设定值地址构建映射（基于getMonitoringAddresses返回的顺序）
+        // 重要：为空地址使用唯一标识符，避免键值覆盖问题
+        if (monitoringAddresses.length >= 5) { // currentValue + 4个报警设定值
+          // 为空地址使用唯一标识符，避免都使用""导致覆盖
+          const sllKey = monitoringAddresses[1] || 'EMPTY_SLL_ADDRESS';
+          const slKey = monitoringAddresses[2] || 'EMPTY_SL_ADDRESS';
+          const shKey = monitoringAddresses[3] || 'EMPTY_SH_ADDRESS';
+          const shhKey = monitoringAddresses[4] || 'EMPTY_SHH_ADDRESS';
+          
+          addressKeyMap[sllKey] = 'sllSetPoint'; // SLL
+          addressKeyMap[slKey] = 'slSetPoint';   // SL
+          addressKeyMap[shKey] = 'shSetPoint';   // SH
+          addressKeyMap[shhKey] = 'shhSetPoint'; // SHH
+          console.log('📊 [MANUAL_TEST_MODAL] AI点位地址映射（唯一标识符）:', addressKeyMap);
+        }
       } else if (moduleType === ModuleType.AO) {
         addressKeyMap[baseAddress] = 'currentOutput';
       } else if (moduleType === ModuleType.DI || moduleType === ModuleType.DO) {
@@ -345,23 +352,22 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
           console.error('❌ [MANUAL_TEST_MODAL] AI点位定义缺少 plc_communication_address');
         }
 
-        // AI点位的【报警设定值】监控其各自独立的地址
-        const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address;
-        if (sllAddr) {
-          addresses.push(sllAddr);
-        }
-        const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address;
-        if (slAddr) {
-          addresses.push(slAddr);
-        }
-        const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address;
-        if (shAddr) {
-          addresses.push(shAddr);
-        }
-        const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address;
-        if (shhAddr) {
-          addresses.push(shhAddr);
-        }
+        // AI点位的【报警设定值】监控其各自独立的地址（为空地址使用唯一标识符）
+        const sllAddr = this.definition.sll_set_point_communication_address || this.definition.sll_set_point_plc_address || 'EMPTY_SLL_ADDRESS';
+        addresses.push(sllAddr);
+        console.log('📊 [MANUAL_TEST_MODAL] AI点位【SLL设定值】监控地址:', sllAddr === 'EMPTY_SLL_ADDRESS' ? '(空地址-SLL)' : sllAddr);
+        
+        const slAddr = this.definition.sl_set_point_communication_address || this.definition.sl_set_point_plc_address || 'EMPTY_SL_ADDRESS';
+        addresses.push(slAddr);
+        console.log('📊 [MANUAL_TEST_MODAL] AI点位【SL设定值】监控地址:', slAddr === 'EMPTY_SL_ADDRESS' ? '(空地址-SL)' : slAddr);
+        
+        const shAddr = this.definition.sh_set_point_communication_address || this.definition.sh_set_point_plc_address || 'EMPTY_SH_ADDRESS';
+        addresses.push(shAddr);
+        console.log('📊 [MANUAL_TEST_MODAL] AI点位【SH设定值】监控地址:', shAddr === 'EMPTY_SH_ADDRESS' ? '(空地址-SH)' : shAddr);
+        
+        const shhAddr = this.definition.shh_set_point_communication_address || this.definition.shh_set_point_plc_address || 'EMPTY_SHH_ADDRESS';
+        addresses.push(shhAddr);
+        console.log('📊 [MANUAL_TEST_MODAL] AI点位【SHH设定值】监控地址:', shhAddr === 'EMPTY_SHH_ADDRESS' ? '(空地址-SHH)' : shhAddr);
         break;
 
       case ModuleType.AO:

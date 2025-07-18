@@ -1053,30 +1053,76 @@ impl ITestCoordinationService for TestCoordinationService {
 
         let mut instance = self.channel_state_manager.get_instance_state(&request.instance_id).await?;
 
-        // 若为预留点位，确保跳过逻辑已应用（适配旧批次）
+        // 确保跳过逻辑已应用（适配旧批次）
         if let Some(definition) = self.channel_state_manager.get_channel_definition(&instance.definition_id).await {
+            let mut need_update = false;
+            
+            // 第一种：预留点位（名称包含 YLDW），除硬点测试与显示值核对外的测试项全部跳过
             if definition.tag.to_uppercase().contains("YLDW") {
-                let mut need_update = false;
                 for (item, result) in instance.sub_test_results.iter_mut() {
                     if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
                         // do nothing
                     } else if result.status == crate::models::enums::SubTestStatus::NotTested {
                         result.status = crate::models::enums::SubTestStatus::Skipped;
-                        result.details.get_or_insert("预留点位测试".to_string());
+                        result.details = Some("预留点位测试".to_string());
                         need_update = true;
                     }
                 }
-                if need_update {
-                    // 更新实例整体状态（跳过逻辑应用后）
-                    if let Err(e) = self.channel_state_manager.update_overall_status(&instance.instance_id, instance.overall_status.clone()).await {
-                        warn!("⚠️ 更新实例状态失败: {}", e);
+            }
+            // 第二种：非预留点位，根据SLL/SL/SH/SHH设定值决定测试项跳过策略
+            else {
+                let sll_empty = definition.sll_set_value.is_none();
+                let sl_empty = definition.sl_set_value.is_none();
+                let sh_empty = definition.sh_set_value.is_none();
+                let shh_empty = definition.shh_set_value.is_none();
+                
+                // 情况1：如果SLL/SL/SH/SHH设定值都为空，只测试HardPoint和StateDisplay
+                if sll_empty && sl_empty && sh_empty && shh_empty {
+                    for (item, result) in instance.sub_test_results.iter_mut() {
+                        if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
+                            // 保持 NotTested 由后续流程执行
+                        } else if result.status == crate::models::enums::SubTestStatus::NotTested {
+                            result.status = crate::models::enums::SubTestStatus::Skipped;
+                            result.details = Some("无报警设定值".to_string());
+                            need_update = true;
+                        }
                     }
+                } else {
+                    // 情况2：部分设定值为空时，跳过对应的测试项
+                    for (item, result) in instance.sub_test_results.iter_mut() {
+                        let should_skip = match item {
+                            crate::models::enums::SubTestItem::LowLowAlarm if sll_empty => true,
+                            crate::models::enums::SubTestItem::LowAlarm if sl_empty => true,
+                            crate::models::enums::SubTestItem::HighAlarm if sh_empty => true,
+                            crate::models::enums::SubTestItem::HighHighAlarm if shh_empty => true,
+                            _ => false,
+                        };
+                        
+                        if should_skip && result.status == crate::models::enums::SubTestStatus::NotTested {
+                            result.status = crate::models::enums::SubTestStatus::Skipped;
+                            result.details = Some(format!("{}设定值为空", match item {
+                                crate::models::enums::SubTestItem::LowLowAlarm => "SLL",
+                                crate::models::enums::SubTestItem::LowAlarm => "SL",
+                                crate::models::enums::SubTestItem::HighAlarm => "SH",
+                                crate::models::enums::SubTestItem::HighHighAlarm => "SHH",
+                                _ => "未知",
+                            }));
+                            need_update = true;
+                        }
+                    }
+                }
+            }
 
-                    // 重新评估整体状态（确保通过）
-                    // 注意：evaluate_overall_status 是私有，这里简单调用 persistence_service 保存实例
-                    if let Err(e) = self.persistence_service.save_test_instance(&instance).await {
-                        warn!("⚠️ 保存预留点位实例失败: {}", e);
-                    }
+            if need_update {
+                info!("🔧 [TEST_COORDINATION] 应用跳过逻辑，更新实例: {}", instance.instance_id);
+                // 更新实例整体状态（跳过逻辑应用后）
+                if let Err(e) = self.channel_state_manager.update_overall_status(&instance.instance_id, instance.overall_status.clone()).await {
+                    warn!("⚠️ 更新实例状态失败: {}", e);
+                }
+
+                // 重新评估整体状态（确保通过）
+                if let Err(e) = self.persistence_service.save_test_instance(&instance).await {
+                    warn!("⚠️ 保存实例失败: {}", e);
                 }
             }
         }

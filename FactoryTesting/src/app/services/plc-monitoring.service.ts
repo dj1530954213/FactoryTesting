@@ -186,9 +186,9 @@ export class PlcMonitoringService {
    */
   getMonitoringValue(key: string): any {
     const data = this.currentMonitoringData.value;
-    if (!data || !data.values) return null;
+    if (!data || !data.values) return undefined; // 没有监控数据时返回undefined
 
-    return data.values[key];
+    return data.values[key]; // 可能返回null（空地址）或具体值
   }
 
   /**
@@ -196,7 +196,14 @@ export class PlcMonitoringService {
    */
   getFormattedMonitoringValue(key: string, moduleType: ModuleType): string {
     const value = this.getMonitoringValue(key);
-    if (value === null || value === undefined) {
+    
+    // 如果值为null（对应空地址），显示'--'
+    if (value === null) {
+      return '--';
+    }
+    
+    // 如果值为undefined（监控数据还未到达），显示'读取中...'
+    if (value === undefined) {
       return '读取中...';
     }
 

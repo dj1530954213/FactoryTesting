@@ -295,7 +295,9 @@ impl IChannelStateManager for ChannelStateManager {
         // 根据模块类型初始化子测试结果
         instance.sub_test_results = self.initialize_sub_test_results(&definition.module_type);
 
-        // 若为预留点位（名称包含 YLDW），除硬点测试与显示值核对外的测试项全部跳过
+        // 分为两种并行的点位处理策略：
+        
+        // 第一种：预留点位（名称包含 YLDW），除硬点测试与显示值核对外的测试项全部跳过
         if definition.tag.to_uppercase().contains("YLDW") {
             for (item, result) in instance.sub_test_results.iter_mut() {
                 match item {
@@ -305,6 +307,53 @@ impl IChannelStateManager for ChannelStateManager {
                     _ => {
                         result.status = SubTestStatus::Skipped;
                         result.details = Some("预留点位测试".to_string());
+                    }
+                }
+            }
+        }
+        // 第二种：非预留点位，根据SLL/SL/SH/SHH设定值决定测试项跳过策略
+        else {
+            let sll_empty = definition.sll_set_value.is_none();
+            let sl_empty = definition.sl_set_value.is_none();
+            let sh_empty = definition.sh_set_value.is_none();
+            let shh_empty = definition.shh_set_value.is_none();
+            
+            // 情况1：如果SLL/SL/SH/SHH设定值都为空，只测试HardPoint和StateDisplay
+            if sll_empty && sl_empty && sh_empty && shh_empty {
+                for (item, result) in instance.sub_test_results.iter_mut() {
+                    match item {
+                        SubTestItem::HardPoint | SubTestItem::StateDisplay => {
+                            // 保持 NotTested 由后续流程执行
+                        }
+                        _ => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("无报警设定值".to_string());
+                        }
+                    }
+                }
+            } else {
+                // 情况2：部分设定值为空时，跳过对应的测试项
+                for (item, result) in instance.sub_test_results.iter_mut() {
+                    match item {
+                        SubTestItem::LowLowAlarm if sll_empty => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("SLL设定值为空".to_string());
+                        }
+                        SubTestItem::LowAlarm if sl_empty => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("SL设定值为空".to_string());
+                        }
+                        SubTestItem::HighAlarm if sh_empty => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("SH设定值为空".to_string());
+                        }
+                        SubTestItem::HighHighAlarm if shh_empty => {
+                            result.status = SubTestStatus::Skipped;
+                            result.details = Some("SHH设定值为空".to_string());
+                        }
+                        _ => {
+                            // 其他测试项保持原状
+                        }
                     }
                 }
             }

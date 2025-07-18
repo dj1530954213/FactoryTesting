@@ -500,25 +500,26 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // 初始化显示值
+    this.updateRealtimeValues();
+    
     // 订阅PLC监控数据
     this.subscriptions.add(
       this.plcMonitoringService.currentMonitoringData$.subscribe(data => {
-        if (data && data.values) {
-          this.realtimeCurrentValue = this.plcMonitoringService.getFormattedMonitoringValue('currentValue', ModuleType.AI);
-          this.realtimeSllSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI);
-          this.realtimeSlSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI);
-          this.realtimeShSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI);
-          this.realtimeShhSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI);
-        } else {
-          // 如果没有数据，则显示默认值
-          this.realtimeCurrentValue = '读取中...';
-          this.realtimeSllSetPoint = '读取中...';
-          this.realtimeSlSetPoint = '读取中...';
-          this.realtimeShSetPoint = '读取中...';
-          this.realtimeShhSetPoint = '读取中...';
-        }
+        this.updateRealtimeValues();
       })
     );
+  }
+
+  /**
+   * 更新实时显示值
+   */
+  private updateRealtimeValues(): void {
+    this.realtimeCurrentValue = this.plcMonitoringService.getFormattedMonitoringValue('currentValue', ModuleType.AI);
+    this.realtimeSllSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('sllSetPoint', ModuleType.AI);
+    this.realtimeSlSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('slSetPoint', ModuleType.AI);
+    this.realtimeShSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shSetPoint', ModuleType.AI);
+    this.realtimeShhSetPoint = this.plcMonitoringService.getFormattedMonitoringValue('shhSetPoint', ModuleType.AI);
   }
 
   ngOnDestroy(): void {
