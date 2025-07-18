@@ -406,10 +406,11 @@ impl BatchAllocationService {
 
                 // 保存到数据库
                 let active_model: channel_test_instance::ActiveModel = (&test_instance).into();
-                let saved_model = active_model.insert(&*self.db).await
+                let _saved_model = active_model.insert(&*self.db).await
                     .map_err(|e| AppError::persistence_error(format!("保存测试实例失败: {}", e)))?;
 
-                test_instances.push((&saved_model).into());
+                // 使用原始实例而不是从数据库读取的版本，以保留完整的跳过状态
+                test_instances.push(test_instance);
             }
         }
 

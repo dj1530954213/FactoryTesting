@@ -124,7 +124,7 @@ impl ChannelStateManager {
         let mut manual_tests_completed = true;
 
         // 移除详细的状态评估日志，避免日志过多
-        // trace!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
+        //trace!("🔍 [EVALUATE_STATUS] 开始评估状态: {}", instance.instance_id);
 
         // 遍历所有子测试结果
         for (sub_test_item, result) in &instance.sub_test_results {

@@ -876,8 +876,15 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.initializeTestProgress();
 
       // 🔧 新增：在API调用之前初始化测试计数器，避免时序问题
-      const totalPoints = this.batchDetails?.instances?.length || 0;
-      this.initializeTestCounter(totalPoints);
+      // 计算实际需要执行的测试数量（排除已经被标记为跳过的实例）
+      const instancesNeedingTest = this.batchDetails?.instances?.filter(inst => 
+        inst.overall_status !== OverallTestStatus.Skipped &&
+        inst.overall_status !== OverallTestStatus.TestCompletedPassed &&
+        inst.overall_status !== OverallTestStatus.TestCompletedFailed
+      ) || [];
+      const testCountToExecute = instancesNeedingTest.length;
+      console.log(`🔧 [TEST_AREA] 批次共有 ${this.batchDetails?.instances?.length || 0} 个实例，其中 ${testCountToExecute} 个需要执行测试`);
+      this.initializeTestCounter(testCountToExecute);
 
       // 调用后端API开始自动测试
       const result = await this.tauriApiService.startBatchAutoTest(this.selectedBatch.batch_id).toPromise();
@@ -1610,14 +1617,16 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         case OverallTestStatus.TestCompletedFailed:
           failedPoints++;
           break;
-        // 可根据需要补充其他已完成但跳过的状态
+        case OverallTestStatus.Skipped:
+          skippedPoints++;
+          break;
         default:
           // 其它状态（未测试、测试中等）不计入已测，待测将在后续由总数计算得出
           break;
       }
     });
 
-    const testedPoints = successPoints + failedPoints; // 跳过的不计入已测
+    const testedPoints = successPoints + failedPoints + skippedPoints; // 跳过的也计入已测（因为它们不需要执行）
     const pendingPoints = totalPoints - testedPoints;
 
     // 根据进度更新批次状态摘要与 overall_status，便于 UI 正确显示
