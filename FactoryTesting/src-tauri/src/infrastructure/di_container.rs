@@ -247,7 +247,8 @@ impl ServiceContainer for AppServiceContainer {
 
     fn get_batch_allocation_service(&self) -> Arc<dyn IBatchAllocationService> {
         let db = Arc::new(self.persistence_service.get_database_connection());
-        Arc::new(RealBatchAllocationService::new(db))
+        let channel_state_manager = self.get_channel_state_manager();
+        Arc::new(RealBatchAllocationService::new(db, channel_state_manager))
     }
 
     fn get_event_publisher(&self) -> Arc<dyn IEventPublisher> {

@@ -13,6 +13,7 @@ use chrono::Utc;
 use uuid::Uuid;
 use serde_json;
 use log::{info, warn, error};
+use crate::domain::services::channel_state_manager::IChannelStateManager;
 
 /// 分配策略
 #[derive(Debug, Clone)]
@@ -90,12 +91,13 @@ impl AllocationSummary {
 /// 批次分配服务
 pub struct BatchAllocationService {
     db: Arc<DatabaseConnection>,
+    channel_state_manager: Arc<dyn IChannelStateManager>,
 }
 
 impl BatchAllocationService {
     /// 创建新的批次分配服务实例
-    pub fn new(db: Arc<DatabaseConnection>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<DatabaseConnection>, channel_state_manager: Arc<dyn IChannelStateManager>) -> Self {
+        Self { db, channel_state_manager }
     }
 
     /// 创建测试批次并分配通道
@@ -391,12 +393,16 @@ impl BatchAllocationService {
 
         for group in grouped_definitions {
             for definition in group {
-                let mut test_instance = ChannelTestInstance::new(
-                    definition.id.clone(),
-                    batch_info.batch_id.clone(),
-                );
+                info!("🔧 [BATCH_ALLOCATION] 使用ChannelStateManager创建测试实例: {}", definition.tag);
+                
+                // 使用ChannelStateManager的initialize_channel_test_instance方法
+                // 这确保了所有的跳过逻辑（YLDW和设定值策略）都会被正确应用
+                let mut test_instance = self.channel_state_manager
+                    .initialize_channel_test_instance(definition.clone(), batch_info.batch_id.clone())
+                    .await
+                    .map_err(|e| AppError::persistence_error(format!("初始化测试实例失败: {}", e)))?;
+                
                 test_instance.test_batch_name = batch_info.batch_name.clone();
-                // 其他字段可以通过定义获取，但不在构造函数中设置
 
                 // 保存到数据库
                 let active_model: channel_test_instance::ActiveModel = (&test_instance).into();

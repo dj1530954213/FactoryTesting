@@ -1057,8 +1057,8 @@ impl ITestCoordinationService for TestCoordinationService {
         if let Some(definition) = self.channel_state_manager.get_channel_definition(&instance.definition_id).await {
             let mut need_update = false;
             
-            // 第一种：预留点位（名称包含 YLDW），除硬点测试与显示值核对外的测试项全部跳过
             if definition.tag.to_uppercase().contains("YLDW") {
+                // 预留点位，除硬点测试与显示值核对外的测试项全部跳过
                 for (item, result) in instance.sub_test_results.iter_mut() {
                     if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
                         // do nothing
@@ -1068,15 +1068,14 @@ impl ITestCoordinationService for TestCoordinationService {
                         need_update = true;
                     }
                 }
-            }
-            // 第二种：非预留点位，根据SLL/SL/SH/SHH设定值决定测试项跳过策略
-            else {
+            } else {
+                // 非预留点位，根据SLL/SL/SH/SHH设定值决定测试项跳过策略
                 let sll_empty = definition.sll_set_value.is_none();
                 let sl_empty = definition.sl_set_value.is_none();
                 let sh_empty = definition.sh_set_value.is_none();
                 let shh_empty = definition.shh_set_value.is_none();
                 
-                // 情况1：如果SLL/SL/SH/SHH设定值都为空，只测试HardPoint和StateDisplay
+                // 如果SLL/SL/SH/SHH设定值都为空，只测试HardPoint和StateDisplay
                 if sll_empty && sl_empty && sh_empty && shh_empty {
                     for (item, result) in instance.sub_test_results.iter_mut() {
                         if matches!(item, crate::models::enums::SubTestItem::HardPoint | crate::models::enums::SubTestItem::StateDisplay) {
@@ -1088,7 +1087,7 @@ impl ITestCoordinationService for TestCoordinationService {
                         }
                     }
                 } else {
-                    // 情况2：部分设定值为空时，跳过对应的测试项
+                    // 部分设定值为空时，跳过对应的测试项
                     for (item, result) in instance.sub_test_results.iter_mut() {
                         let should_skip = match item {
                             crate::models::enums::SubTestItem::LowLowAlarm if sll_empty => true,
@@ -1112,9 +1111,8 @@ impl ITestCoordinationService for TestCoordinationService {
                     }
                 }
             }
-
+            
             if need_update {
-                info!("🔧 [TEST_COORDINATION] 应用跳过逻辑，更新实例: {}", instance.instance_id);
                 // 更新实例整体状态（跳过逻辑应用后）
                 if let Err(e) = self.channel_state_manager.update_overall_status(&instance.instance_id, instance.overall_status.clone()).await {
                     warn!("⚠️ 更新实例状态失败: {}", e);

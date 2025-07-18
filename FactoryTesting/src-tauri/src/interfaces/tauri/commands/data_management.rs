@@ -1350,7 +1350,10 @@ pub async fn create_batch_and_persist_data_cmd(
 
     // 调用通道分配服务
     let db_conn = state.persistence_service.get_database_connection();
-    let allocation_service = crate::application::services::batch_allocation_service::BatchAllocationService::new(Arc::new(db_conn));
+    let allocation_service = crate::application::services::batch_allocation_service::BatchAllocationService::new(
+        Arc::new(db_conn), 
+        state.channel_state_manager.clone()
+    );
 
     let allocation_result = match allocation_service
         .create_test_batch(
@@ -1483,7 +1486,10 @@ pub async fn create_test_batch_with_allocation_cmd(
     };
 
     let db = state.persistence_service.get_database_connection();
-    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+    let allocation_service = BatchAllocationService::new(
+        Arc::new(db.clone()), 
+        state.channel_state_manager.clone()
+    );
 
     match allocation_service.create_test_batch(
         batch_name,
@@ -1773,7 +1779,10 @@ pub async fn create_test_batch_with_definitions_cmd(
 
     // 第二步：创建测试批次
     let db = persistence_service.get_database_connection();
-    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+    let allocation_service = BatchAllocationService::new(
+        Arc::new(db.clone()), 
+        state.channel_state_manager.clone()
+    );
 
     // 第二步：创建测试批次，确保station_name被正确设置
     let mut updated_batch_info = batch_info.clone();
@@ -1874,7 +1883,10 @@ pub async fn import_excel_and_create_batch_cmd(
         _ => AllocationStrategy::Smart,
     };
 
-    let allocation_service = BatchAllocationService::new(Arc::new(db.clone()));
+    let allocation_service = BatchAllocationService::new(
+        Arc::new(db.clone()), 
+        state.channel_state_manager.clone()
+    );
     let allocation_result = match allocation_service.create_test_batch(
         batch_name,
         product_model,

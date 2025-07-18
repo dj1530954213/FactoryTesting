@@ -12,6 +12,7 @@ use crate::domain::services::test_orchestration_service::AllocationSummary;
 use chrono::{Utc, DateTime};
 use std::collections::HashMap;
 use crate::utils::error::{AppError, AppResult};
+use crate::domain::services::channel_state_manager::IChannelStateManager;
 
 use sea_orm::{DatabaseConnection, Statement, DatabaseBackend, ConnectionTrait, TryGetable, EntityTrait};
 use crate::application::services::batch_allocation_service as app_service;
@@ -23,6 +24,7 @@ use crate::models::entities::test_batch_info;
 /// progressively implemented in subsequent steps.
 pub struct RealBatchAllocationService {
     db: Arc<DatabaseConnection>,
+    channel_state_manager: Arc<dyn IChannelStateManager>,
 }
 
 impl RealBatchAllocationService {
@@ -50,8 +52,8 @@ impl RealBatchAllocationService {
         }
     }
     /// Create a new instance using a database connection.
-    pub fn new(db: Arc<DatabaseConnection>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<DatabaseConnection>, channel_state_manager: Arc<dyn IChannelStateManager>) -> Self {
+        Self { db, channel_state_manager }
     }
 }
 
@@ -85,7 +87,10 @@ impl IBatchAllocationService for RealBatchAllocationService {
         let _ = definitions; // 目前忽略显式定义列表，后续可扩展
 
         // 构建应用层服务
-        let app_service = app_service::BatchAllocationService::new(self.db.clone());
+        let app_service = app_service::BatchAllocationService::new(
+            self.db.clone(), 
+            self.channel_state_manager.clone()
+        );
         let app_strategy = Self::convert_strategy(&strategy);
 
         // 调用应用层逻辑
@@ -189,7 +194,10 @@ impl IBatchAllocationService for RealBatchAllocationService {
         let batch_info: TestBatchInfo = (&batch_info_model).into();
 
         // 2. 构建应用层分配服务
-        let app_service = app_service::BatchAllocationService::new(self.db.clone());
+        let app_service = app_service::BatchAllocationService::new(
+            self.db.clone(), 
+            self.channel_state_manager.clone()
+        );
 
         // 3. 策略转换
         let app_strategy = Self::convert_strategy(&strategy);

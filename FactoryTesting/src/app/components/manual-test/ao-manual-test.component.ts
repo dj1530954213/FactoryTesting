@@ -130,7 +130,7 @@ import {
           </nz-card>
 
           <!-- 维护功能测试 -->
-          <nz-card nzSize="small" class="test-item-card">
+          <nz-card nzSize="small" class="test-item-card" *ngIf="shouldShowSubItem(ManualTestSubItem.MaintenanceFunction)">
             <div class="test-item-header">
               <span class="test-item-title">维护功能测试</span>
               <nz-tag [nzColor]="getSubItemStatusColor(ManualTestSubItem.MaintenanceFunction)">
@@ -281,6 +281,31 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
     const status = this.manualTestService.getSubItemStatus(subItem);
     return status === ManualTestSubItemStatus.Passed || 
            status === ManualTestSubItemStatus.Skipped;
+  }
+
+  /**
+   * 检查子项是否应该显示（未被后端标记为跳过）
+   * 如果后端在初始化时就将某个子项标记为Skipped，说明该项应该被隐藏
+   */
+  shouldShowSubItem(subItem: ManualTestSubItem): boolean {
+    // 如果没有测试状态，显示所有项目（向后兼容）
+    if (!this.testStatus) return true;
+    
+    // 检查后端返回的状态
+    const subItemResult = this.testStatus.subItemResults[subItem];
+    if (!subItemResult) return true;
+    
+    // 如果后端初始化时就标记为Skipped，且有相关的跳过原因，则不显示
+    // 跳过原因存储在operatorNotes字段中（后端映射关系：details -> operatorNotes）
+    if (subItemResult.status === ManualTestSubItemStatus.Skipped && 
+        subItemResult.operatorNotes && 
+        (subItemResult.operatorNotes.includes('预留点位测试') ||
+         subItemResult.operatorNotes.includes('设定值为空') ||
+         subItemResult.operatorNotes.includes('无报警设定值'))) {
+      return false;
+    }
+    
+    return true;
   }
 
   /**

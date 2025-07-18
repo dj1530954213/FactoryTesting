@@ -211,12 +211,12 @@ impl PlcMonitoringService {
                 // 从地址映射表中查找对应的键名
                 if let Some(map) = address_key_map {
                     if let Some(key) = map.get(address) {
-                        log::info!("🔍 [PLC_MONITORING] 为空地址标识符设置null值: {} ({}) -> null", key, address);
+                        //log::info!("🔍 [PLC_MONITORING] 为空地址标识符设置null值: {} ({}) -> null", key, address);
                         values.insert(key.clone(), serde_json::Value::Null);
                     }
                 } else {
                     let value_key = Self::get_value_key(address, module_type);
-                    log::info!("🔍 [PLC_MONITORING] 为空地址设置null值(无映射): {} -> null", value_key);
+                    //log::info!("🔍 [PLC_MONITORING] 为空地址设置null值(无映射): {} -> null", value_key);
                     values.insert(value_key, serde_json::Value::Null);
                 }
             }

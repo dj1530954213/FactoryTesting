@@ -14,7 +14,8 @@
       "Bash(kill:*)",
       "Bash(ng build:*)",
       "Bash(sqlite3:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

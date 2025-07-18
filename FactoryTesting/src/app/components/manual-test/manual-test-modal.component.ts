@@ -204,7 +204,7 @@ export class ManualTestModalComponent implements OnInit, OnDestroy, OnChanges {
       const existingStatus = await this.manualTestService.getManualTestStatus(this.instance.instance_id);
       
       if (existingStatus) {
-        console.log('✅ [MANUAL_TEST_MODAL] 找到现有手动测试状态，使用现有状态:', existingStatus);
+        console.log('✅ [MANUAL_TEST_MODAL] 找到现有手动测试状态，使用现有状态');
         // 已有状态，直接使用不创建新状态
       } else {
         console.log('🔧 [MANUAL_TEST_MODAL] 未找到现有状态，创建新的手动测试状态...');
