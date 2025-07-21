@@ -166,6 +166,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   // 🔧 性能优化：防抖处理
   private _searchDebounceTimer: any = null;
   private _statsUpdateTimer: any = null;
+  private _progressUpdateTimer: any = null; // 🔧 新增：进度更新防抖定时器
 
   // 模块类型选项
   moduleTypeOptions = [
@@ -244,6 +245,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     if (this._statsUpdateTimer) {
       clearTimeout(this._statsUpdateTimer);
       this._statsUpdateTimer = null;
+    }
+    if (this._progressUpdateTimer) {
+      clearTimeout(this._progressUpdateTimer);
+      this._progressUpdateTimer = null;
     }
   }
 
@@ -755,8 +760,24 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 根据 batchDetails 重新计算总体进度并更新 testProgress
+   * 🔧 修复：添加防抖机制，避免频繁更新导致闪烁
    */
   private updateOverallProgress(): void {
+    // 清除之前的定时器
+    if (this._progressUpdateTimer) {
+      clearTimeout(this._progressUpdateTimer);
+    }
+
+    // 使用防抖机制，延迟100ms更新，避免频繁闪烁
+    this._progressUpdateTimer = setTimeout(() => {
+      this.doUpdateOverallProgress();
+    }, 100);
+  }
+
+  /**
+   * 实际执行进度更新的方法
+   */
+  private doUpdateOverallProgress(): void {
     const stats = this.calculateTestStatsFromDetails();
 
     this.testProgress.totalPoints = stats.totalPoints;
@@ -774,7 +795,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.selectedBatch.failed_points = stats.failedPoints;
       this.selectedBatch.skipped_points = stats.skippedPoints;
 
-      // 同时更新 availableBatches 列表中的同批次对象
+      // 同时更新 availableBatches 列表中的同批次对象（仅更新统计数据）
       const idx = this.availableBatches.findIndex(b => b.batch_id === this.selectedBatch!.batch_id);
       if (idx !== -1) {
         this.availableBatches[idx] = { ...this.availableBatches[idx], ...{
@@ -782,10 +803,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           tested_points: stats.testedPoints,
           passed_points: stats.successPoints,
           failed_points: stats.failedPoints,
-          skipped_points: stats.skippedPoints,
-          // 🔧 修复：同步状态字段更新，确保批次选择区域实时显示正确状态
-          overall_status: this.selectedBatch!.overall_status,
-          status_summary: this.selectedBatch!.status_summary
+          skipped_points: stats.skippedPoints
+          // 🔧 移除：状态字段不再同步，批次选择区域使用独立的状态逻辑
         } } as TestBatchInfo;
       }
     }
@@ -1031,18 +1050,21 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 获取测试状态颜色
-   * success | warning | processing | default
+   * 🔧 修复：使用与批次选择区域一致的状态逻辑
    */
   getTestStatusColor(): string {
-    const { totalPoints, completedPoints, failedPoints } = this.testProgress;
-    const allDone = totalPoints > 0 && completedPoints === totalPoints;
-
-    if (allDone) {
-      return failedPoints > 0 ? 'warning' : 'success';
-    } else if (completedPoints > 0) {
-      return 'processing';
-    } else {
+    if (!this.selectedBatch) {
       return 'default';
+    }
+    
+    // 使用批次选择区域的状态逻辑保持一致
+    const status = this.getBatchSelectionStatus(this.selectedBatch);
+    
+    switch (status.color) {
+      case 'success': return 'success';
+      case 'error': return 'warning';
+      case 'processing': return 'processing';
+      default: return 'default';
     }
   }
 
@@ -1080,19 +1102,25 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 获取测试状态文本
+   * 🔧 修复：使用与批次选择区域一致的状态逻辑
    */
   getTestStatusText(): string {
-    const { totalPoints, completedPoints, failedPoints } = this.testProgress;
-
-    if (totalPoints === 0 || completedPoints === 0) {
+    if (!this.selectedBatch) {
       return '等待开始';
     }
-
-    if (completedPoints < totalPoints) {
-      return '测试进行中';
+    
+    // 使用批次选择区域的状态逻辑保持一致
+    const status = this.getBatchSelectionStatus(this.selectedBatch);
+    
+    // 根据状态返回对应的文本
+    switch (status.status) {
+      case '未开始': return '等待开始';
+      case '测试中': return '测试进行中';
+      case '已完成': 
+        const { failedPoints } = this.testProgress;
+        return failedPoints > 0 ? '测试完成(有失败)' : '测试完成(全部通过)';
+      default: return '等待开始';
     }
-
-    return failedPoints > 0 ? '测试完成(有失败)' : '测试完成(全部通过)';
   }
 
   /**
@@ -1662,19 +1690,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const testedPoints = successPoints + failedPoints + skippedPoints; // 跳过的也计入已测（因为它们不需要执行）
     const pendingPoints = totalPoints - testedPoints;
 
-    // 根据进度更新批次状态摘要与 overall_status，便于 UI 正确显示
-    if (this.selectedBatch) {
-      if (testedPoints === 0) {
-        this.selectedBatch.status_summary = '未开始';
-        this.selectedBatch.overall_status = OverallTestStatus.NotTested;
-      } else if (testedPoints < totalPoints) {
-        this.selectedBatch.status_summary = '测试中';
-        this.selectedBatch.overall_status = OverallTestStatus.HardPointTesting;
-      } else {
-        this.selectedBatch.status_summary = '已完成';
-        this.selectedBatch.overall_status = failedPoints === 0 ? OverallTestStatus.TestCompletedPassed : OverallTestStatus.TestCompletedFailed;
-      }
-    }
+    // 🔧 移除：不再在统计计算中更新批次状态，避免与批次选择区域状态冲突
+    // 批次选择区域现在使用独立的 getBatchSelectionStatus() 方法
 
     return {
       totalPoints,
