@@ -676,7 +676,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         nzTitle: '硬点通道自动测试',
         nzContent: '正在进行硬点通道测试，请稍候……',
         nzClosable: false,
-        nzMaskClosable: false
+        nzMaskClosable: false,
+        nzFooter: null  // 移除确认和取消按钮，只能通过后台逻辑自动关闭
       });
     }
   }
@@ -698,7 +699,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         nzTitle: '硬点通道自动测试',
         nzContent: '正在进行硬点通道测试，请稍候……',
         nzClosable: false,
-        nzMaskClosable: false
+        nzMaskClosable: false,
+        nzFooter: null  // 移除确认和取消按钮，只能通过后台逻辑自动关闭
       });
       this.isTestingModalVisible = true;
       console.log('🔧 [TEST_AREA] 测试弹窗已打开');

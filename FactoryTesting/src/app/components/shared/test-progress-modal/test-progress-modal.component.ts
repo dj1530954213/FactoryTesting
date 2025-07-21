@@ -44,7 +44,7 @@ interface TestProgressStats {
       nzTitle="批次自动测试进度"
       [nzClosable]="false"
       [nzMaskClosable]="false"
-      [nzFooter]="footerTemplate"
+      [nzFooter]="null"
       nzWidth="600px">
       
       <div class="test-progress-content">
@@ -143,21 +143,7 @@ interface TestProgressStats {
         </div>
       </div>
 
-      <ng-template #footerTemplate>
-        <button
-          nz-button
-          nzType="default"
-          (click)="closeModal()">
-          {{ isTestCompleted ? '关闭' : '强制关闭' }}
-        </button>
-        <button
-          *ngIf="isTestCompleted"
-          nz-button
-          nzType="primary"
-          (click)="closeModal()">
-          完成
-        </button>
-      </ng-template>
+      <!-- 已移除底部按钮，只能通过后台逻辑自动关闭 -->
     </nz-modal>
   `,
   styleUrls: ['./test-progress-modal.component.css']
