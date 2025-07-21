@@ -29,22 +29,53 @@ pub struct ExcelExportService {
 }
 
 impl ExcelExportService {
-    /// 导出测试结果表（全部批次，无过滤）
+    /// 导出测试结果表（根据当前会话批次过滤）
     /// `target_path` 可以是目录或完整文件路径；为空时写入临时目录。
+    /// `session_batch_ids` 当前会话的批次ID集合，用于过滤数据
     /// 返回生成的文件完整路径
-    pub async fn export_test_results(&self, target_path: Option<PathBuf>) -> AppResult<String> {
+    pub async fn export_test_results(&self, target_path: Option<PathBuf>, session_batch_ids: Option<std::collections::HashSet<String>>) -> AppResult<String> {
         // 1. 加载所需数据
-        let definitions = self.persistence_service.load_all_channel_definitions().await?;
-        if definitions.is_empty() {
+        let all_definitions = self.persistence_service.load_all_channel_definitions().await?;
+        if all_definitions.is_empty() {
             return Err(AppError::ValidationError { message: "暂无通道定义，无法导出测试结果".into() });
         }
+
+        let all_instances = self.persistence_service.load_all_test_instances().await?;
+        if all_instances.is_empty() {
+            return Err(AppError::ValidationError { message: "暂无测试实例数据，无法导出测试结果".into() });
+        }
+
+        // 2. 根据会话批次ID过滤数据（只导出当前会话的数据）
+        let filtered_instances: Vec<ChannelTestInstance> = if let Some(session_ids) = &session_batch_ids {
+            all_instances.into_iter()
+                .filter(|instance| session_ids.contains(&instance.test_batch_id))
+                .collect()
+        } else {
+            // 如果没有提供会话ID，则导出所有数据（兼容旧版本）
+            all_instances
+        };
+
+        if filtered_instances.is_empty() {
+            return Err(AppError::ValidationError { message: "当前会话暂无测试数据，无法导出测试结果".into() });
+        }
+
+        // 3. 过滤通道定义，只保留当前会话相关的定义
+        let instance_definition_ids: std::collections::HashSet<String> = filtered_instances.iter()
+            .map(|instance| instance.definition_id.clone())
+            .collect();
+        
+        let definitions: Vec<ChannelPointDefinition> = all_definitions.into_iter()
+            .filter(|def| instance_definition_ids.contains(&def.id))
+            .collect();
+
+        if definitions.is_empty() {
+            return Err(AppError::ValidationError { message: "找不到当前会话相关的通道定义".into() });
+        }
+
         let def_map: std::collections::HashMap<String, &ChannelPointDefinition> =
             definitions.iter().map(|d| (d.id.clone(), d)).collect();
 
-        let instances = self.persistence_service.load_all_test_instances().await?;
-        if instances.is_empty() {
-            return Err(AppError::ValidationError { message: "暂无测试实例数据，无法导出测试结果".into() });
-        }
+        let instances = filtered_instances;
 
         // 为了避免一条条去数据库查询 outcome，先尝试批量 by batch；若无对应接口，则逐个 fetch
         let mut outcome_cache: std::collections::HashMap<String, Vec<crate::models::structs::RawTestOutcome>> = std::collections::HashMap::new();

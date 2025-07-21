@@ -1674,8 +1674,14 @@ pub async fn export_test_results_cmd(
         state.channel_state_manager.clone(),
     );
 
+    // 获取当前会话的批次ID集合，用于过滤导出数据
+    let session_batch_ids = {
+        let session_batch_ids_guard = state.session_batch_ids.lock().await;
+        session_batch_ids_guard.clone()
+    };
+
     let path_buf = real_path_opt.map(PathBuf::from);
-    match service.export_test_results(path_buf).await {
+    match service.export_test_results(path_buf, Some(session_batch_ids)).await {
         Ok(result_path) => {
             log::info!("✅ [CMD] 测试结果导出成功: {}", result_path);
             Ok(result_path)
@@ -1822,6 +1828,42 @@ pub async fn save_error_notes_cmd(
         },
         Err(e) => {
             log::error!("❌ [CMD] 错误备注保存失败: {}: {}", instance_id, e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 获取测试实例详情命令
+/// 
+/// 业务说明：
+/// 获取指定测试实例的最新详情信息，包括最新的错误备注
+/// 确保前端获取到数据库中的最新数据，而不是缓存中的旧数据
+/// 
+/// 参数：
+/// - instance_id: 测试实例ID
+/// 
+/// 返回：
+/// - Ok(ChannelTestInstance): 测试实例详情
+/// - Err: 错误信息
+#[tauri::command]
+pub async fn get_test_instance_details_cmd(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<Option<crate::models::ChannelTestInstance>, String> {
+    log::info!("📋 [CMD] 获取测试实例详情: instance_id={}", instance_id);
+
+    // 调用持久化服务获取最新的测试实例数据
+    match state.persistence_service.load_test_instance(&instance_id).await {
+        Ok(instance) => {
+            if instance.is_some() {
+                log::info!("✅ [CMD] 测试实例详情获取成功: {}", instance_id);
+            } else {
+                log::warn!("⚠️ [CMD] 测试实例不存在: {}", instance_id);
+            }
+            Ok(instance)
+        },
+        Err(e) => {
+            log::error!("❌ [CMD] 测试实例详情获取失败: {}: {}", instance_id, e);
             Err(e.to_string())
         }
     }

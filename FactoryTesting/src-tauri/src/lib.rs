@@ -385,7 +385,9 @@ pub fn run() {
                 
                 // === 错误管理命令 ===
                 // 错误备注管理
-                tauri_commands::save_error_notes_cmd
+                tauri_commands::save_error_notes_cmd,
+                // 获取测试实例详情
+                tauri_commands::get_test_instance_details_cmd
             ])
             // 运行Tauri应用
             // Rust知识点：generate_context! 宏从tauri.conf.json生成应用配置

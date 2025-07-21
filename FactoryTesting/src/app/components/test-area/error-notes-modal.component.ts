@@ -1112,16 +1112,16 @@ export class ErrorNotesModalComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnInit(): void {
     // 组件初始化时加载现有的错误备注
-    this.loadExistingNotes();
+    this.loadExistingNotes().catch(console.error);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     // 当输入属性变化时重新加载数据
     if (changes['visible'] && changes['visible'].currentValue) {
-      this.loadExistingNotes();
+      this.loadExistingNotes().catch(console.error);
     }
     if (changes['instance'] || changes['definition']) {
-      this.loadExistingNotes();
+      this.loadExistingNotes().catch(console.error);
     }
   }
 
@@ -1135,10 +1135,38 @@ export class ErrorNotesModalComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   /**
-   * 加载现有的错误备注
+   * 加载现有的错误备注（从服务端获取最新数据）
    */
-  private loadExistingNotes(): void {
-    if (this.instance) {
+  private async loadExistingNotes(): Promise<void> {
+    if (!this.instance) {
+      return;
+    }
+
+    try {
+      console.log('🔄 [ERROR_NOTES_MODAL] 从服务端加载最新错误备注:', this.instance.instance_id);
+      
+      // 从服务端获取最新的实例数据，确保备注信息是最新的
+      const latestInstance = await firstValueFrom(
+        this.tauriApiService.getTestInstanceDetails(this.instance.instance_id)
+      );
+      
+      if (latestInstance) {
+        // 使用最新数据更新错误备注
+        this.errorNotes.integration = latestInstance.integration_error_notes || '';
+        this.errorNotes.plc = latestInstance.plc_programming_error_notes || '';
+        this.errorNotes.hmi = latestInstance.hmi_configuration_error_notes || '';
+        
+        console.log('✅ [ERROR_NOTES_MODAL] 最新错误备注加载成功:', this.errorNotes);
+      } else {
+        // 如果获取失败，使用传入的instance数据作为备选
+        console.warn('⚠️ [ERROR_NOTES_MODAL] 无法获取最新数据，使用缓存数据');
+        this.errorNotes.integration = this.instance.integration_error_notes || '';
+        this.errorNotes.plc = this.instance.plc_programming_error_notes || '';
+        this.errorNotes.hmi = this.instance.hmi_configuration_error_notes || '';
+      }
+    } catch (error) {
+      console.error('❌ [ERROR_NOTES_MODAL] 加载错误备注失败，使用缓存数据:', error);
+      // 如果发生错误，使用传入的instance数据作为备选
       this.errorNotes.integration = this.instance.integration_error_notes || '';
       this.errorNotes.plc = this.instance.plc_programming_error_notes || '';
       this.errorNotes.hmi = this.instance.hmi_configuration_error_notes || '';

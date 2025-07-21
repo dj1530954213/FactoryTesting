@@ -1051,4 +1051,31 @@ export class TauriApiService {
     );
   }
 
+  /**
+   * 获取测试实例详情
+   * 从数据库获取最新的测试实例数据，确保包含最新的错误备注信息
+   * 
+   * @param instanceId 测试实例ID
+   * @returns Observable<ChannelTestInstance | null>
+   */
+  getTestInstanceDetails(instanceId: string): Observable<ChannelTestInstance | null> {
+    console.log('📋 [TAURI_API] 获取测试实例详情:', instanceId);
+
+    return from(invoke<ChannelTestInstance | null>('get_test_instance_details_cmd', {
+      instanceId
+    })).pipe(
+      tap(instance => {
+        if (instance) {
+          console.log('✅ [TAURI_API] 测试实例详情获取成功:', instanceId);
+        } else {
+          console.warn('⚠️ [TAURI_API] 测试实例不存在:', instanceId);
+        }
+      }),
+      catchError(err => {
+        console.error('❌ [TAURI_API] 测试实例详情获取失败:', err);
+        throw err;
+      })
+    );
+  }
+
 }
