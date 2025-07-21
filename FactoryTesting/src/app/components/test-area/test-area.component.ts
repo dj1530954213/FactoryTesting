@@ -1564,10 +1564,31 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    */
   hasFailedHardPoints(): boolean {
     if (this.batchDetails) {
-      return this.batchDetails.instances.some(inst => inst.overall_status === OverallTestStatus.TestCompletedFailed);
+      return this.batchDetails.instances.some(inst => this.isHardPointTestFailed(inst));
     }
-    // 如果没有详情，回退到批次摘要信息
+    // 如果没有详情，无法确定具体是硬点失败还是其他测试失败，保持原逻辑
     return (this.selectedBatch?.failed_points || 0) > 0;
+  }
+
+  /**
+   * 判断单个实例是否硬点测试失败
+   * 只检查硬点测试，不包括上位机手动测试失败
+   */
+  private isHardPointTestFailed(instance: ChannelTestInstance): boolean {
+    // 方法1：检查子测试结果中的硬点测试
+    if (instance.sub_test_results && instance.sub_test_results[SubTestItem.HardPoint]) {
+      return instance.sub_test_results[SubTestItem.HardPoint].status === SubTestStatus.Failed;
+    }
+
+    // 方法2：如果没有详细的子测试结果，根据状态推断
+    // 如果整体状态是失败，但还没有进入手动测试阶段，可能是硬点失败
+    if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
+      // 如果没有子测试结果或硬点测试结果，但状态是失败的
+      // 这可能表示硬点测试失败（因为硬点测试是第一步）
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -1928,29 +1949,6 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     return '';
   }
 
-  /**
-   * 检查是否为硬点测试失败
-   * 通过检查硬点测试的具体状态来判断失败原因
-   */
-  private isHardPointTestFailed(instance: ChannelTestInstance): boolean {
-    // 检查是否存在硬点测试结果且状态为失败
-    if (instance.sub_test_results) {
-      for (const [subTestItem, result] of Object.entries(instance.sub_test_results)) {
-        // 硬点测试相关的子测试项
-        if (subTestItem === 'HardPoint' || 
-            subTestItem === 'Output0Percent' || 
-            subTestItem === 'Output25Percent' || 
-            subTestItem === 'Output50Percent' || 
-            subTestItem === 'Output75Percent' || 
-            subTestItem === 'Output100Percent') {
-          if ((result as any).status === 'Failed') {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
 
   /**
    * 检查是否为手动测试失败
@@ -2161,6 +2159,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 重新测试当前批次硬点测试失败的点位
+   * 只启动硬点通道失败的重测，不包括上位机手动测试失败的情况
    */
   async retestFailedHardPoints(): Promise<void> {
     if (!this.selectedBatch) {
@@ -2179,18 +2178,18 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.isRetestingFailed = true;
 
     try {
-      // 收集失败的硬点实例
+      // 收集硬点测试失败的实例（不包括上位机测试失败）
       if (!this.batchDetails) {
         await this.loadBatchDetails();
       }
-      const failedInstances = (this.batchDetails?.instances || []).filter(inst => inst.overall_status === OverallTestStatus.TestCompletedFailed);
+      const failedInstances = (this.batchDetails?.instances || []).filter(inst => this.isHardPointTestFailed(inst));
       
       if (failedInstances.length === 0) {
-        this.message.info('当前批次没有硬点失败，无需重测');
+        this.message.info('当前批次没有硬点测试失败的点位，无需重测');
         return;
       }
 
-      console.log('🔄 [TEST_AREA] 开始批量重测失败点位，共', failedInstances.length, '个');
+      console.log('🔄 [TEST_AREA] 开始批量重测硬点测试失败的点位，共', failedInstances.length, '个');
 
       // 🔧 新增：为批量重测初始化计数器
       this.initializeTestCounter(failedInstances.length);
@@ -2200,7 +2199,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       const startPromises = failedInstances.map(async (inst) => {
         try {
           await firstValueFrom(this.tauriApiService.startSingleChannelTest(inst.instance_id));
-          console.log('✅ [TEST_AREA] 失败点位重测启动成功:', inst.instance_id);
+          console.log('✅ [TEST_AREA] 硬点测试失败点位重测启动成功:', inst.instance_id);
           successCount++;
         } catch (error) {
           console.error('❌ [TEST_AREA] 启动单通道重测失败:', inst.instance_id, error);
@@ -2211,12 +2210,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       await Promise.allSettled(startPromises);
 
       if (successCount === 0) {
-        this.message.error('所有失败点位重测启动都失败');
+        this.message.error('所有硬点测试失败点位重测启动都失败');
         // 如果没有成功启动的测试，重置计数器
         this.expectedTestCount = 0;
         this.completedTestCount = 0;
       } else {
-        this.message.success(`已启动 ${successCount} 个失败点位重测`);
+        this.message.success(`已启动 ${successCount} 个硬点测试失败点位重测`);
         // 🔧 修正：根据实际成功启动的数量调整预期计数
         this.expectedTestCount = successCount;
       }
@@ -2227,8 +2226,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 启动后刷新数据
       this.scheduleDataRefresh('failed-retest-started', 800);
     } catch (error) {
-      console.error('❌ [TEST_AREA] 启动失败点位重测失败:', error);
-      this.message.error('启动失败点位重测失败: ' + error);
+      console.error('❌ [TEST_AREA] 启动硬点测试失败点位重测失败:', error);
+      this.message.error('启动硬点测试失败点位重测失败: ' + error);
     } finally {
       this.isRetestingFailed = false;
     }
