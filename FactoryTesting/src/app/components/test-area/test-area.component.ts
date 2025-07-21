@@ -152,6 +152,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   private _searchText = '';
   showOnlyTested = false;
   showOnlyFailed = false;
+  showOnlyPassed = false;
+  showOnlyHardPointPassed = false;
+  showOnlyNotTested = false;
 
   // 🔧 性能优化：缓存过滤结果
   private _filteredInstances: ChannelTestInstance[] = [];
@@ -1295,7 +1298,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       selectedModuleTypes: this.selectedModuleTypes.sort(),
       searchText: this.searchText.trim().toLowerCase(),
       showOnlyTested: this.showOnlyTested,
+      showOnlyPassed: this.showOnlyPassed,
       showOnlyFailed: this.showOnlyFailed,
+      showOnlyHardPointPassed: this.showOnlyHardPointPassed,
+      showOnlyNotTested: this.showOnlyNotTested,
       instancesLength: this.batchDetails?.instances?.length || 0,
       // 添加实例状态变化的检测
       instancesHash: this.batchDetails?.instances?.map(i => `${i.instance_id}:${i.overall_status}`).join(',') || ''
@@ -1338,6 +1344,27 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 失败状态筛选 - 保持原有逻辑
       if (this.showOnlyFailed) {
         if (instance.overall_status !== OverallTestStatus.TestCompletedFailed) {
+          return false;
+        }
+      }
+
+      // 已通过状态筛选
+      if (this.showOnlyPassed) {
+        if (instance.overall_status !== OverallTestStatus.TestCompletedPassed) {
+          return false;
+        }
+      }
+
+      // 硬点测试通过筛选
+      if (this.showOnlyHardPointPassed) {
+        if (instance.overall_status !== OverallTestStatus.HardPointTestCompleted) {
+          return false;
+        }
+      }
+
+      // 未测试状态筛选
+      if (this.showOnlyNotTested) {
+        if (instance.overall_status !== OverallTestStatus.NotTested) {
           return false;
         }
       }
@@ -1400,7 +1427,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.selectedModuleTypes = [];
     this.searchText = '';
     this.showOnlyTested = false;
+    this.showOnlyPassed = false;
     this.showOnlyFailed = false;
+    this.showOnlyHardPointPassed = false;
+    this.showOnlyNotTested = false;
   }
 
   getFilterStatusText(): string {

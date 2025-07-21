@@ -251,11 +251,23 @@
               </div>
               
               <div class="filter-item">
-                <nz-checkbox [(ngModel)]="showOnlyTested" (ngModelChange)="onFilterChange()">仅显示已测试</nz-checkbox>
+                <label nz-checkbox [(ngModel)]="showOnlyTested" (ngModelChange)="onFilterChange()">仅显示已测试</label>
               </div>
               
               <div class="filter-item">
-                <nz-checkbox [(ngModel)]="showOnlyFailed" (ngModelChange)="onFilterChange()">仅显示失败</nz-checkbox>
+                <label nz-checkbox [(ngModel)]="showOnlyPassed" (ngModelChange)="onFilterChange()">仅显示已通过</label>
+              </div>
+              
+              <div class="filter-item">
+                <label nz-checkbox [(ngModel)]="showOnlyFailed" (ngModelChange)="onFilterChange()">仅显示失败</label>
+              </div>
+              
+              <div class="filter-item">
+                <label nz-checkbox [(ngModel)]="showOnlyHardPointPassed" (ngModelChange)="onFilterChange()">仅显示硬点测试通过</label>
+              </div>
+              
+              <div class="filter-item">
+                <label nz-checkbox [(ngModel)]="showOnlyNotTested" (ngModelChange)="onFilterChange()">仅显示未测试</label>
               </div>
               
               <div class="filter-item">
