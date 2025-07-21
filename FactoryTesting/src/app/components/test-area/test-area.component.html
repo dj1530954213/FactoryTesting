@@ -18,7 +18,7 @@
           nz-button
           nzType="primary"
           [nzLoading]="isAutoTesting"
-          [disabled]="!selectedBatch || !isConnected || isAutoTesting"
+          [disabled]="!selectedBatch || !isConnected || isAutoTesting || hasAnyHardPointTested()"
           (click)="startAutoTest()">
           <span nz-icon nzType="play-circle" nzTheme="outline"></span>
           开始通道自动测试

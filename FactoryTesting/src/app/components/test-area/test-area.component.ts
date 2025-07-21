@@ -893,6 +893,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.hasAnyHardPointTested()) {
+      this.message.warning('当前批次已有硬点测试完成，无法再次进行自动测试。请切换到其他批次进行测试。');
+      return;
+    }
+
     console.log('🚀 [TEST_AREA] 开始通道自动测试');
     this.isAutoTesting = true;
 
@@ -1560,6 +1565,22 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     }
     // 如果没有详情，回退到批次摘要信息
     return (this.selectedBatch?.failed_points || 0) > 0;
+  }
+
+  /**
+   * 判断当前批次是否有任何硬点测试已完成（不论成功失败）
+   * 用于控制自动测试按钮的可用性
+   */
+  hasAnyHardPointTested(): boolean {
+    if (this.batchDetails) {
+      return this.batchDetails.instances.some(inst => 
+        inst.overall_status === OverallTestStatus.HardPointTestCompleted ||
+        inst.overall_status === OverallTestStatus.TestCompletedPassed ||
+        inst.overall_status === OverallTestStatus.TestCompletedFailed
+      );
+    }
+    // 如果没有详情，回退到批次摘要信息
+    return (this.selectedBatch?.tested_points || 0) > 0;
   }
 
   /**
