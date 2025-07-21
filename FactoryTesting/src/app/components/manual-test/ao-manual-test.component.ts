@@ -130,7 +130,7 @@ import {
           </nz-card>
 
           <!-- 维护功能测试 -->
-          <nz-card nzSize="small" class="test-item-card" *ngIf="shouldShowSubItem(ManualTestSubItem.MaintenanceFunction)">
+          <!--nz-card nzSize="small" class="test-item-card" *ngIf="shouldShowSubItem(ManualTestSubItem.MaintenanceFunction)">
             <div class="test-item-header">
               <span class="test-item-title">维护功能测试</span>
               <nz-tag [nzColor]="getSubItemStatusColor(ManualTestSubItem.MaintenanceFunction)">
@@ -159,7 +159,7 @@ import {
                 </button>
               </div>
             </div>
-          </nz-card>
+          </nz-card-->
 
         </div>
       </div>

@@ -385,7 +385,7 @@ impl ExcelExportService {
 
                     // 测试时间
                     let test_time = instance.final_test_time
-                        .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                        .map(|t| t.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string())
                         .unwrap_or_else(|| "-".into());
                     error_sheet.write_with_format(current_row, 7, test_time, &stats_fmt)?;
 

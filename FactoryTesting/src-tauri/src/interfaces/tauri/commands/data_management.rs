@@ -682,7 +682,6 @@ pub async fn import_excel_and_prepare_batch_cmd(
                     }
                 }
             }
-        }
     }
 
     if definitions.is_empty() {
