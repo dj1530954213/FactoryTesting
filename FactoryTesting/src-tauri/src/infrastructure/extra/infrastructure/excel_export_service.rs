@@ -406,7 +406,6 @@ impl ExcelExportService {
         error_sheet.merge_range(current_row, 0, current_row, 6, "错误统计信息汇总", &title_fmt)?;
         current_row += 1;
 
-        let total_failed = instances.iter().filter(|i| i.overall_status == OverallTestStatus::TestCompletedFailed).count();
         let hardpoint_failed = instances.iter().filter(|i| {
             if i.overall_status == OverallTestStatus::TestCompletedFailed {
                 // 使用同步方式检查硬点错误
@@ -432,18 +431,9 @@ impl ExcelExportService {
             false
         }).count();
 
-        let total_with_notes = instances.iter().filter(|i| {
-            i.integration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
-                || i.plc_programming_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
-                || i.hmi_configuration_error_notes.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
-        }).count();
-
         let stats = vec![
-            ("总点位数", instances.len()),
-            ("失败点位数", total_failed),
             ("硬点测试失败", hardpoint_failed),
             ("手动测试失败", manual_failed),
-            ("有用户备注", total_with_notes),
         ];
 
         for (i, (label, count)) in stats.iter().enumerate() {

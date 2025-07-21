@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(timeout 10 npm run dev)",
-      "Bash(ng build:*)"
+      "Bash(ng build:*)",
+      "Bash(cargo build:*)"
     ],
     "deny": []
   }
