@@ -1,5 +1,31 @@
-//! 领域层实现（ChannelStateManager、TestExecutionEngine 等）
-//! 与 traits 分离，放置在 domain::impls 便于与接口解耦。
+//! # 领域层实现模块 (Domain Implementations)
+//!
+//! ## 业务说明
+//! 本模块包含领域服务接口(trait)的具体实现，提供真实的业务逻辑处理能力
+//! 实现与接口定义分离，遵循依赖倒置原则，便于测试和替换
+//!
+//! ## 实现类型
+//! - **真实实现**: 生产环境使用的完整业务逻辑实现
+//! - **测试实现**: 用于单元测试的Mock实现
+//! - **空实现**: 用于开发阶段的占位实现
+//!
+//! ## 核心实现
+//! - **通道状态管理**: ChannelStateManager - 管理测试通道的状态转换
+//! - **测试执行引擎**: TestExecutionEngine - 执行具体的测试任务
+//! - **特定测试器**: Specific Test Executors - AI/AO/DI/DO各类型的专用执行器
+//! - **PLC连接管理**: PlcConnectionManager - 管理PLC设备连接
+//! - **批次分配服务**: RealBatchAllocationService - 处理测试批次的分配逻辑
+//! - **测试编排服务**: RealTestOrchestrationService - 协调整个测试流程
+//!
+//! ## 设计原则
+//! - **单一职责**: 每个实现专注于一个特定的业务功能
+//! - **依赖注入**: 通过构造函数注入依赖服务
+//! - **错误处理**: 统一的错误处理和传播机制
+//!
+//! ## Rust知识点
+//! - **trait实现**: impl Trait for Struct语法
+//! - **组合模式**: 通过包含其他服务实现复杂功能
+//! - **生命周期管理**: 合理管理资源的生命周期
 
 pub mod channel_state_manager;
 pub mod test_execution_engine;

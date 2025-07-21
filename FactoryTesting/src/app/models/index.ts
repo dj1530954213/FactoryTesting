@@ -1,54 +1,126 @@
-// 枚举类型定义
+/**
+ * # 工厂测试系统模型定义 - Models Index
+ * 
+ * ## 业务功能说明
+ * - 定义工厂测试系统的核心数据模型和枚举
+ * - 提供前后端数据交换的接口规范
+ * - 支持工厂自动化测试的完整业务流程
+ * - 包含中文标签映射，支持国际化显示
+ * 
+ * ## 前后端调用链
+ * - **数据模型**: 与Rust后端的struct保持一致
+ * - **枚举定义**: 对应后端的enum类型
+ * - **接口规范**: API调用的请求和响应格式
+ * 
+ * ## Angular知识点
+ * - **TypeScript接口**: 类型安全的数据定义
+ * - **枚举类型**: 常量值的类型安全管理
+ * - **模块导出**: barrel pattern统一导出
+ * 
+ * ## 业务领域模型
+ * - **测试批次**: 工厂测试的基本单位
+ * - **通道定义**: PLC点位的配置信息
+ * - **测试实例**: 具体的测试执行记录
+ * - **测试结果**: 测试过程和结果数据
+ */
+
+// ============================================================================
+// 枚举类型定义 - 业务常量
+// ============================================================================
+
+/**
+ * 模块类型枚举
+ * 
+ * **业务含义**: 工厂自动化中的I/O模块类型
+ * **应用场景**: 区分不同类型的PLC模块和信号处理方式
+ */
 export enum ModuleType {
-  AI = 'AI',
-  AO = 'AO', 
-  DI = 'DI',
-  DO = 'DO',
-  AINone = 'AINone',
-  DINone = 'DINone'
+  AI = 'AI',        // 模拟量输入模块
+  AO = 'AO',        // 模拟量输出模块
+  DI = 'DI',        // 数字量输入模块
+  DO = 'DO',        // 数字量输出模块
+  AINone = 'AINone', // 无模拟量输入
+  DINone = 'DINone'  // 无数字量输入
 }
 
+/**
+ * 点位数据类型枚举
+ * 
+ * **业务含义**: PLC点位的数据类型定义
+ * **技术用途**: 确定数据的读写方式和值域范围
+ */
 export enum PointDataType {
-  Bool = 'Bool',
-  Int = 'Int',
-  Float = 'Float',
-  String = 'String'
+  Bool = 'Bool',     // 布尔型（开关量）
+  Int = 'Int',       // 整数型
+  Float = 'Float',   // 浮点型（模拟量）
+  String = 'String'  // 字符串型
 }
 
+/**
+ * 整体测试状态枚举
+ * 
+ * **业务含义**: 测试实例在整个测试流程中的状态
+ * **状态流转**: 从未测试 → 接线确认 → 硬点测试 → 手动测试 → 报警测试 → 完成
+ */
 export enum OverallTestStatus {
-  NotTested = 'NotTested',
-  Skipped = 'Skipped',
-  WiringConfirmationRequired = 'WiringConfirmationRequired',
-  WiringConfirmed = 'WiringConfirmed',
-  HardPointTestInProgress = 'HardPointTestInProgress',
-  HardPointTesting = 'HardPointTesting',
-  HardPointTestCompleted = 'HardPointTestCompleted',
-  ManualTestInProgress = 'ManualTestInProgress',
-  ManualTesting = 'ManualTesting',
-  AlarmTesting = 'AlarmTesting',
-  TestCompletedPassed = 'TestCompletedPassed',
-  TestCompletedFailed = 'TestCompletedFailed',
-  Retesting = 'Retesting'
+  NotTested = 'NotTested',                           // 未测试
+  Skipped = 'Skipped',                              // 跳过测试
+  WiringConfirmationRequired = 'WiringConfirmationRequired', // 需要接线确认
+  WiringConfirmed = 'WiringConfirmed',              // 接线已确认
+  HardPointTestInProgress = 'HardPointTestInProgress',       // 硬点测试进行中
+  HardPointTesting = 'HardPointTesting',            // 硬点测试中
+  HardPointTestCompleted = 'HardPointTestCompleted', // 硬点测试已完成
+  ManualTestInProgress = 'ManualTestInProgress',     // 手动测试进行中
+  ManualTesting = 'ManualTesting',                  // 手动测试中
+  AlarmTesting = 'AlarmTesting',                    // 报警测试中
+  TestCompletedPassed = 'TestCompletedPassed',     // 测试完成并通过
+  TestCompletedFailed = 'TestCompletedFailed',     // 测试完成并失败
+  Retesting = 'Retesting'                          // 重新测试中
 }
 
+/**
+ * 子测试项目枚举
+ * 
+ * **业务含义**: 每个通道测试包含的具体测试项目
+ * **测试流程**: 硬点测试 → 报警测试 → 状态显示测试
+ */
 export enum SubTestItem {
-  HardPoint = 'HardPoint',
-  LowLowAlarm = 'LowLowAlarm',
-  LowAlarm = 'LowAlarm',
-  HighAlarm = 'HighAlarm',
-  HighHighAlarm = 'HighHighAlarm',
-  StateDisplay = 'StateDisplay'
+  HardPoint = 'HardPoint',         // 硬点测试（基础功能测试）
+  LowLowAlarm = 'LowLowAlarm',     // 低低报警测试
+  LowAlarm = 'LowAlarm',           // 低报警测试
+  HighAlarm = 'HighAlarm',         // 高报警测试
+  HighHighAlarm = 'HighHighAlarm', // 高高报警测试
+  StateDisplay = 'StateDisplay'    // 状态显示测试
 }
 
+/**
+ * 子测试状态枚举
+ * 
+ * **业务含义**: 单个测试项目的执行状态
+ * **状态流转**: 未开始 → 进行中 → 通过/失败/跳过
+ */
 export enum SubTestStatus {
-  NotStarted = 'NotStarted',
-  InProgress = 'InProgress',
-  Passed = 'Passed', 
-  Failed = 'Failed',
-  Skipped = 'Skipped'
+  NotStarted = 'NotStarted', // 未开始
+  InProgress = 'InProgress', // 进行中
+  Passed = 'Passed',         // 通过
+  Failed = 'Failed',         // 失败
+  Skipped = 'Skipped'        // 跳过
 }
 
-// 核心数据模型
+// ============================================================================
+// 核心数据模型 - 业务实体
+// ============================================================================
+
+/**
+ * 通道点位定义接口
+ * 
+ * **业务含义**: Excel点表中每一行的完整定义信息
+ * **数据来源**: Excel导入解析后的结构化数据
+ * **用途**: 
+ * - 定义PLC点位的基本属性和通信地址
+ * - 配置测试参数和报警设定值
+ * - 建立测试实例的基础数据
+ */
 export interface ChannelPointDefinition {
   id: string;
   sequenceNumber?: number;
@@ -85,35 +157,47 @@ export interface ChannelPointDefinition {
   updated_at: string;
 }
 
+/**
+ * 测试批次信息接口
+ * 
+ * **业务含义**: 工厂测试的基本单位，包含一组相关的测试点位
+ * **生命周期**: 创建 → 分配测试实例 → 执行测试 → 完成/失败
+ * **数据来源**: Excel导入时自动创建，或手动创建
+ * **用途**:
+ * - 组织和管理测试点位
+ * - 跟踪测试进度和统计信息
+ * - 提供测试报告的基础数据
+ */
 export interface TestBatchInfo {
-  batch_id: string;
-  batch_name: string;                    // 批次名称
-  product_model?: string;                // 产品型号
-  serial_number?: string;                // 序列号
+  // === 基本信息 ===
+  batch_id: string;                      // 批次唯一标识
+  batch_name: string;                    // 批次显示名称
+  product_model?: string;                // 被测产品型号
+  serial_number?: string;                // 产品序列号
   customer_name?: string;                // 客户名称
-  station_name?: string;                 // 站场信息
-  operator_name?: string;                // 操作员名称
+  station_name?: string;                 // 工厂站场信息
+  operator_name?: string;                // 测试操作员
 
-  // 时间信息
-  creation_time: string;                 // 创建时间
+  // === 时间信息 ===
+  creation_time: string;                 // 批次创建时间
   last_updated_time: string;             // 最后更新时间
   test_start_time?: string;              // 测试开始时间
   test_end_time?: string;                // 测试结束时间
 
-  // 统计信息
-  total_points: number;                  // 总点位数
+  // === 统计信息 ===
+  total_points: number;                  // 总点位数量
   tested_points: number;                 // 已测试点位数
-  passed_points: number;                 // 通过点位数
-  failed_points: number;                 // 失败点位数
-  skipped_points: number;                // 跳过点位数
+  passed_points: number;                 // 测试通过点位数
+  failed_points: number;                 // 测试失败点位数
+  skipped_points: number;                // 跳过测试点位数
 
-  // 状态信息
-  overall_status: OverallTestStatus;     // 整体状态
-  status_summary?: string;               // 状态摘要
+  // === 状态信息 ===
+  overall_status: OverallTestStatus;     // 批次整体状态
+  status_summary?: string;               // 状态文字摘要
 
-  // 兼容性字段（保持向后兼容）
-  created_at: string;
-  updated_at: string;
+  // === 兼容性字段 ===
+  created_at: string;                    // 创建时间（备用）
+  updated_at: string;                    // 更新时间（备用）
 }
 
 export interface SubTestExecutionResult {
@@ -124,43 +208,68 @@ export interface SubTestExecutionResult {
   timestamp: string;
 }
 
+/**
+ * 通道测试实例接口
+ * 
+ * **业务含义**: 基于通道定义创建的具体测试执行单元
+ * **生命周期**: 创建 → 分配PLC通道 → 执行测试 → 记录结果
+ * **数据关系**: 一个ChannelPointDefinition对应一个ChannelTestInstance
+ * **用途**:
+ * - 跟踪单个点位的测试执行状态
+ * - 存储测试过程数据和结果
+ * - 支持测试重试和错误记录
+ */
 export interface ChannelTestInstance {
-  instance_id: string;
-  definition_id: string;
-  test_batch_id: string;
-  test_batch_name?: string;
-  overall_status: OverallTestStatus;
-  sub_test_results: { [key: string]: SubTestExecutionResult };
-  test_plc_channel_tag?: string;
-  test_plc_communication_address?: string;
-  error_message?: string;
-  current_step_details?: string;
-  creation_time?: string;
-  start_time?: string;
-  last_updated_time?: string;
-  final_test_time?: string;
-  total_test_duration_ms?: number;
-  current_operator?: string;
-  retries_count?: number;
+  // === 基本信息 ===
+  instance_id: string;                     // 测试实例唯一标识
+  definition_id: string;                   // 关联的通道定义ID
+  test_batch_id: string;                   // 所属测试批次ID
+  test_batch_name?: string;                // 批次名称（冗余字段）
+  overall_status: OverallTestStatus;       // 实例整体状态
 
-  // 百分比测试结果字段 - 存储实际工程量
-  test_result_0_percent?: number;
-  test_result_25_percent?: number;
-  test_result_50_percent?: number;
-  test_result_75_percent?: number;
-  test_result_100_percent?: number;
+  // === 测试结果 ===
+  sub_test_results: { [key: string]: SubTestExecutionResult }; // 子测试结果集合
 
-  // 错误备注字段 - 用于人工记录测试失败原因
-  integration_error_notes?: string;        // 集成错误备注
-  plc_programming_error_notes?: string;    // PLC编程错误备注
+  // === PLC配置信息 ===
+  test_plc_channel_tag?: string;           // 分配的测试PLC通道标签
+  test_plc_communication_address?: string; // 测试PLC通信地址
+
+  // === 状态和错误信息 ===
+  error_message?: string;                  // 测试错误消息
+  current_step_details?: string;          // 当前步骤详情
+
+  // === 时间信息 ===
+  creation_time?: string;                  // 实例创建时间
+  start_time?: string;                     // 测试开始时间
+  last_updated_time?: string;              // 最后更新时间
+  final_test_time?: string;                // 测试完成时间
+  total_test_duration_ms?: number;         // 总测试耗时（毫秒）
+
+  // === 操作信息 ===
+  current_operator?: string;               // 当前操作员
+  retries_count?: number;                  // 重试次数
+
+  // === 百分比测试结果 ===
+  // **业务含义**: 模拟量测试时的工程量读数
+  test_result_0_percent?: number;          // 0%量程时的读数
+  test_result_25_percent?: number;         // 25%量程时的读数
+  test_result_50_percent?: number;         // 50%量程时的读数
+  test_result_75_percent?: number;         // 75%量程时的读数
+  test_result_100_percent?: number;        // 100%量程时的读数
+
+  // === 错误备注字段 ===
+  // **业务用途**: 人工记录测试失败的具体原因，便于问题追溯
+  integration_error_notes?: string;        // 集成测试错误备注
+  plc_programming_error_notes?: string;    // PLC编程相关错误备注
   hmi_configuration_error_notes?: string;  // 上位机组态错误备注
 
-  // 测试数据字段
-  hardpoint_readings?: AnalogReadingPoint[];
-  digital_test_steps?: DigitalTestStep[];
+  // === 测试数据 ===
+  hardpoint_readings?: AnalogReadingPoint[]; // 模拟量硬点测试读数
+  digital_test_steps?: DigitalTestStep[];    // 数字量测试步骤
 
-  created_at: string;
-  updated_at: string;
+  // === 时间戳 ===
+  created_at: string;                      // 创建时间戳
+  updated_at: string;                      // 更新时间戳
 }
 
 export interface RawTestOutcome {
@@ -266,7 +375,16 @@ export interface CreateBatchResponse {
   batch_id?: string;
 }
 
-// 中文标签常量映射
+// ============================================================================
+// 中文标签常量映射 - 国际化支持
+// ============================================================================
+
+/**
+ * 模块类型中文标签映射
+ * 
+ * **业务用途**: 在UI中显示用户友好的中文标签
+ * **技术实现**: 使用TypeScript的映射类型确保完整性
+ */
 export const MODULE_TYPE_LABELS: { [key in ModuleType]: string } = {
   [ModuleType.AI]: '模拟量输入',
   [ModuleType.AO]: '模拟量输出',
@@ -276,6 +394,11 @@ export const MODULE_TYPE_LABELS: { [key in ModuleType]: string } = {
   [ModuleType.DINone]: '数字量输入(无)'
 };
 
+/**
+ * 点位数据类型中文标签映射
+ * 
+ * **业务用途**: 数据类型的中文显示名称
+ */
 export const POINT_DATA_TYPE_LABELS: { [key in PointDataType]: string } = {
   [PointDataType.Bool]: '布尔型',
   [PointDataType.Int]: '整数型',
@@ -283,6 +406,12 @@ export const POINT_DATA_TYPE_LABELS: { [key in PointDataType]: string } = {
   [PointDataType.String]: '字符串型'
 };
 
+/**
+ * 整体测试状态中文标签映射
+ * 
+ * **业务用途**: 测试状态的中文显示，便于操作员理解
+ * **设计考虑**: 标签简洁明了，体现测试流程的进展
+ */
 export const OVERALL_TEST_STATUS_LABELS: { [key in OverallTestStatus]: string } = {
   [OverallTestStatus.NotTested]: '未测试',
   [OverallTestStatus.Skipped]: '跳过测试',

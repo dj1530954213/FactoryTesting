@@ -1,3 +1,31 @@
+//! # 真实批次分配服务实现 (Real Batch Allocation Service Implementation)
+//!
+//! ## 业务说明
+//! 本模块提供真实的批次分配服务实现，负责将测试通道合理分配到可用的测试资源上
+//! 是生产环境中使用的完整业务逻辑实现，区别于测试用的Mock实现
+//!
+//! ## 核心功能
+//! - **智能分配**: 根据通道类型、测试需求自动分配测试资源
+//! - **策略支持**: 支持多种分配策略(按模块类型、按站点、按产品型号等)
+//! - **验证机制**: 分配前进行完整性验证，确保分配的合理性
+//! - **预览功能**: 提供分配预览，允许用户确认后再执行
+//!
+//! ## 分配策略
+//! - **ByModuleType**: 按模块类型分组分配(AI一组、DI一组等)
+//! - **ByStation**: 按站点分组分配(Station1、Station2等)
+//! - **ByProductModel**: 按产品型号分组分配
+//! - **Smart**: 智能分配，综合考虑多种因素
+//!
+//! ## 架构设计
+//! - **桥接模式**: 作为领域层和应用层的桥梁
+//! - **适配器模式**: 适配不同的分配策略接口
+//! - **委托模式**: 将具体实现委托给应用层服务
+//!
+//! ## Rust知识点
+//! - **trait实现**: 实现IBatchAllocationService接口
+//! - **类型转换**: 在领域层和应用层类型间转换
+//! - **错误传播**: 使用?操作符进行错误传播
+
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -18,10 +46,20 @@ use sea_orm::{DatabaseConnection, Statement, DatabaseBackend, ConnectionTrait, T
 use crate::application::services::batch_allocation_service as app_service;
 use crate::models::entities::test_batch_info;
 
-/// Real implementation that bridges domain trait to application-layer batch allocation logic.
-/// Currently delegates to `application::services::batch_allocation_service::BatchAllocationService`.
-/// NOTE: Only `allocate_channels` is fully wired for now; the remaining methods will be
-/// progressively implemented in subsequent steps.
+/// 真实批次分配服务实现
+/// 
+/// 业务说明：
+/// 作为领域层接口到应用层批次分配逻辑的桥梁实现
+/// 当前主要委托给`application::services::batch_allocation_service::BatchAllocationService`
+/// 
+/// 实现状态：
+/// - 已实现：`allocate_channels` 完全连接
+/// - 待实现：其余方法将在后续步骤中逐步完善
+/// 
+/// 设计考虑：
+/// - 保持领域层接口的纯净性
+/// - 将复杂的分配逻辑放在应用层
+/// - 支持多种分配策略的灵活切换
 pub struct RealBatchAllocationService {
     db: Arc<DatabaseConnection>,
     channel_state_manager: Arc<dyn IChannelStateManager>,

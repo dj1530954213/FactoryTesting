@@ -1,3 +1,41 @@
+/**
+ * # 仪表盘组件 - DashboardComponent
+ * 
+ * ## 业务功能说明
+ * - 工厂测试系统的主仪表盘，展示系统整体状态和测试进度
+ * - 提供批次管理、测试监控、数据可视化功能
+ * - 支持测试工作流程的导航和状态展示
+ * - 实时更新系统状态和测试进度
+ * 
+ * ## 前后端调用链
+ * - **数据获取**: getDashboardBatchList → 仪表盘批次数据获取
+ * - **批次管理**: deleteBatch → delete_batch_cmd → 级联删除批次数据
+ * - **系统监控**: getSystemStatus → get_system_status → 系统健康状态
+ * - **会话恢复**: restoreSession → restore_session_cmd → 会话数据恢复
+ * 
+ * ## Angular知识点
+ * - **Component**: 使用standalone组件，简化模块依赖
+ * - **生命周期**: OnInit/OnDestroy模式，规范资源管理
+ * - **RxJS**: interval轮询、subscription管理、Observable操作
+ * - **路由导航**: Router服务实现页面跳转
+ * 
+ * ## NG-ZORRO组件集成
+ * - **数据展示**: Card、Statistic、List、Progress等展示组件
+ * - **用户交互**: Modal、Message、Button等交互组件
+ * - **布局系统**: Grid、Space、Divider等布局组件
+ * 
+ * ## ECharts图表集成
+ * - **测试进度图**: 饼图展示测试完成情况
+ * - **系统状态图**: 柱状图展示各模块健康状态
+ * - **批次分布图**: 饼图展示批次状态分布
+ * 
+ * ## 核心业务特性
+ * - **智能分组**: 按站场和导入会话自动分组批次
+ * - **实时监控**: 定时刷新测试进度和系统状态
+ * - **批量操作**: 支持按站场或会话批量删除批次
+ * - **视觉反馈**: 丰富的状态标识和进度指示
+ */
+
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
@@ -30,6 +68,10 @@ import { EChartsOption } from 'echarts';
 // 引入新批次会话列表组件
 import { BatchSessionListComponent } from './batch-session-list.component';
 
+/**
+ * 可用批次接口
+ * **业务含义**: 可用于测试的批次信息
+ */
 interface AvailableBatch {
   id: string;
   productModel: string;
@@ -40,58 +82,76 @@ interface AvailableBatch {
   status: string;
 }
 
+/**
+ * 测试进度接口
+ * **业务含义**: 当前测试的实时进度统计
+ */
 interface TestProgress {
-  total: number;
-  completed: number;
-  passed: number;
-  failed: number;
-  pending: number;
+  total: number;      // 总测试点位数
+  completed: number;  // 已完成测试数
+  passed: number;     // 测试通过数
+  failed: number;     // 测试失败数
+  pending: number;    // 待测试数
 }
 
+/**
+ * 最终测试结果接口
+ * **业务含义**: 测试完成后的总结果
+ */
 interface FinalResults {
-  passed: number;
-  failed: number;
+  passed: number;  // 通过的测试数
+  failed: number;  // 失败的测试数
 }
 
+/**
+ * 最近活动接口
+ * **业务含义**: 系统最近发生的重要活动记录
+ */
 interface RecentActivity {
-  icon: string;
-  title: string;
-  description: string;
-  timestamp: Date;
+  icon: string;        // 活动图标
+  title: string;       // 活动标题
+  description: string; // 活动描述
+  timestamp: Date;     // 活动时间戳
 }
 
-// 仪表盘显示的批次信息接口 - 包含模板中使用的所有字段
+/**
+ * 仪表盘批次显示接口
+ * 
+ * **业务说明**: 仪表盘中批次信息的统一显示格式
+ * **设计原因**: 兼容新旧字段名，支持模板中的多种访问方式
+ * **数据来源**: 后端DashboardBatchInfo经过展平和格式化处理
+ */
 interface DashboardBatchDisplay {
-  // 新的字段名（用于某些显示）
-  id: string;
-  name: string;
-  station: string;
-  createdAt: string;
-  totalPoints: number;
-  testedCount: number;
-  untestedCount: number;
-  successCount: number;
-  failureCount: number;
-  status: OverallTestStatus;
-  isCurrentSession: boolean;
+  // === 新的字段名（用于某些显示组件） ===
+  id: string;              // 批次唯一标识
+  name: string;            // 批次显示名称
+  station: string;         // 站场名称
+  createdAt: string;       // 创建时间
+  totalPoints: number;     // 总点位数
+  testedCount: number;     // 已测试点位数
+  untestedCount: number;   // 未测试点位数
+  successCount: number;    // 成功点位数
+  failureCount: number;    // 失败点位数
+  status: OverallTestStatus;    // 测试状态
+  isCurrentSession: boolean;    // 是否为当前会话
 
-  // 原始字段名（模板中使用的）
-  batch_id: string;
-  batch_name: string;
-  product_model?: string;
-  serial_number?: string;
-  station_name?: string;
-  creation_time?: string;
-  last_updated_time?: string;
-  total_points: number;
-  tested_points: number;
-  passed_points: number;
-  failed_points: number;
-  skipped_points: number;
-  overall_status: OverallTestStatus;
-  operator_name?: string;
-  created_at?: string;
-  updated_at?: string;
+  // === 原始字段名（模板中使用的，保持与后端一致） ===
+  batch_id: string;            // 批次ID（后端原始字段）
+  batch_name: string;          // 批次名称（后端原始字段）
+  product_model?: string;      // 产品型号
+  serial_number?: string;      // 产品序列号
+  station_name?: string;       // 站场名称（后端原始字段）
+  creation_time?: string;      // 创建时间（后端原始字段）
+  last_updated_time?: string;  // 最后更新时间
+  total_points: number;        // 总点位数（后端原始字段）
+  tested_points: number;       // 已测试点位数（后端原始字段）
+  passed_points: number;       // 通过点位数（后端原始字段）
+  failed_points: number;       // 失败点位数（后端原始字段）
+  skipped_points: number;      // 跳过点位数
+  overall_status: OverallTestStatus;  // 整体测试状态
+  operator_name?: string;      // 操作员名称
+  created_at?: string;         // 创建时间（备用字段）
+  updated_at?: string;         // 更新时间（备用字段）
 }
 
 interface StationBatchGroup {
@@ -115,6 +175,13 @@ interface ImportSessionGroup {
   stations: string[];
 }
 
+/**
+ * 仪表盘组件
+ * 
+ * **业务作用**: 工厂测试系统的主控制台，提供全局视图和快速导航
+ * **核心功能**: 批次管理、测试监控、数据可视化、工作流程导航
+ * **数据刷新**: 每30秒自动刷新系统状态和测试进度
+ */
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -122,41 +189,65 @@ interface ImportSessionGroup {
     CommonModule,
     RouterModule,
     FormsModule,
-    // NG-ZORRO 模块
-    NzCardModule,
-    NzStatisticModule,
-    NzGridModule,
-    NzIconModule,
-    NzButtonModule,
-    NzSpinModule,
-    NzAlertModule,
-    NzTagModule,
-    NzProgressModule,
-    NzListModule,
-    NzAvatarModule,
-    NzDividerModule,
-    NzSpaceModule,
-    NzModalModule,
-    NzMessageModule,
-    // ECharts 模块
+    // NG-ZORRO 模块 - 提供丰富的UI组件
+    NzCardModule,        // 卡片布局
+    NzStatisticModule,   // 统计数据展示
+    NzGridModule,        // 响应式网格
+    NzIconModule,        // 图标库
+    NzButtonModule,      // 按钮组件
+    NzSpinModule,        // 加载指示器
+    NzAlertModule,       // 警告提示
+    NzTagModule,         // 标签组件
+    NzProgressModule,    // 进度条
+    NzListModule,        // 列表展示
+    NzAvatarModule,      // 头像组件
+    NzDividerModule,     // 分割线
+    NzSpaceModule,       // 间距控制
+    NzModalModule,       // 模态对话框
+    NzMessageModule,     // 消息提示
+    // ECharts 模块 - 图表可视化
     NgxEchartsModule,
-    BatchSessionListComponent
+    // 自定义组件
+    BatchSessionListComponent  // 批次会话列表组件
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  // 系统状态
+  // === 系统状态数据 ===
+  /** 系统整体状态信息 */
   systemStatus: SystemStatus | null = null;
-  recentBatches: DashboardBatchDisplay[] = []; // 🔧 原始批次数组
-  stationGroups: StationBatchGroup[] = [];     // 🔧 站场分组后的列表
+  
+  /** 最近批次列表（原始数组） */
+  recentBatches: DashboardBatchDisplay[] = [];
+  
+  /** 按站场分组的批次列表 */
+  stationGroups: StationBatchGroup[] = [];
+  
+  /** 最近系统活动记录 */
   recentActivities: RecentActivity[] = [];
+  
+  // === 统计数据 ===
+  /** 总通道数量 */
   totalChannels = 0;
+  
+  /** 总批次数量 */
   totalBatches = 0;
+  
+  /** 待测试批次数量 */
   pendingBatches = 0;
+  
+  /** 整体测试成功率 */
   overallSuccessRate = 0;
+  
+  // === UI状态 ===
+  /** 页面加载状态 */
   loading = true;
+  
+  /** 加载状态消息 */
   loadingMessage = '正在加载系统数据...';
+  
+  /** 错误信息 */
   error: string | null = null;
 
   // 工作流程状态
@@ -192,6 +283,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   importSessions: ImportSessionGroup[] = [];
 
+  /**
+   * 构造函数 - 依赖注入核心服务
+   * 
+   * **注入服务**:
+   * - TauriApiService: 与后端通信的API服务
+   * - Router: Angular路由服务，用于页面导航
+   * - NzModalService: Ant Design模态对话框服务
+   * - NzMessageService: Ant Design消息提示服务
+   */
   constructor(
     private tauriApi: TauriApiService,
     private router: Router,
@@ -199,14 +299,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private message: NzMessageService
   ) {}
 
+  /**
+   * 组件初始化生命周期钩子
+   * 
+   * **业务流程**:
+   * 1. 加载仪表盘数据（批次、系统状态等）
+   * 2. 加载可用批次列表
+   * 3. 初始化ECharts图表
+   * 4. 设置定时刷新机制
+   * 
+   * **调用链**: ngOnInit → loadDashboardData → TauriApiService → 后端数据服务
+   */
   ngOnInit() {
+    // 初始加载所有必要数据
     this.loadDashboardData();
     this.loadAvailableBatches();
     this.initializeCharts();
 
-    // 每30秒自动刷新数据
+    // 每30秒自动刷新数据，保持仪表盘实时性
     const refreshSubscription = interval(30000).subscribe(() => {
       this.loadDashboardData();
+      // 如果测试正在进行，更新进度信息
       if (this.testInProgress) {
         this.updateTestProgress();
       }
@@ -214,6 +327,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.subscriptions.push(refreshSubscription);
   }
 
+  /**
+   * 组件销毁生命周期钩子
+   * 
+   * **资源清理**: 取消所有订阅，防止内存泄漏
+   * **Angular最佳实践**: 在OnDestroy中清理定时器和订阅
+   */
   ngOnDestroy() {
     this.subscriptions.forEach(sub => sub.unsubscribe());
   }

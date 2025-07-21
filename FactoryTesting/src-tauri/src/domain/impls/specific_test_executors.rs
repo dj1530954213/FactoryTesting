@@ -1,6 +1,30 @@
-/// 特定测试步骤执行器
-///
-/// 包含各种具体的测试执行器实现，每个执行器负责一个原子的测试操作
+//! # 特定测试步骤执行器实现 (Specific Test Step Executors)
+//!
+//! ## 业务说明
+//! 本模块包含各种具体的测试执行器实现，每个执行器负责执行一个原子的测试操作
+//! 不同类型的测试通道(AI/AO/DI/DO)使用专门的执行器来处理其特定的测试逻辑
+//!
+//! ## 执行器类型
+//! - **AIHardPointPercentExecutor**: AI模拟量输入硬点百分比测试
+//! - **AOHardPointTestExecutor**: AO模拟量输出硬点测试
+//! - **DIHardPointTestExecutor**: DI数字量输入硬点测试
+//! - **DOHardPointTestExecutor**: DO数字量输出硬点测试
+//! - **AIAlarmTestExecutor**: AI报警功能测试执行器
+//!
+//! ## 设计模式
+//! - **策略模式**: 每个执行器实现相同的接口，可以动态选择
+//! - **工厂模式**: 根据通道类型和测试项目创建合适的执行器
+//! - **模板方法**: 共同的执行框架，具体步骤由子类实现
+//!
+//! ## 测试流程
+//! ```
+//! 预处理 → PLC写入 → 延时等待 → PLC读取 → 结果验证 → 后处理
+//! ```
+//!
+//! ## Rust知识点
+//! - **trait对象**: 使用dyn ISpecificTestStepExecutor实现多态
+//! - **异步编程**: 所有PLC操作都是异步的
+//! - **错误处理**: 统一的AppResult错误处理机制
 
 use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, SubTestItem,

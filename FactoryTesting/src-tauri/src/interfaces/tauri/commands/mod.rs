@@ -1,20 +1,34 @@
-/// Tauri命令模块
-/// 
-/// 业务说明：
-/// 这是所有前端可调用的Tauri命令的聚合模块
-/// 按功能域组织成不同的子模块，便于维护和扩展
-/// 
-/// 架构说明：
-/// - data_management: 数据管理命令（Excel导入、批次管理等）
-/// - manual_testing: 手动测试命令（旧版）
-/// - manual_test_commands: 手动测试命令（新版，支持分步测试）
-/// - global_function_test_commands: 全局功能测试命令
-/// - test_plc_config: PLC配置管理命令
-/// - channel_range_setting: 通道量程设置命令
-/// 
-/// Rust知识点：
-/// pub mod 声明公开的子模块
-/// pub use 重新导出子模块的内容，简化外部引用路径
+//! # Tauri命令模块 (Tauri Commands Module)
+//!
+//! ## 业务说明
+//! 这是所有前端可调用的Tauri命令的聚合模块，作为前后端交互的核心接口层
+//! 将复杂的后端业务逻辑封装为简单的前端API，按功能域组织成不同的子模块
+//!
+//! ## 架构设计
+//! 采用分层架构模式，将命令按业务功能进行模块化组织：
+//! - **data_management**: 数据管理命令(Excel导入、批次创建、数据持久化)
+//! - **manual_testing**: 手动测试命令(旧版API，兼容性支持)
+//! - **manual_test_commands**: 手动测试命令(新版API，支持分步骤测试)
+//! - **global_function_test_commands**: 全局功能测试命令(系统级测试)
+//! - **test_plc_config**: PLC配置管理命令(连接、映射、通道配置)
+//! - **channel_range_setting**: 通道量程设置命令(AI/AO量程配置)
+//!
+//! ## 调用链路
+//! ```
+//! 前端TypeScript → Tauri IPC → 命令处理器 → 应用层服务 → 
+//! 领域层服务 → 基础设施层 → 外部系统(PLC/数据库)
+//! ```
+//!
+//! ## 设计原则
+//! - **单一职责**: 每个命令只处理一个特定的业务功能
+//! - **错误处理**: 统一的错误格式和用户友好的错误消息
+//! - **类型安全**: 严格的参数类型检查和返回值类型定义
+//! - **异步处理**: 所有I/O操作都使用异步模式
+//!
+//! ## Rust知识点
+//! - **模块组织**: 使用pub mod声明公开子模块
+//! - **重新导出**: 通过pub use简化外部引用路径
+//! - **宏系统**: 利用Tauri的#[tauri::command]宏自动生成命令处理代码
 
 pub mod data_management;
 pub mod manual_testing;

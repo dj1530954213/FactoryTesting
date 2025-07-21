@@ -1,3 +1,35 @@
+/**
+ * # 手动测试服务 - ManualTestService
+ * 
+ * ## 业务功能说明
+ * - 管理手动测试流程的状态和执行
+ * - 协调前端UI与后端测试逻辑的交互
+ * - 提供实时的测试状态更新和事件通知
+ * - 支持多种测试类型：报警测试、状态显示测试等
+ * 
+ * ## 前后端调用链
+ * - **测试启动**: startManualTest → start_manual_test_cmd → 手动测试协调器
+ * - **状态更新**: updateManualTestSubItem → update_manual_test_sub_item_cmd → 测试状态管理
+ * - **实时监控**: 通过轮询或事件机制获取测试进度更新
+ * 
+ * ## Angular知识点
+ * - **Injectable**: 全局服务，单例模式
+ * - **BehaviorSubject**: 有初始值的状态管理
+ * - **Subject**: 事件发射器，支持多播
+ * - **Observable**: 响应式数据流，支持异步操作
+ * 
+ * ## 业务流程
+ * - **测试准备**: 选择测试实例和测试类型
+ * - **测试执行**: 逐步完成各个子测试项目
+ * - **状态跟踪**: 实时更新测试进度和结果
+ * - **完成处理**: 通知相关组件测试完成
+ * 
+ * ## 设计模式
+ * - **观察者模式**: 通过Observable通知状态变化
+ * - **状态机模式**: 管理测试的各个阶段
+ * - **命令模式**: 封装测试操作为命令对象
+ */
+
 import { Injectable } from '@angular/core';
 import { Observable, BehaviorSubject, Subject } from 'rxjs';
 import { invoke } from '@tauri-apps/api/core';
@@ -10,31 +42,58 @@ import {
   ManualTestSubItem,
   ManualTestSubItemStatus
 } from '../models/manual-test.types';
-
 /**
- * 手动测试服务
- * 负责管理手动测试的状态和与后端的通信
+ * 手动测试服务类
+ * 
+ * **业务作用**: 管理手动测试的完整生命周期
+ * **服务范围**: 全局单例，支持跨组件的测试状态管理
+ * **实时性**: 提供测试状态的实时更新和事件通知
  */
 @Injectable({
   providedIn: 'root'
 })
 export class ManualTestService {
-  // 当前手动测试状态
+  // === 状态管理 ===
+  
+  /** 
+   * 当前手动测试状态
+   * **业务用途**: 跟踪当前正在进行的手动测试的详细状态
+   */
   private currentTestStatus = new BehaviorSubject<ManualTestStatus | null>(null);
   public currentTestStatus$ = this.currentTestStatus.asObservable();
 
-  // 手动测试完成事件
+  // === 事件通知 ===
+  
+  /** 
+   * 手动测试完成事件
+   * **触发时机**: 当手动测试的所有子项目都完成时
+   * **用途**: 通知相关组件更新UI和数据
+   */
   private testCompleted = new Subject<ManualTestStatus>();
   public testCompleted$ = this.testCompleted.asObservable();
 
-  // 手动测试状态实时更新事件（供测试区域实时刷新）
+  /** 
+   * 手动测试状态实时更新事件
+   * **业务用途**: 供测试区域组件实时刷新显示
+   * **触发频率**: 每次子测试项目状态变化时
+   */
   private testStatusUpdated = new Subject<ManualTestStatus>();
   public testStatusUpdated$ = this.testStatusUpdated.asObservable();
 
-  // 当前是否有活跃的手动测试
+  // === 活跃状态管理 ===
+  
+  /** 
+   * 当前是否有活跃的手动测试
+   * **业务含义**: 标识系统是否正在进行手动测试
+   * **用途**: 防止并发测试，控制UI状态
+   */
   private hasActiveTest = new BehaviorSubject<boolean>(false);
   public hasActiveTest$ = this.hasActiveTest.asObservable();
 
+  /**
+   * 构造函数
+   * **初始化**: 设置初始状态，准备事件监听
+   */
   constructor() {}
 
   /**

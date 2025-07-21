@@ -1,3 +1,41 @@
+/**
+ * # Tauri API服务 - TauriApiService
+ * 
+ * ## 业务功能说明
+ * - 前端与Rust后端通信的核心服务
+ * - 封装所有Tauri命令调用，提供类型安全的API接口
+ * - 管理系统状态的实时轮询和缓存
+ * - 处理环境检测和兼容性适配
+ * 
+ * ## 前后端调用链架构
+ * ```
+ * Angular组件 → TauriApiService → @tauri-apps/api/core.invoke → Tauri框架 → Rust后端命令 → 业务逻辑处理
+ * ```
+ * 
+ * ## 主要功能模块
+ * - **数据管理**: Excel导入、批次创建、通道定义管理
+ * - **测试协调**: 批次测试执行、进度监控、结果获取
+ * - **PLC通信**: 连接管理、状态监控、数据读写
+ * - **系统监控**: 状态轮询、健康检查、环境检测
+ * - **文件处理**: Excel解析、报告生成、数据导出
+ * 
+ * ## Angular知识点
+ * - **Injectable装饰器**: 标记为可注入的服务，单例模式
+ * - **RxJS操作符**: from、map、catchError、switchMap、tap用于异步操作
+ * - **BehaviorSubject**: 状态管理，保存最新值并支持订阅
+ * - **Observable模式**: 所有API调用返回Observable，支持响应式编程
+ * 
+ * ## Tauri集成
+ * - **invoke函数**: Tauri提供的前后端通信桥梁
+ * - **环境检测**: 多重检测机制判断运行环境
+ * - **类型安全**: TypeScript接口确保调用参数和返回值的类型正确性
+ * 
+ * ## 设计模式
+ * - **门面模式**: 为复杂的后端API提供简化接口
+ * - **观察者模式**: 状态轮询和事件订阅
+ * - **适配器模式**: 环境适配，支持Tauri和浏览器环境
+ */
+
 import { Injectable } from '@angular/core';
 import { Observable, from, BehaviorSubject, interval } from 'rxjs';
 import { map, catchError, switchMap, tap } from 'rxjs/operators';
@@ -24,17 +62,50 @@ import {
 } from '../models';
 import { PlcConnectionStatus } from '../models/plc-connection-status.model';
 
+/**
+ * Tauri API服务类
+ * 
+ * **业务作用**: 前端与Rust后端通信的单一入口点
+ * **服务范围**: 全局单例服务，在根模块注入
+ * **核心职责**: 
+ * - 封装所有后端API调用
+ * - 管理系统状态轮询
+ * - 处理环境检测和适配
+ */
 @Injectable({
   providedIn: 'root'
 })
 export class TauriApiService {
+  // === 状态管理 ===
+  /** 
+   * 系统状态主题 - 使用BehaviorSubject保存最新状态
+   * **数据来源**: 后端get_system_status命令
+   * **更新机制**: 每5秒轮询一次
+   */
   private systemStatusSubject = new BehaviorSubject<SystemStatus | null>(null);
+  
+  /** 
+   * 系统状态Observable - 供组件订阅
+   * **使用方式**: 组件通过订阅获取实时状态更新
+   */
   public systemStatus$ = this.systemStatusSubject.asObservable();
 
-  // 缓存Tauri环境检测结果，避免重复检测
+  // === 环境检测缓存 ===
+  /** Tauri环境检测结果缓存，避免重复检测 */
   private _isTauriEnvironment: boolean | null = null;
+  
+  /** 环境检测是否已完成标志 */
   private _environmentChecked = false;
 
+  /**
+   * 构造函数
+   * 
+   * **初始化流程**:
+   * 1. 重置环境检测缓存
+   * 2. 启动系统状态轮询
+   * 
+   * **设计理念**: 服务启动即开始监控，确保状态实时性
+   */
   constructor() {
     // 重置环境检测缓存，确保每次启动都重新检测
     this._environmentChecked = false;
@@ -49,22 +120,30 @@ export class TauriApiService {
   // ============================================================================
 
   /**
-   * 获取指定站场+导入时间的 5 条全局功能测试状态
-   */
-  /**
-   * 调用后端命令获取全局功能测试状态
+   * 获取全局功能测试状态
+   * 
+   * **业务功能**: 获取指定站场和导入时间的功能测试状态列表
+   * **应用场景**: 仪表盘显示各功能模块的测试状态
+   * **调用链**: getGlobalFunctionTests → invoke → get_global_function_tests_cmd → 后端状态查询
+   * 
+   * @param stationName 站场名称
+   * @param importTime 导入时间 (YYYY-MM-DDTHH:MM:SS格式)
+   * @returns Observable<any[]> 返回功能测试状态数组
    */
   getGlobalFunctionTests(stationName: string, importTime: string) {
     console.log('[API] getGlobalFunctionTests →', stationName, importTime);
 
+    // 构建兼容新旧版本的参数对象
     const payload = {
       stationName: stationName,
       importTime: importTime,
-      // 兼容旧版后端参数名
+      // 兼容旧版后端参数名（snake_case格式）
       station_name: stationName,
       import_time: importTime
     } as any;
     console.log('[API] invoke get_global_function_tests_cmd payload', payload);
+    
+    // 调用后端命令获取功能测试状态
     return from(invoke<any[]>('get_global_function_tests_cmd', payload));
   }
 
@@ -150,15 +229,23 @@ export class TauriApiService {
   }
 
   /**
-   * 连接PLC - 确认接线
-   */
-  /**
-   * 连接 PLC 并可选下发量程。
-   *
-   * 说明：
-   * Rust 侧的 `connect_plc_cmd` 返回 { success, message? }，
-   * 而 `apply_channel_range_setting_cmd` 仅返回 ()（Unit），在 JS 侧会被序列化为 `null`。
-   * 因此这里将量程下发的成功视为没有抛异常即可。
+   * 连接PLC并下发量程设置
+   * 
+   * **业务功能**: 
+   * 1. 建立与PLC的连接通道
+   * 2. 可选地为指定批次下发通道量程配置
+   * 
+   * **业务场景**: 测试开始前的PLC准备工作
+   * **调用链**: connectPlc → connect_plc_cmd → PLC连接管理器 → Modbus连接
+   * **后续操作**: 连接成功后可选调用apply_channel_range_setting_cmd下发量程
+   * 
+   * **技术说明**:
+   * - connect_plc_cmd返回 {success, message?}
+   * - apply_channel_range_setting_cmd返回Unit（在JS中为null）
+   * - 使用switchMap链式调用，确保连接成功后再下发量程
+   * 
+   * @param batchId 可选的批次ID，提供时会自动下发该批次的量程配置
+   * @returns Observable<{success: boolean, message?: string}> PLC连接结果
    */
   connectPlc(batchId?: string): Observable<{ success: boolean; message?: string }> {
     console.log('🔗 [TAURI_API] 调用连接PLC API');
@@ -427,9 +514,27 @@ export class TauriApiService {
 
   /**
    * 检查是否在Tauri环境中运行
+   * 
+   * **业务功能**: 智能检测应用运行环境，确保API调用的正确性
+   * **检测场景**:
+   * - Tauri桌面环境：调用真实的后端API
+   * - 浏览器环境：返回模拟数据用于开发调试
+   * 
+   * **检测策略**: 多重检测机制，提高检测准确性
+   * 1. __TAURI__全局对象检测
+   * 2. tauri://协议检测
+   * 3. file://协议 + User-Agent检测
+   * 4. Tauri内部对象检测
+   * 5. invoke函数可用性检测
+   * 6. 网络端口分析
+   * 
+   * **缓存机制**: 首次检测后缓存结果，避免重复检测开销
+   * **容错处理**: 检测失败时支持延迟重试
+   * 
+   * @returns boolean true表示Tauri环境，false表示浏览器环境
    */
   isTauriEnvironment(): boolean {
-    // 如果已经检测过，直接返回缓存结果
+    // 如果已经检测过，直接返回缓存结果，提高性能
     if (this._environmentChecked) {
       return this._isTauriEnvironment!;
     }
@@ -664,12 +769,30 @@ export class TauriApiService {
   }
 
   /**
-   * 自动分配批次 - 根据导入的通道定义自动创建测试批次和实例
-   *
-   * 这是主要的点表导入和批次分配入口，会：
-   * 1. 解析Excel文件
-   * 2. 执行自动批次分配
-   * 3. 将结果存储到状态管理器
+   * 自动分配批次 - 点表导入和批次创建的核心方法
+   * 
+   * **业务功能**: 
+   * 1. 解析Excel点表文件
+   * 2. 自动创建测试批次
+   * 3. 分配测试实例
+   * 4. 存储到状态管理器
+   * 
+   * **业务场景**: 用户导入Excel点表后的自动化处理流程
+   * **调用链**: autoAllocateBatch → import_excel_and_prepare_batch_cmd → Excel解析器 → 批次管理器 → 数据库存储
+   * 
+   * **处理步骤**:
+   * 1. 解析Excel文件获取通道定义
+   * 2. 根据产品型号和序列号创建批次
+   * 3. 为每个通道定义创建测试实例
+   * 4. 存储批次信息到内存状态管理器
+   * 
+   * **参数说明**:
+   * - filePath: Excel文件路径
+   * - productModel: 产品型号
+   * - serialNumber: 产品序列号
+   * 
+   * @param batchData 包含文件路径和产品信息的批次数据
+   * @returns Observable<any> 返回创建的批次信息和分配结果
    */
   autoAllocateBatch(batchData: any): Observable<any> {
     console.log('🚀 [TAURI_API] 调用自动分配批次API');

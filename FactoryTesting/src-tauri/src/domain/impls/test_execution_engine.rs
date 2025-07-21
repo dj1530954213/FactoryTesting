@@ -1,6 +1,32 @@
-/// 测试执行引擎
-///
-/// 负责管理和并发执行测试任务，协调多个测试执行器完成完整的测试序列
+//! # 测试执行引擎实现 (Test Execution Engine Implementation)
+//!
+//! ## 业务说明
+//! 测试执行引擎是系统的核心执行组件，负责管理和并发执行各种类型的测试任务
+//! 协调多个专用测试执行器(AI/AO/DI/DO)完成完整的自动化测试流程
+//!
+//! ## 核心功能
+//! - **任务调度**: 管理测试任务的排队、执行和完成
+//! - **并发控制**: 控制同时执行的任务数量，避免资源冲突
+//! - **执行器协调**: 根据通道类型选择合适的专用执行器
+//! - **结果收集**: 统一收集和处理各执行器的测试结果
+//!
+//! ## 架构特点
+//! - **任务池模式**: 使用信号量控制并发数量
+//! - **取消机制**: 支持任务级和全局级取消操作
+//! - **异步执行**: 基于tokio异步运行时的高性能执行
+//! - **类型安全**: 每种通道类型有专用的强类型执行器
+//!
+//! ## 执行流程
+//! ```
+//! 任务提交 → 类型判断 → 选择执行器 → 并发执行 → 结果返回
+//!    ↓           ↓           ↓           ↓         ↓
+//! 队列管理   AI/AO/DI/DO   资源分配    PLC通信   状态更新
+//! ```
+//!
+//! ## Rust知识点
+//! - **并发原语**: Semaphore、RwLock、CancellationToken
+//! - **异步编程**: async/await、Future、tokio运行时
+//! - **类型系统**: trait对象、泛型约束、动态分发
 
 use crate::models::{ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, ModuleType, SubTestItem};
 use crate::infrastructure::plc_communication::IPlcCommunicationService;
