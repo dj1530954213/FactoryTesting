@@ -782,7 +782,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           tested_points: stats.testedPoints,
           passed_points: stats.successPoints,
           failed_points: stats.failedPoints,
-          skipped_points: stats.skippedPoints
+          skipped_points: stats.skippedPoints,
+          // 🔧 修复：同步状态字段更新，确保批次选择区域实时显示正确状态
+          overall_status: this.selectedBatch!.overall_status,
+          status_summary: this.selectedBatch!.status_summary
         } } as TestBatchInfo;
       }
     }
@@ -2214,6 +2217,82 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         { name: 'Excel', extensions: ['xlsx'] }
       ]
     });
+  }
+
+  /**
+   * 🔧 新增：专门用于批次选择区域的状态判断
+   * 
+   * 与通道详情区域的进度统计分离，解决状态冲突问题
+   * 
+   * 判断逻辑：
+   * - 只要有任何点位开始过硬点测试，就显示"测试中"
+   * - 所有点位完成测试后，显示"已完成"
+   * - 从未开始测试，显示"未开始"
+   */
+  getBatchSelectionStatus(batch: TestBatchInfo): { status: string; color: string } {
+    // 如果不是当前选中的批次，使用基础统计
+    if (!this.selectedBatch || this.selectedBatch.batch_id !== batch.batch_id || !this.batchDetails?.instances) {
+      const testedPoints = batch.tested_points || 0;
+      const totalPoints = batch.total_points || 0;
+      
+      if (testedPoints === 0) {
+        return { status: '未开始', color: 'default' };
+      } else if (testedPoints < totalPoints) {
+        return { status: '测试中', color: 'processing' };
+      } else {
+        const failedPoints = batch.failed_points || 0;
+        return { 
+          status: '已完成', 
+          color: failedPoints === 0 ? 'success' : 'error' 
+        };
+      }
+    }
+
+    // 当前选中批次，使用详细状态判断
+    const instances = this.batchDetails.instances;
+    const totalPoints = instances.length;
+    
+    // 统计不同状态的点位数量
+    let completedPoints = 0;      // 完全完成测试的点位
+    let startedTestingPoints = 0; // 开始过测试的点位（包括正在测试和已完成）
+    let failedPoints = 0;         // 失败的点位
+    
+    instances.forEach(instance => {
+      const status = instance.overall_status;
+      
+      // 统计完全完成的点位
+      if (status === OverallTestStatus.TestCompletedPassed || 
+          status === OverallTestStatus.TestCompletedFailed ||
+          status === OverallTestStatus.Skipped) {
+        completedPoints++;
+      }
+      
+      // 统计失败点位
+      if (status === OverallTestStatus.TestCompletedFailed) {
+        failedPoints++;
+      }
+      
+      // 统计开始过测试的点位（关键：包括正在测试的状态）
+      if (status !== OverallTestStatus.NotTested &&
+          status !== OverallTestStatus.WiringConfirmationRequired) {
+        startedTestingPoints++;
+      }
+    });
+
+    // 批次选择区域的状态判断逻辑
+    if (startedTestingPoints === 0) {
+      // 没有任何点位开始测试
+      return { status: '未开始', color: 'default' };
+    } else if (completedPoints < totalPoints) {
+      // 有点位开始测试但还未全部完成
+      return { status: '测试中', color: 'processing' };
+    } else {
+      // 所有点位完成测试
+      return { 
+        status: '已完成', 
+        color: failedPoints === 0 ? 'success' : 'error' 
+      };
+    }
   }
 
 

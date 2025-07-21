@@ -108,8 +108,8 @@
                   nzHoverable>
                   <div class="batch-header">
                     <h4>{{ batch.batch_name || batch.batch_id }}</h4>
-                    <nz-tag [nzColor]="getStatusColor(batch.overall_status)">
-                      {{ batch.status_summary || '未开始' }}
+                    <nz-tag [nzColor]="getBatchSelectionStatus(batch).color">
+                      {{ getBatchSelectionStatus(batch).status }}
                     </nz-tag>
                   </div>
                   <div class="batch-info">
