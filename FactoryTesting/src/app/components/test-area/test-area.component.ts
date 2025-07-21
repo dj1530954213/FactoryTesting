@@ -59,6 +59,7 @@ interface BatchTestStats {
   successPoints: number;
   failedPoints: number;
   skippedPoints: number;
+  startedPoints: number; // 已开始测试的点位数（包括中间状态）
 }
 
 
@@ -794,6 +795,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.selectedBatch.passed_points = stats.successPoints;
       this.selectedBatch.failed_points = stats.failedPoints;
       this.selectedBatch.skipped_points = stats.skippedPoints;
+      this.selectedBatch.started_points = stats.startedPoints; // 🔧 新增：更新已开始测试点位数
 
       // 同时更新 availableBatches 列表中的同批次对象（仅更新统计数据）
       const idx = this.availableBatches.findIndex(b => b.batch_id === this.selectedBatch!.batch_id);
@@ -803,7 +805,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           tested_points: stats.testedPoints,
           passed_points: stats.successPoints,
           failed_points: stats.failedPoints,
-          skipped_points: stats.skippedPoints
+          skipped_points: stats.skippedPoints,
+          started_points: stats.startedPoints // 🔧 新增：更新已开始测试点位数
           // 🔧 移除：状态字段不再同步，批次选择区域使用独立的状态逻辑
         } } as TestBatchInfo;
       }
@@ -1665,7 +1668,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       pendingPoints: (batch.total_points || 0) - (batch.tested_points || 0),
       successPoints: batch.passed_points || 0,
       failedPoints: batch.failed_points || 0,
-      skippedPoints: batch.skipped_points || 0
+      skippedPoints: batch.skipped_points || 0,
+      startedPoints: batch.started_points || 0 // 使用批次中保存的已开始测试点位数
     };
   }
 
@@ -1680,7 +1684,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
         testedPoints: 0,
         successPoints: 0,
         failedPoints: 0,
-        skippedPoints: 0
+        skippedPoints: 0,
+        startedPoints: 0
       };
     }
 
@@ -1711,6 +1716,17 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     const testedPoints = successPoints + failedPoints + skippedPoints; // 跳过的也计入已测（因为它们不需要执行）
     const pendingPoints = totalPoints - testedPoints;
 
+    // 🔧 新增：计算已开始测试的点位数（用于批次状态显示）
+    let startedPoints = 0;
+    instances.forEach(instance => {
+      const status = instance.overall_status;
+      // 统计已开始测试的点位（包括中间状态）
+      if (status !== OverallTestStatus.NotTested &&
+          status !== OverallTestStatus.WiringConfirmationRequired) {
+        startedPoints++;
+      }
+    });
+
     // 🔧 移除：不再在统计计算中更新批次状态，避免与批次选择区域状态冲突
     // 批次选择区域现在使用独立的 getBatchSelectionStatus() 方法
 
@@ -1720,7 +1736,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       testedPoints,
       successPoints,
       failedPoints,
-      skippedPoints
+      skippedPoints,
+      startedPoints // 新增字段
     };
   }
 
@@ -2270,10 +2287,12 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   getBatchSelectionStatus(batch: TestBatchInfo): { status: string; color: string } {
     // 如果不是当前选中的批次，使用基础统计
     if (!this.selectedBatch || this.selectedBatch.batch_id !== batch.batch_id || !this.batchDetails?.instances) {
-      const testedPoints = batch.tested_points || 0;
+      const testedPoints = batch.tested_points || 0; // 完全完成测试的点位
+      const startedPoints = batch.started_points || 0; // 已开始测试的点位（包括中间状态）
       const totalPoints = batch.total_points || 0;
       
-      if (testedPoints === 0) {
+      // 🔧 修复：使用 startedPoints 判断是否开始测试，解决硬点测试完成后切换批次状态变为"未测试"的问题
+      if (startedPoints === 0) {
         return { status: '未开始', color: 'default' };
       } else if (testedPoints < totalPoints) {
         return { status: '测试中', color: 'processing' };

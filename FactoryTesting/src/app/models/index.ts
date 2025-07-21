@@ -190,6 +190,7 @@ export interface TestBatchInfo {
   passed_points: number;                 // 测试通过点位数
   failed_points: number;                 // 测试失败点位数
   skipped_points: number;                // 跳过测试点位数
+  started_points?: number;               // 已开始测试点位数（包括中间状态）
 
   // === 状态信息 ===
   overall_status: OverallTestStatus;     // 批次整体状态
