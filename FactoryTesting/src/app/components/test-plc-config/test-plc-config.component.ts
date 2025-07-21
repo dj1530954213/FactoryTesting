@@ -133,7 +133,7 @@ import { PlcAdvancedTestWindowComponent } from './plc-advanced-test-window.compo
                   <button *nzSpaceItem nz-button nzType="default" nzSize="small" 
                           (click)="openAdvancedTestWindow(connection)">
                     <span nz-icon nzType="experiment" nzTheme="outline"></span>
-                    高级测试
+                    通讯参数设置及测试
                   </button>
                   <!--button *nzSpaceItem nz-button nzType="default" nzSize="small" 
                           (click)="editConnection(connection)">
