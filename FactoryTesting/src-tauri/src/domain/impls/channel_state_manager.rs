@@ -280,9 +280,8 @@ impl ChannelStateManager {
                 results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             ModuleType::AO => {
-                // AO点的测试项
+                // AO点的测试项：只包含硬点测试和显示值核对
                 results.insert(SubTestItem::HardPoint, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
-                results.insert(SubTestItem::Maintenance, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
                 results.insert(SubTestItem::StateDisplay, SubTestExecutionResult::new(SubTestStatus::NotTested, None, None, None));
             }
             ModuleType::DI => {
