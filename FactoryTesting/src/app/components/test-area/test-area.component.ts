@@ -2290,9 +2290,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 处理上位机测试按钮点击
-   * 根据按钮状态执行不同的操作：
-   * - "上位机测试"/"重新测试" → 打开手动测试模态框
-   * - "查看测试详情" → 打开测试详情模态框
+   * 所有情况都打开手动测试模态框：
+   * - "上位机测试"/"重新测试" → 打开手动测试模态框（可操作）
+   * - "查看测试详情" → 打开手动测试模态框（只读模式，不可操作）
    */
   async startManualTest(instance: ChannelTestInstance): Promise<void> {
     try {
@@ -2310,16 +2310,10 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.selectedManualTestInstance = instance;
       this.selectedManualTestDefinition = definition;
 
-      // 根据按钮文本决定操作
-      if (buttonText === '查看测试详情') {
-        // 查看测试详情：打开错误详情模态框
-        console.log('✅ [TEST_AREA] 打开测试详情模态框');
-        this.showTestDetails(instance);
-      } else {
-        // 开始手动测试或重新测试：打开手动测试模态框
-        console.log('✅ [TEST_AREA] 打开手动测试模态框');
-        this.manualTestModalVisible = true;
-      }
+      // 无论按钮文本是什么，都打开手动测试模态框
+      // 模态框内部会根据测试状态决定是否为只读模式
+      console.log('✅ [TEST_AREA] 打开手动测试模态框 (', buttonText, ')');
+      this.manualTestModalVisible = true;
 
     } catch (error) {
       console.error('❌ [TEST_AREA] 处理上位机测试按钮点击失败:', error);

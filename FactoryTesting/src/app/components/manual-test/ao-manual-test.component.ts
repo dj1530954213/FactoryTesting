@@ -12,7 +12,7 @@ import { NzStatisticModule } from 'ng-zorro-antd/statistic';
 import { invoke } from '@tauri-apps/api/core';
 import { Subscription } from 'rxjs';
 
-import { ChannelTestInstance, ChannelPointDefinition } from '../../models';
+import { ChannelTestInstance, ChannelPointDefinition, OverallTestStatus } from '../../models';
 import { ManualTestService } from '../../services/manual-test.service';
 import { PlcMonitoringService } from '../../services/plc-monitoring.service';
 import {
@@ -60,11 +60,19 @@ import {
 
       <!-- AO 采集按钮 -->
       <nz-card nzTitle="采集输出百分比测试" nzSize="small" class="capture-card">
+        
+        <!-- 测试完成状态提示 -->
+        <div *ngIf="isTestCompleted()" 
+             style="margin-bottom: 12px; padding: 8px 12px; background-color: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px; display: flex; align-items: center; gap: 8px; color: #52c41a; font-size: 12px;">
+          <i nz-icon nzType="check-circle" nzTheme="twotone" [nzTwotoneColor]="'#52c41a'"></i>
+          <span>测试已完成，采集按钮已禁用以保护数据一致性</span>
+        </div>
+
         <div class="capture-buttons">
           <button *ngFor="let pct of percentPoints"
                   nz-button
                   nzType="default"
-                  [disabled]="captureCompleted[pct]"
+                  [disabled]="captureCompleted[pct] || isTestCompleted()"
                   [nzLoading]="isCapturing && currentCapturingPercent === pct"
                   (click)="captureAoPoint(pct)"
                   [title]="getButtonTooltip(pct)">
@@ -417,6 +425,40 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 检查测试是否已完成（通过或失败）
+   * 用于控制采集按钮的禁用状态，保护数据一致性
+   */
+  isTestCompleted(): boolean {
+    if (!this.instance) return false;
+    
+    // 方法1：如果整体状态明确显示为测试完成，则禁用采集按钮（最权威的判断）
+    const isOverallCompleted = this.instance.overall_status === OverallTestStatus.TestCompletedPassed ||
+                              this.instance.overall_status === OverallTestStatus.TestCompletedFailed;
+    
+    if (isOverallCompleted) {
+      return true;
+    }
+    
+    // 方法2：如果已经发出完成事件，也禁用采集按钮（防止状态更新延迟）
+    if (this.completedEmitted) {
+      console.log('🔍 [AO_MANUAL_TEST] 测试完成事件已发出，禁用采集按钮');
+      return true;
+    }
+    
+    // 调试输出当前状态
+    if (Math.random() < 0.1) { // 10%概率输出调试信息
+      console.log('🔍 [AO_MANUAL_TEST] isTestCompleted检查:', {
+        instanceStatus: this.instance.overall_status,
+        completedEmitted: this.completedEmitted,
+        allCompleted: this.isAllCompleted(),
+        result: false
+      });
+    }
+    
+    return false;
+  }
+
+  /**
    * 完成测试
    */
   // 当用户点击 “完成测试” 或程序检测到测试完成时调用
@@ -461,6 +503,11 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
    * 获取按钮提示文本
    */
   getButtonTooltip(percent: number): string {
+    // 如果测试已完成，显示保护性提示
+    if (this.isTestCompleted()) {
+      return `测试已完成，采集按钮已禁用以保护数据一致性`;
+    }
+    
     if (this.captureCompleted[percent]) {
       const result = this.captureResults[percent];
       return `已采集 - 实际值: ${result.value.toFixed(2)}, 偏差: ${result.deviation.toFixed(1)}%`;
