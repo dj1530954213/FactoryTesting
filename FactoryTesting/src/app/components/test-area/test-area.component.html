@@ -32,7 +32,7 @@
           [disabled]="!selectedBatch || !isConnected || isRetestingFailed || !hasFailedHardPoints()"
           (click)="retestFailedHardPoints()">
           <span nz-icon nzType="history" nzTheme="outline"></span>
-          失败点位重测
+          硬点失败点位重测
         </button>
 
         <button
@@ -399,12 +399,12 @@
                   <div class="manual-test-actions">
                     <button
                       nz-button
-                      [nzType]="isManualTestFailed(instance) ? 'primary' : 'default'"
+                      [nzType]="getManualTestButtonType(instance)"
                       nzSize="small"
                       [disabled]="!isManualTestEnabled(instance)"
                       (click)="startManualTest(instance)">
                       <i nz-icon 
-                         [nzType]="isManualTestFailed(instance) ? 'redo' : 'setting'"></i>
+                         [nzType]="getManualTestButtonIcon(instance)"></i>
                       {{ getManualTestButtonText(instance) }}
                     </button>
                     <button

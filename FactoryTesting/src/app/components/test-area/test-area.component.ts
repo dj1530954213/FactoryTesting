@@ -1991,24 +1991,39 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 检查手动测试按钮是否启用
-   * 新逻辑：硬点测试失败时禁用，手动测试失败时允许重测
+   * 
+   * 启用条件：
+   * 1. 硬点测试完成且未进行上位机测试 → 允许进行上位机测试
+   * 2. 上位机测试存在失败 → 允许重新测试
+   * 3. 所有测试都通过 → 允许查看测试详情
+   * 
+   * 禁用条件：
+   * 1. 硬点测试未通过 → 不允许上位机测试
    */
   isManualTestEnabled(instance: ChannelTestInstance): boolean {
-    // 情况1：硬点测试完成，允许手动测试
-    if (instance.overall_status === OverallTestStatus.HardPointTestCompleted ||
-        instance.overall_status === OverallTestStatus.TestCompletedPassed ||
-        instance.overall_status === OverallTestStatus.ManualTesting) {
+    // 启用情况1：硬点测试完成，允许手动测试
+    if (instance.overall_status === OverallTestStatus.HardPointTestCompleted) {
       return true;
     }
     
-    // 情况2：测试失败时，区分失败类型
+    // 启用情况2：所有测试通过，允许查看详情
+    if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
+      return true;
+    }
+    
+    // 启用情况3：正在手动测试中
+    if (instance.overall_status === OverallTestStatus.ManualTesting) {
+      return true;
+    }
+    
+    // 启用情况4：测试失败时，区分失败类型
     if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
-      // 如果是硬点测试失败，禁用手动测试
+      // 如果是硬点测试失败，禁用按钮（显示"上位机测试"但不可点击）
       if (this.isHardPointTestFailed(instance)) {
         return false;
       }
       
-      // 如果是手动测试失败，允许重新打开手动测试
+      // 如果是手动测试失败，允许重新测试（显示"重新测试"可点击）
       if (this.isManualTestFailed(instance)) {
         return true;
       }
@@ -2019,8 +2034,35 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 检查硬点测试和上位机测试是否全部通过
+   */
+  private isAllTestsPassed(instance: ChannelTestInstance): boolean {
+    // 必须是测试完成并通过状态
+    if (instance.overall_status !== OverallTestStatus.TestCompletedPassed) {
+      return false;
+    }
+    
+    // 检查所有子测试结果
+    if (instance.sub_test_results) {
+      for (const [, result] of Object.entries(instance.sub_test_results)) {
+        // 如果有任何测试项失败，则不是全部通过
+        if (result.status === 'Failed') {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  /**
    * 获取手动测试按钮文本
    * 根据测试状态显示不同的按钮文本
+   * 
+   * 三种状态：
+   * 1. 硬点测试未通过：显示"上位机测试"（不能点击）
+   * 2. 上位机测试存在失败：显示"重新测试"（可以点击）
+   * 3. 硬点和上位机所有测试项全部通过：显示"查看测试详情"（可以点击）
    */
   getManualTestButtonText(instance: ChannelTestInstance): string {
     // 如果正在手动测试中
@@ -2028,31 +2070,74 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       return '测试中...';
     }
     
-    // 如果是手动测试失败，显示重测
+    // 情况1：硬点测试未通过，显示"上位机测试"（不能点击）
+    if (this.isHardPointTestFailed(instance)) {
+      return '上位机测试';
+    }
+    
+    // 情况3：硬点和上位机所有测试项全部通过，显示"查看测试详情"
+    if (this.isAllTestsPassed(instance)) {
+      return '查看测试详情';
+    }
+    
+    // 情况2：上位机测试存在失败，显示"重新测试"
     if (this.isManualTestFailed(instance)) {
       return '重新测试';
     }
     
-    // 如果是硬点测试失败，显示禁用状态
-    if (this.isHardPointTestFailed(instance)) {
-      return '硬点测试失败';
-    }
-    
-    // 如果已测试通过
-    if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
-      return '重新测试';
-    }
-    
-    // 默认情况
+    // 默认情况：硬点测试通过但还未进行上位机测试
     return '上位机测试';
   }
 
   /**
-   * 开始手动测试
+   * 获取手动测试按钮图标
+   * 根据测试状态显示不同的图标
+   */
+  getManualTestButtonIcon(instance: ChannelTestInstance): string {
+    const buttonText = this.getManualTestButtonText(instance);
+    
+    switch (buttonText) {
+      case '测试中...':
+        return 'loading';
+      case '查看测试详情':
+        return 'eye';
+      case '重新测试':
+        return 'redo';
+      case '上位机测试':
+      default:
+        return 'setting';
+    }
+  }
+
+  /**
+   * 获取手动测试按钮类型
+   * 根据测试状态显示不同的按钮样式
+   */
+  getManualTestButtonType(instance: ChannelTestInstance): 'primary' | 'default' | 'dashed' | 'link' | 'text' {
+    const buttonText = this.getManualTestButtonText(instance);
+    
+    switch (buttonText) {
+      case '重新测试':
+        return 'primary';  // 重新测试使用主要按钮样式
+      case '查看测试详情':
+        return 'default';  // 查看详情使用默认按钮样式（dashed在某些版本可能不支持）
+      case '上位机测试':
+      case '测试中...':
+      default:
+        return 'default';  // 其他情况使用默认样式
+    }
+  }
+
+  /**
+   * 处理上位机测试按钮点击
+   * 根据按钮状态执行不同的操作：
+   * - "上位机测试"/"重新测试" → 打开手动测试模态框
+   * - "查看测试详情" → 打开测试详情模态框
    */
   async startManualTest(instance: ChannelTestInstance): Promise<void> {
     try {
-      console.log('🔧 [TEST_AREA] 开始手动测试:', instance.instance_id);
+      const buttonText = this.getManualTestButtonText(instance);
+      console.log('🔧 [TEST_AREA] 上位机测试按钮点击:', instance.instance_id, '按钮文本:', buttonText);
 
       // 获取通道定义信息
       const definition = this.getDefinitionByInstanceId(instance.instance_id);
@@ -2065,15 +2150,37 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       this.selectedManualTestInstance = instance;
       this.selectedManualTestDefinition = definition;
 
-      // 打开手动测试模态框
-      this.manualTestModalVisible = true;
-
-      console.log('✅ [TEST_AREA] 手动测试模态框已打开');
+      // 根据按钮文本决定操作
+      if (buttonText === '查看测试详情') {
+        // 查看测试详情：打开错误详情模态框
+        console.log('✅ [TEST_AREA] 打开测试详情模态框');
+        this.showTestDetails(instance);
+      } else {
+        // 开始手动测试或重新测试：打开手动测试模态框
+        console.log('✅ [TEST_AREA] 打开手动测试模态框');
+        this.manualTestModalVisible = true;
+      }
 
     } catch (error) {
-      console.error('❌ [TEST_AREA] 启动手动测试失败:', error);
-      this.message.error(`启动手动测试失败: ${error}`);
+      console.error('❌ [TEST_AREA] 处理上位机测试按钮点击失败:', error);
+      this.message.error(`操作失败: ${error}`);
     }
+  }
+
+  /**
+   * 显示测试详情
+   */
+  private showTestDetails(instance: ChannelTestInstance): void {
+    const definition = this.getDefinitionByInstanceId(instance.instance_id);
+    if (!definition) {
+      this.message.error('无法找到通道定义信息');
+      return;
+    }
+
+    // 设置选中的实例和定义，然后打开错误详情模态框
+    this.selectedErrorInstance = instance;
+    this.selectedErrorDefinition = definition;
+    this.errorDetailModalVisible = true;
   }
 
   /**
