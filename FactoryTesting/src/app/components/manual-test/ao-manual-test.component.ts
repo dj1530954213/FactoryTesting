@@ -107,12 +107,21 @@ import {
             </div>
             <div class="test-item-content">
               <p>请确认HMI界面显示的输出值与实际输出一致</p>
+              
+              <!-- 检查点收集状态提示 -->
+              <div *ngIf="!areAllCheckpointsCollected() && !isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)" 
+                   style="margin: 8px 0; padding: 8px 12px; background-color: #fffbe6; border: 1px solid #fadb14; border-radius: 4px; display: flex; align-items: center; gap: 8px; color: #faad14; font-size: 12px;">
+                <i nz-icon nzType="exclamation-circle" nzTheme="twotone" [nzTwotoneColor]="'#faad14'"></i>
+                <span>确认通过需要先完成所有检查点 (0%, 25%, 50%, 75%, 100%) 的数据采集</span>
+              </div>
+
               <div class="test-item-actions">
                 <button 
                   nz-button 
                   nzType="primary" 
                   nzSize="small"
-                  [disabled]="isSubItemPassedOrSkipped(ManualTestSubItem.ShowValueCheck)"
+                  [disabled]="isConfirmButtonDisabled(ManualTestSubItem.ShowValueCheck)"
+                  [title]="getConfirmButtonTooltip()"
                   (click)="completeSubItem(ManualTestSubItem.ShowValueCheck)">
                   <i nz-icon nzType="check"></i>
                   确认通过
@@ -276,11 +285,55 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   /**
    * 检查子项是否已通过或跳过（用于按钮disable判断）
    * 只有通过或跳过的项目才禁用按钮，失败的项目允许重新操作
+   * 注意：这个方法现在只用于"测试失败"按钮，"确认通过"按钮有单独的判断逻辑
    */
   isSubItemPassedOrSkipped(subItem: ManualTestSubItem): boolean {
     const status = this.manualTestService.getSubItemStatus(subItem);
     return status === ManualTestSubItemStatus.Passed || 
            status === ManualTestSubItemStatus.Skipped;
+  }
+
+  /**
+   * 检查确认通过按钮是否应该禁用
+   * 对于AO点位的确认通过按钮，需要满足两个条件：
+   * 1. 该项目未通过或跳过
+   * 2. 所有5个检查点都已收集完数据
+   */
+  isConfirmButtonDisabled(subItem: ManualTestSubItem): boolean {
+    const status = this.manualTestService.getSubItemStatus(subItem);
+    
+    // 如果已经通过或跳过，禁用按钮
+    if (status === ManualTestSubItemStatus.Passed || status === ManualTestSubItemStatus.Skipped) {
+      return true;
+    }
+
+    // 对于ShowValueCheck（显示值核对），需要检查5个检查点是否都收集完数据
+    if (subItem === ManualTestSubItem.ShowValueCheck) {
+      return !this.areAllCheckpointsCollected();
+    }
+    
+    return false;
+  }
+
+  /**
+   * 检查是否所有5个检查点都已收集完数据
+   * 0%, 25%, 50%, 75%, 100%
+   */
+  areAllCheckpointsCollected(): boolean {
+    const allCollected = this.percentPoints.every(percent => this.captureCompleted[percent]);
+    
+    // 调试输出
+    if (!allCollected) {
+      const missingPoints = this.percentPoints.filter(percent => !this.captureCompleted[percent]);
+      console.log('🔍 [AO_MANUAL_TEST] 检查点收集状态:', {
+        allCollected: allCollected,
+        completedPoints: this.percentPoints.filter(percent => this.captureCompleted[percent]),
+        missingPoints: missingPoints,
+        captureCompleted: this.captureCompleted
+      });
+    }
+    
+    return allCollected;
   }
 
   /**
@@ -420,6 +473,28 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
    */
   hasAnyResults(): boolean {
     return Object.keys(this.captureResults).length > 0;
+  }
+
+  /**
+   * 获取确认通过按钮的提示文本
+   */
+  getConfirmButtonTooltip(): string {
+    const status = this.manualTestService.getSubItemStatus(ManualTestSubItem.ShowValueCheck);
+    
+    if (status === ManualTestSubItemStatus.Passed) {
+      return '该项目已通过';
+    }
+    
+    if (status === ManualTestSubItemStatus.Skipped) {
+      return '该项目已跳过';
+    }
+    
+    if (!this.areAllCheckpointsCollected()) {
+      const missingPoints = this.percentPoints.filter(percent => !this.captureCompleted[percent]);
+      return `需要先完成所有检查点的数据采集。缺失检查点: ${missingPoints.join(', ')}%`;
+    }
+    
+    return '确认显示值与实际输出一致';
   }
 
   cancelTest(): void {
