@@ -1566,10 +1566,29 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    */
   hasFailedHardPoints(): boolean {
     if (this.batchDetails) {
-      return this.batchDetails.instances.some(inst => this.isHardPointTestFailed(inst));
+      const failedInstances = this.batchDetails.instances.filter(inst => this.isHardPointTestFailed(inst));
+      console.log('🔍 [TEST_AREA] 硬点失败检测:', {
+        totalInstances: this.batchDetails.instances.length,
+        failedCount: failedInstances.length,
+        failedInstanceIds: failedInstances.map(inst => inst.instance_id),
+        allStatuses: this.batchDetails.instances.map(inst => ({
+          id: inst.instance_id,
+          status: inst.overall_status,
+          hasSubResults: !!inst.sub_test_results,
+          hardPointStatus: inst.sub_test_results?.[SubTestItem.HardPoint]?.status,
+          hasError: !!inst.error_message
+        }))
+      });
+      return failedInstances.length > 0;
     }
-    // 如果没有详情，无法确定具体是硬点失败还是其他测试失败，保持原逻辑
-    return (this.selectedBatch?.failed_points || 0) > 0;
+    // 如果没有详情，根据批次统计判断
+    const hasFailed = (this.selectedBatch?.failed_points || 0) > 0;
+    console.log('🔍 [TEST_AREA] 硬点失败检测(fallback):', {
+      batchId: this.selectedBatch?.batch_id,
+      failedPoints: this.selectedBatch?.failed_points,
+      result: hasFailed
+    });
+    return hasFailed;
   }
 
   /**
@@ -1577,20 +1596,78 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    * 只检查硬点测试，不包括上位机手动测试失败
    */
   private isHardPointTestFailed(instance: ChannelTestInstance): boolean {
-    // 方法1：检查子测试结果中的硬点测试
+    let isFailed = false;
+    let reason = '';
+
+    // 方法1：检查子测试结果中的硬点测试状态
     if (instance.sub_test_results && instance.sub_test_results[SubTestItem.HardPoint]) {
-      return instance.sub_test_results[SubTestItem.HardPoint].status === SubTestStatus.Failed;
+      const hardPointStatus = instance.sub_test_results[SubTestItem.HardPoint].status;
+      if (hardPointStatus === SubTestStatus.Failed) {
+        isFailed = true;
+        reason = '硬点子测试状态为Failed';
+      }
     }
 
-    // 方法2：如果没有详细的子测试结果，根据状态推断
-    // 如果整体状态是失败，但还没有进入手动测试阶段，可能是硬点失败
-    if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
-      // 如果没有子测试结果或硬点测试结果，但状态是失败的
-      // 这可能表示硬点测试失败（因为硬点测试是第一步）
-      return true;
+    // 方法2：根据整体状态判断
+    // 如果整体状态为TestCompletedFailed，需要判断是否是硬点失败
+    if (!isFailed && instance.overall_status === OverallTestStatus.TestCompletedFailed) {
+      // 检查是否有手动测试结果
+      const hasManualTestResults = instance.sub_test_results && (
+        instance.sub_test_results[SubTestItem.LowLowAlarm] ||
+        instance.sub_test_results[SubTestItem.LowAlarm] ||
+        instance.sub_test_results[SubTestItem.HighAlarm] ||
+        instance.sub_test_results[SubTestItem.HighHighAlarm] ||
+        instance.sub_test_results[SubTestItem.StateDisplay]
+      );
+
+      if (!hasManualTestResults) {
+        // 没有手动测试结果，说明可能在硬点测试阶段失败了
+        isFailed = true;
+        reason = '整体状态失败且无手动测试结果';
+      } else {
+        // 有手动测试结果，检查硬点测试是否明确失败
+        if (instance.sub_test_results?.[SubTestItem.HardPoint]?.status !== SubTestStatus.Passed) {
+          isFailed = true;
+          reason = '整体状态失败且硬点测试非通过状态';
+        }
+      }
     }
 
-    return false;
+    // 方法3：检查特殊情况 - 硬点测试完成但有明确的错误消息
+    if (!isFailed && instance.overall_status === OverallTestStatus.HardPointTestCompleted) {
+      if (instance.error_message && instance.error_message.trim()) {
+        // 进一步检查错误消息是否包含硬点相关的失败信息
+        const errorLower = instance.error_message.toLowerCase();
+        if (errorLower.includes('硬点') || errorLower.includes('hardpoint') || 
+            errorLower.includes('通道测试') || errorLower.includes('测试失败')) {
+          isFailed = true;
+          reason = '硬点测试完成但有相关错误消息';
+        }
+      }
+    }
+
+    // 方法4：检查是否测试过程中失败但状态未更新
+    if (!isFailed && (instance.overall_status === OverallTestStatus.HardPointTesting || 
+                      instance.overall_status === OverallTestStatus.HardPointTestInProgress)) {
+      // 如果正在测试但有错误消息，可能是测试失败了
+      if (instance.error_message && instance.error_message.trim()) {
+        isFailed = true;
+        reason = '硬点测试中但有错误消息';
+      }
+    }
+
+    // 调试输出
+    if (isFailed) {
+      console.log('🔍 [TEST_AREA] 检测到硬点失败:', {
+        instanceId: instance.instance_id,
+        status: instance.overall_status,
+        reason: reason,
+        errorMessage: instance.error_message,
+        subResults: instance.sub_test_results
+      });
+    }
+
+    return isFailed;
   }
 
   /**
