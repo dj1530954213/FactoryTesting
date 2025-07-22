@@ -436,10 +436,19 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
                               this.instance.overall_status === OverallTestStatus.TestCompletedFailed;
     
     if (isOverallCompleted) {
+      console.log('🔍 [AO_MANUAL_TEST] 测试状态已完成，禁用采集按钮:', this.instance.overall_status);
       return true;
     }
     
-    // 方法2：如果已经发出完成事件，也禁用采集按钮（防止状态更新延迟）
+    // 方法2：检查所有手动测试子项是否都已完成（适用于查看详情模式）
+    // 这种情况下completedEmitted可能是false，但子项状态已完成
+    const allSubItemsCompleted = this.isAllCompleted();
+    if (allSubItemsCompleted) {
+      console.log('🔍 [AO_MANUAL_TEST] 所有手动测试子项已完成，禁用采集按钮');
+      return true;
+    }
+    
+    // 方法3：如果已经发出完成事件，也禁用采集按钮（防止状态更新延迟）
     if (this.completedEmitted) {
       console.log('🔍 [AO_MANUAL_TEST] 测试完成事件已发出，禁用采集按钮');
       return true;
@@ -450,7 +459,7 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
       console.log('🔍 [AO_MANUAL_TEST] isTestCompleted检查:', {
         instanceStatus: this.instance.overall_status,
         completedEmitted: this.completedEmitted,
-        allCompleted: this.isAllCompleted(),
+        allCompleted: allSubItemsCompleted,
         result: false
       });
     }
@@ -505,7 +514,15 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   getButtonTooltip(percent: number): string {
     // 如果测试已完成，显示保护性提示
     if (this.isTestCompleted()) {
-      return `测试已完成，采集按钮已禁用以保护数据一致性`;
+      // 区分不同的完成情况
+      if (this.instance && (this.instance.overall_status === OverallTestStatus.TestCompletedPassed ||
+                           this.instance.overall_status === OverallTestStatus.TestCompletedFailed)) {
+        return `整体测试已完成（${this.instance.overall_status === OverallTestStatus.TestCompletedPassed ? '通过' : '失败'}），采集按钮已禁用以保护数据一致性`;
+      } else if (this.isAllCompleted()) {
+        return `所有测试项已完成，采集按钮已禁用以保护数据一致性`;
+      } else {
+        return `测试已完成，采集按钮已禁用以保护数据一致性`;
+      }
     }
     
     if (this.captureCompleted[percent]) {
