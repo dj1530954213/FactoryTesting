@@ -1671,6 +1671,42 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * 判断单个实例是否已经进行过硬点测试（不论成功失败）
+   * 用于控制单个通道硬点重测按钮的可用性
+   */
+  private hasHardPointTested(instance: ChannelTestInstance): boolean {
+    // 方法1：检查子测试结果中是否有硬点测试记录
+    if (instance.sub_test_results && instance.sub_test_results[SubTestItem.HardPoint]) {
+      const hardPointStatus = instance.sub_test_results[SubTestItem.HardPoint].status;
+      // 只要不是NotStarted状态，就说明已经测试过了
+      return hardPointStatus !== SubTestStatus.NotStarted;
+    }
+
+    // 方法2：根据整体状态判断是否已经进行过硬点测试
+    const status = instance.overall_status;
+    
+    // 这些状态表明已经进行过硬点测试
+    if (status === OverallTestStatus.HardPointTestCompleted ||
+        status === OverallTestStatus.ManualTestInProgress ||
+        status === OverallTestStatus.ManualTesting ||
+        status === OverallTestStatus.AlarmTesting ||
+        status === OverallTestStatus.TestCompletedPassed ||
+        status === OverallTestStatus.TestCompletedFailed) {
+      return true;
+    }
+
+    // 方法3：如果有错误消息且状态不是初始状态，可能表示测试过了
+    if (instance.error_message && instance.error_message.trim() &&
+        status !== OverallTestStatus.NotTested &&
+        status !== OverallTestStatus.WiringConfirmationRequired &&
+        status !== OverallTestStatus.WiringConfirmed) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * 判断当前批次是否有任何硬点测试已完成（不论成功失败）
    * 用于控制自动测试按钮的可用性
    */
@@ -1936,42 +1972,89 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
   /**
    * 检查单个通道测试按钮是否应该禁用
+   * 
+   * 按钮启用条件：
+   * 1. 通道已经进行过硬点测试
+   * 2. 并且硬点测试失败了
+   * 
+   * 按钮禁用条件：
+   * 1. 正在测试中
+   * 2. 从未进行过硬点测试
+   * 3. 硬点测试通过了
+   * 4. 整体测试已通过
    */
   isChannelTestDisabled(instance: ChannelTestInstance): boolean {
+    let isDisabled = false;
+    let reason = '';
+
     // 正在测试中时禁用按钮
     if (instance.overall_status === OverallTestStatus.HardPointTesting ||
         instance.overall_status === OverallTestStatus.ManualTesting ||
         instance.overall_status === OverallTestStatus.ManualTestInProgress) {
-      return true;
+      isDisabled = true;
+      reason = '正在测试中';
     }
 
     // 整体测试通过时禁用按钮
-    if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
-      return true;
+    else if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
+      isDisabled = true;
+      reason = '整体测试已通过';
     }
 
-    // 硬点测试完成且未失败时禁用按钮
-    if (instance.overall_status === OverallTestStatus.HardPointTestCompleted) {
-      return true;
+    else {
+      // 检查是否进行过硬点测试
+      const hasHardPointTested = this.hasHardPointTested(instance);
+      
+      // 如果从未进行过硬点测试，禁用按钮
+      if (!hasHardPointTested) {
+        isDisabled = true;
+        reason = '从未进行过硬点测试';
+      } else {
+        // 如果进行过硬点测试，只有在硬点测试失败时才启用按钮
+        const isHardPointFailed = this.isHardPointTestFailed(instance);
+        if (!isHardPointFailed) {
+          isDisabled = true;
+          reason = '硬点测试未失败';
+        } else {
+          reason = '硬点测试失败，可重测';
+        }
+      }
     }
 
-    // 如果整体状态是失败，只有硬点测试失败时才启用硬点重测按钮
-    if (instance.overall_status === OverallTestStatus.TestCompletedFailed) {
-      return !this.isHardPointTestFailed(instance);
+    // 调试输出（只在需要时启用）
+    if (Math.random() < 0.01) { // 随机输出1%的调用以避免刷屏
+      console.log('🔍 [TEST_AREA] 单通道硬点重测按钮状态:', {
+        instanceId: instance.instance_id,
+        status: instance.overall_status,
+        disabled: isDisabled,
+        reason: reason,
+        hasHardPointTested: this.hasHardPointTested(instance),
+        isHardPointFailed: this.isHardPointTestFailed(instance)
+      });
     }
 
-    // 其他情况启用按钮（未测试、接线确认等）
-    return false;
+    return isDisabled;
   }
 
   /**
    * 获取单个通道测试按钮的文本
    */
   getChannelTestButtonText(instance: ChannelTestInstance): string {
+    // 正在测试中
     if (instance.overall_status === OverallTestStatus.HardPointTesting) {
       return '测试中...';
     }
-    return '硬点重测';
+    
+    // 检查是否已经进行过硬点测试
+    const hasHardPointTested = this.hasHardPointTested(instance);
+    
+    if (!hasHardPointTested) {
+      // 从未进行过硬点测试
+      return '硬点测试';
+    } else {
+      // 已经测试过，这是重测
+      return '硬点重测';
+    }
   }
 
   /**
