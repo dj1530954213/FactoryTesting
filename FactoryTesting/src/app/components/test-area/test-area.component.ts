@@ -204,6 +204,18 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // 订阅实例数据更新事件，确保手动测试采集完后列表立即刷新
+    this.subscriptions.add(
+      this.manualTestService.instanceUpdated$.subscribe(() => {
+        this.loadBatchDetails();
+      })
+    );
+    // 订阅实例数据更新事件，在实例更新时立即刷新批次详情
+    this.subscriptions.add(
+      this.manualTestService.instanceUpdated$.subscribe(() => {
+        this.loadBatchDetails();
+      })
+    );
     // 订阅手动测试状态变化，实时刷新实例状态
     // 订阅当前手动测试状态（启动测试时会推送一次）
     this.subscriptions.add(
@@ -228,6 +240,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
     // 🔧 优化：组件销毁时清理所有定时器
     this.refreshTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     this.refreshTimeouts.clear();

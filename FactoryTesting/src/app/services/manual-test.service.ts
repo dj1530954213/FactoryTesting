@@ -78,6 +78,11 @@ export class ManualTestService {
    * **触发频率**: 每次子测试项目状态变化时
    */
   private testStatusUpdated = new Subject<ManualTestStatus>();
+  /**
+   * 采集单个点位后实例数据已更新事件
+   */
+  private instanceUpdated = new Subject<string>();
+  public instanceUpdated$ = this.instanceUpdated.asObservable();
   public testStatusUpdated$ = this.testStatusUpdated.asObservable();
 
   // === 活跃状态管理 ===
@@ -95,6 +100,13 @@ export class ManualTestService {
    * **初始化**: 设置初始状态，准备事件监听
    */
   constructor() {}
+
+  /**
+   * 手动触发实例更新事件
+   */
+  emitInstanceUpdated(instanceId: string): void {
+    this.instanceUpdated.next(instanceId);
+  }
 
   /**
    * 开始手动测试

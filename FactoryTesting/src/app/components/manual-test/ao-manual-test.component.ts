@@ -10,7 +10,7 @@ import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
 import { NzStatisticModule } from 'ng-zorro-antd/statistic';
 import { invoke } from '@tauri-apps/api/core';
-import { Subscription } from 'rxjs';
+import { Subscription, timer } from 'rxjs';
 
 import { ChannelTestInstance, ChannelPointDefinition, OverallTestStatus } from '../../models';
 import { ManualTestService } from '../../services/manual-test.service';
@@ -523,6 +523,8 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
         const key = `test_result_${percent}_percent` as keyof ChannelTestInstance;
         (this.instance as any)[key] = resp.actual_value;
       }
+      // 触发实例已更新事件，通知父组件刷新
+      this.manualTestService.emitInstanceUpdated(this.instance.instance_id);
       this.message.success(`采集 ${percent}% 成功，偏差 ${resp.deviation_percent.toFixed(2)}%`);
     } catch (err: any) {
       this.message.error(`采集 ${percent}% 失败: ${err}`);
