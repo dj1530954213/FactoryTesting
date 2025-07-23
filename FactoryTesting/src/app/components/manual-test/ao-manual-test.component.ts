@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -192,7 +192,7 @@ import {
   `,
   styleUrls: ['./ai-manual-test.component.css'] // 复用AI组件的样式
 })
-export class AoManualTestComponent implements OnInit, OnDestroy {
+export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
   @Input() instance: ChannelTestInstance | null = null;
   @Input() definition: ChannelPointDefinition | null = null;
   @Input() testStatus: ManualTestStatus | null = null;
@@ -226,9 +226,42 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
   // 已触发完成事件标志，避免重复执行
   private completedEmitted = false;
   private statusInitialized = false;
+
+  // ============== 状态恢复 ==============
+  /**
+   * 根据 instance 中已保存的 test_result_%_percent 字段恢复采集进度
+   */
+  private restoreCaptureState(): void {
+    if (!this.instance) return;
+    const mapping: Array<[number, keyof ChannelTestInstance]> = [
+      [0, 'test_result_0_percent'],
+      [25, 'test_result_25_percent'],
+      [50, 'test_result_50_percent'],
+      [75, 'test_result_75_percent'],
+      [100, 'test_result_100_percent']
+    ];
+    mapping.forEach(([pct, key]) => {
+      const value = (this.instance as any)[key];
+      if (value !== undefined && value !== null) {
+        this.captureCompleted[pct] = true;
+        // 偏差信息无法确定，这里仅记录实际值，偏差设 0
+        if (!this.captureResults[pct]) {
+          this.captureResults[pct] = { value: value as number, deviation: 0 };
+        }
+      }
+    });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['instance'] && !changes['instance'].firstChange) {
+      this.restoreCaptureState();
+    }
+  }
   private previousCompleted = false;
 
   ngOnInit(): void {
+    // 根据已存在的数据恢复采集状态
+    this.restoreCaptureState();
     // PLC 监控刷新
     this.subscriptions.add(
       this.plcMonitoringService.currentMonitoringData$.subscribe(() => {})
@@ -428,43 +461,11 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
    * 检查测试是否已完成（通过或失败）
    * 用于控制采集按钮的禁用状态，保护数据一致性
    */
+  /**
+   * 当五个采集点全部完成时返回 true，用于控制按钮的禁用及提示。
+   */
   isTestCompleted(): boolean {
-    if (!this.instance) return false;
-    
-    // 方法1：如果整体状态明确显示为测试完成，则禁用采集按钮（最权威的判断）
-    const isOverallCompleted = this.instance.overall_status === OverallTestStatus.TestCompletedPassed ||
-                              this.instance.overall_status === OverallTestStatus.TestCompletedFailed;
-    
-    if (isOverallCompleted) {
-      console.log('🔍 [AO_MANUAL_TEST] 测试状态已完成，禁用采集按钮:', this.instance.overall_status);
-      return true;
-    }
-    
-    // 方法2：检查所有手动测试子项是否都已完成（适用于查看详情模式）
-    // 这种情况下completedEmitted可能是false，但子项状态已完成
-    const allSubItemsCompleted = this.isAllCompleted();
-    if (allSubItemsCompleted) {
-      console.log('🔍 [AO_MANUAL_TEST] 所有手动测试子项已完成，禁用采集按钮');
-      return true;
-    }
-    
-    // 方法3：如果已经发出完成事件，也禁用采集按钮（防止状态更新延迟）
-    if (this.completedEmitted) {
-      console.log('🔍 [AO_MANUAL_TEST] 测试完成事件已发出，禁用采集按钮');
-      return true;
-    }
-    
-    // 调试输出当前状态
-    if (Math.random() < 0.1) { // 10%概率输出调试信息
-      console.log('🔍 [AO_MANUAL_TEST] isTestCompleted检查:', {
-        instanceStatus: this.instance.overall_status,
-        completedEmitted: this.completedEmitted,
-        allCompleted: allSubItemsCompleted,
-        result: false
-      });
-    }
-    
-    return false;
+    return this.percentPoints.every(p => this.captureCompleted[p]);
   }
 
   /**
@@ -499,6 +500,11 @@ export class AoManualTestComponent implements OnInit, OnDestroy {
         value: resp.actual_value,
         deviation: resp.deviation_percent
       };
+      // 将结果写回 instance 字段，保证关闭后再打开能立即恢复
+      if (this.instance) {
+        const key = `test_result_${percent}_percent` as keyof ChannelTestInstance;
+        (this.instance as any)[key] = resp.actual_value;
+      }
       this.message.success(`采集 ${percent}% 成功，偏差 ${resp.deviation_percent.toFixed(2)}%`);
     } catch (err: any) {
       this.message.error(`采集 ${percent}% 失败: ${err}`);
