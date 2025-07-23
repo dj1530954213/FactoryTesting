@@ -51,7 +51,7 @@ export class PlcMonitoringService {
     try {
       // 监听PLC监控数据更新事件
       const unlistenData = await listen<PlcMonitoringData>('plc-monitoring-data', (event) => {
-        console.log('📊 [PLC_MONITORING_SERVICE] 收到PLC监控数据:', event.payload);
+        //console.log('📊 [PLC_MONITORING_SERVICE] 收到PLC监控数据:', event.payload);
         this.currentMonitoringData.next(event.payload);
       });
 

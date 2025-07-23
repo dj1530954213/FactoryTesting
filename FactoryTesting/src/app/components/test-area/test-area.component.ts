@@ -1567,7 +1567,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   hasFailedHardPoints(): boolean {
     if (this.batchDetails) {
       const failedInstances = this.batchDetails.instances.filter(inst => this.isHardPointTestFailed(inst));
-      console.log('🔍 [TEST_AREA] 硬点失败检测:', {
+      /*console.log('🔍 [TEST_AREA] 硬点失败检测:', {
         totalInstances: this.batchDetails.instances.length,
         failedCount: failedInstances.length,
         failedInstanceIds: failedInstances.map(inst => inst.instance_id),
@@ -1578,7 +1578,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           hardPointStatus: inst.sub_test_results?.[SubTestItem.HardPoint]?.status,
           hasError: !!inst.error_message
         }))
-      });
+      });*/
       return failedInstances.length > 0;
     }
     // 如果没有详情，根据批次统计判断
@@ -2023,14 +2023,14 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
     // 调试输出（只在需要时启用）
     if (Math.random() < 0.01) { // 随机输出1%的调用以避免刷屏
-      console.log('🔍 [TEST_AREA] 单通道硬点重测按钮状态:', {
+      /*console.log('🔍 [TEST_AREA] 单通道硬点重测按钮状态:', {
         instanceId: instance.instance_id,
         status: instance.overall_status,
         disabled: isDisabled,
         reason: reason,
         hasHardPointTested: this.hasHardPointTested(instance),
         isHardPointFailed: this.isHardPointTestFailed(instance)
-      });
+      });*/
     }
 
     return isDisabled;

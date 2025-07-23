@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NzCardModule } from 'ng-zorro-antd/card';
@@ -220,7 +220,8 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
     private manualTestService: ManualTestService,
     private plcMonitoringService: PlcMonitoringService,
     private message: NzMessageService,
-    private modal: NzModalService
+    private modal: NzModalService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   // 已触发完成事件标志，避免重复执行
@@ -240,20 +241,28 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
       [75, 'test_result_75_percent'],
       [100, 'test_result_100_percent']
     ];
+    let changed = false;
     mapping.forEach(([pct, key]) => {
       const value = (this.instance as any)[key];
       if (value !== undefined && value !== null) {
-        this.captureCompleted[pct] = true;
-        // 偏差信息无法确定，这里仅记录实际值，偏差设 0
+        if (!this.captureCompleted[pct]) {
+          this.captureCompleted[pct] = true;
+          changed = true;
+        }
         if (!this.captureResults[pct]) {
           this.captureResults[pct] = { value: value as number, deviation: 0 };
+          changed = true;
         }
       }
     });
+    if (changed) {
+      // 触发变更检测，确保UI立即刷新
+      this.cdr.markForCheck();
+    }
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['instance'] && !changes['instance'].firstChange) {
+    if (changes['instance'] && changes['instance'].currentValue) {
       this.restoreCaptureState();
     }
   }
@@ -285,6 +294,15 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
           this.finishTest();
         }
         this.previousCompleted = allCompleted;
+        this.restoreCaptureState(); // 增加状态恢复调用
+      })
+    );
+    this.subscriptions.add(
+      this.manualTestService.testStatusUpdated$.subscribe(() => {
+        this.restoreCaptureState(); // 增加状态恢复调用
+        setTimeout(() => {
+          this.restoreCaptureState(); // 增加延迟调用确保后端数据异步到达时同步UI
+        });
       })
     );
   }
@@ -366,12 +384,12 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
     // 调试输出
     if (!allCollected) {
       const missingPoints = this.percentPoints.filter(percent => !this.captureCompleted[percent]);
-      console.log('🔍 [AO_MANUAL_TEST] 检查点收集状态:', {
+      /*console.log('🔍 [AO_MANUAL_TEST] 检查点收集状态:', {
         allCollected: allCollected,
         completedPoints: this.percentPoints.filter(percent => this.captureCompleted[percent]),
         missingPoints: missingPoints,
         captureCompleted: this.captureCompleted
-      });
+      });*/
     }
     
     return allCollected;
