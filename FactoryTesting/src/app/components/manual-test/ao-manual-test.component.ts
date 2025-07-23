@@ -204,6 +204,8 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
   
   // 订阅管理
   private subscriptions = new Subscription();
+  /** 用户是否已点击“确认通过” */
+  private confirmClicked = false;
 
   // AO 采集相关
   percentPoints: number[] = [0, 25, 50, 75, 100];
@@ -233,6 +235,8 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
    * 根据 instance 中已保存的 test_result_%_percent 字段恢复采集进度
    */
   private restoreCaptureState(): void {
+    // 每次进入窗口重置确认标记
+    this.confirmClicked = false;
     if (!this.instance) return;
     const mapping: Array<[number, keyof ChannelTestInstance]> = [
       [0, 'test_result_0_percent'],
@@ -359,19 +363,20 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
    * 2. 所有5个检查点都已收集完数据
    */
   isConfirmButtonDisabled(subItem: ManualTestSubItem): boolean {
-    const status = this.manualTestService.getSubItemStatus(subItem);
-    
-    // 如果已经通过或跳过，禁用按钮
-    if (status === ManualTestSubItemStatus.Passed || status === ManualTestSubItemStatus.Skipped) {
-      return true;
+    // 显示值核对存在特殊逻辑：
+    // 1. 未收集满 5 点禁用
+    // 2. 收集满但用户尚未点击确认 → 启用
+    // 3. 用户点击确认后立即禁用（confirmClicked = true）
+    if (subItem === ManualTestSubItem.ShowValueCheck) {
+      if (!this.areAllCheckpointsCollected()) {
+        return true;
+      }
+      return this.confirmClicked; // true ⇒ 禁用；false ⇒ 可点
     }
 
-    // 对于ShowValueCheck（显示值核对），需要检查5个检查点是否都收集完数据
-    if (subItem === ManualTestSubItem.ShowValueCheck) {
-      return !this.areAllCheckpointsCollected();
-    }
-    
-    return false;
+    // 其它子项按状态判断
+    const status = this.manualTestService.getSubItemStatus(subItem);
+    return status === ManualTestSubItemStatus.Passed || status === ManualTestSubItemStatus.Skipped;
   }
 
   /**
@@ -424,6 +429,10 @@ export class AoManualTestComponent implements OnInit, OnDestroy, OnChanges {
    * 完成子项
    */
   async completeSubItem(subItem: ManualTestSubItem): Promise<void> {
+    // 点击确认通过时立刻禁用按钮，避免重复
+    if (subItem === ManualTestSubItem.ShowValueCheck) {
+      this.confirmClicked = true;
+    }
     if (!this.instance) return;
 
     try {
