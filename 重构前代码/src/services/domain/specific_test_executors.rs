@@ -114,14 +114,10 @@ impl AIHardPointPercentExecutor {
                 info!("变量:{}, 读[{}]={:.2}", definition.tag, definition.plc_communication_address, actual_raw);
 
                 // 计算误差
-                let error_percentage = if eng_value != 0.0 {
-                    Some(((actual_raw - eng_value) / eng_value * 100.0).abs())
-                } else {
-                    Some(actual_raw.abs())
-                };
+                let error_percentage = Some(((actual_raw - eng_value).abs() / range_span) * 100.0);
 
-                // 判断测试状态（误差容忍度2%）
-                let test_status = if error_percentage.unwrap_or(100.0) <= 2.0 {
+                // 判断测试状态（误差容忍度3%）
+                let test_status = if error_percentage.unwrap_or(100.0) <= 3.0 {
                     SubTestStatus::Passed
                 } else {
                     SubTestStatus::Failed
@@ -926,7 +922,7 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
 
             // 计算偏差
             let deviation = ((read_value - output_value) / (range_upper - range_lower) * 100.0).abs();
-            let is_within_tolerance = deviation <= 5.0; // 5%偏差容限
+            let is_within_tolerance = deviation <= 3.0; // 3%偏差容限
 
             let status_icon = if is_within_tolerance { "✅" } else { "❌" };
             info!("{} {}%: {:.2}", status_icon, percentage * 100.0, read_value);

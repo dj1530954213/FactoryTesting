@@ -105,13 +105,13 @@ import { ChannelTestInstance, ChannelPointDefinition, SubTestItem, SubTestExecut
                       <span class="value-text">{{ result.actualValue | number:'1.2-2' }}</span>
                     </td>
                     <td>
-                      <span class="deviation-text" [class.deviation-error]="result.deviation > 2">
+                      <span class="deviation-text" [class.deviation-error]="result.deviation > 3">
                         {{ result.deviation | number:'1.2-2' }}%
                       </span>
                     </td>
                     <td>
-                      <nz-tag [nzColor]="result.deviation <= 2 ? 'success' : 'error'">
-                        {{ result.deviation <= 2 ? '通过' : '失败' }}
+                      <nz-tag [nzColor]="result.deviation <= 3 ? 'success' : 'error'">
+                        {{ result.deviation <= 3 ? '通过' : '失败' }}
                       </nz-tag>
                     </td>
                   </tr>
@@ -188,10 +188,10 @@ import { ChannelTestInstance, ChannelPointDefinition, SubTestItem, SubTestExecut
                 <ol>
                   <li>测试PLC AO按序输出: 0%, 25%, 50%, 75%, 100%</li>
                   <li>被测PLC AI采集对应数值</li>
-                  <li>验证采集值与期望值的偏差在允许范围内(≤2%)</li>
+                  <li>验证采集值与期望值的偏差在允许范围内(≤3%)</li>
                 </ol>
                 <p><strong>量程范围：</strong> {{ definition.range_low_limit || definition.analog_range_min || 0 }} ~ {{ definition.range_high_limit || definition.analog_range_max || 100 }}</p>
-                <p><strong>允许偏差：</strong> ≤2%</p>
+                <p><strong>允许偏差：</strong> ≤3%</p>
               </div>
 
               <!-- AO类型说明 -->
