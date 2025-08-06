@@ -70,6 +70,91 @@
       </nz-space>
     </ng-template>
 
+    <!-- 整体站场测试进度区域（精简版） -->
+    <div class="overall-station-progress-section" *ngIf="showOverallProgress && availableBatches.length > 0">
+      <nz-card nzTitle="整体测试进度" [nzSize]="'default'" class="overall-progress-card">
+        <div class="overall-progress-content">
+          
+          <!-- 主进度显示区域 -->
+          <div class="overall-progress-main">
+            
+            <!-- 核心进度百分比（最醒目） -->
+            <div class="progress-percentage-display">
+              <div class="percentage-circle">
+                <span class="percentage-value">{{ isOverallProgressValid() ? overallStationProgress.progressPercentage : 0 }}%</span>
+                <span class="percentage-label">完成进度</span>
+              </div>
+              <div class="progress-ring">
+                <nz-progress
+                  [nzPercent]="overallStationProgress.progressPercentage"
+                  nzType="circle"
+                  [nzWidth]="120"
+                  [nzStatus]="getOverallProgressStatus()"
+                  [nzStrokeColor]="getOverallProgressColor()"
+                  [nzShowInfo]="false"
+                  [nzStrokeWidth]="8">
+                </nz-progress>
+              </div>
+            </div>
+
+            <!-- 核心统计数据 -->
+            <div class="progress-stats-grid">
+              <div class="stat-item total-stat">
+                <div class="stat-icon">
+                  <i nz-icon nzType="database" nzTheme="outline"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ overallStationProgress.totalPoints }}</div>
+                  <div class="stat-label">总点位数</div>
+                </div>
+              </div>
+
+              <div class="stat-item tested-stat">
+                <div class="stat-icon">
+                  <i nz-icon nzType="check-square" nzTheme="outline"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ overallStationProgress.testedPoints }}</div>
+                  <div class="stat-label">已测点数</div>
+                </div>
+              </div>
+
+              <div class="stat-item pending-stat">
+                <div class="stat-icon">
+                  <i nz-icon nzType="clock-circle" nzTheme="outline"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ overallStationProgress.pendingPoints }}</div>
+                  <div class="stat-label">待测点数</div>
+                </div>
+              </div>
+
+              <div class="stat-item success-stat">
+                <div class="stat-icon">
+                  <i nz-icon nzType="check-circle" nzTheme="outline"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ overallStationProgress.successPoints }}</div>
+                  <div class="stat-label">成功点数</div>
+                </div>
+              </div>
+
+              <div class="stat-item failed-stat">
+                <div class="stat-icon">
+                  <i nz-icon nzType="close-circle" nzTheme="outline"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ overallStationProgress.failedPoints }}</div>
+                  <div class="stat-label">失败点数</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </nz-card>
+    </div>
+
     <!-- 批次选择区域 - 可折叠 -->
     <div class="batch-selection-section">
       <nz-collapse nzExpandIconPosition="end">

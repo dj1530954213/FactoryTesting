@@ -39,6 +39,7 @@ import {
   ModuleType,
   PointDataType,
   AllocationSummary,
+  OverallStationProgress,
 
   SubTestItem,
   SubTestStatus,
@@ -129,6 +130,22 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     currentPoint: undefined as string | undefined,
     estimatedTimeRemaining: undefined as string | undefined
   };
+
+  // 整体站场进度相关属性（精简版）
+  overallStationProgress: OverallStationProgress = {
+    totalPoints: 0,
+    testedPoints: 0,
+    pendingPoints: 0,
+    successPoints: 0,
+    failedPoints: 0,
+    progressPercentage: 0
+  };
+
+  // 控制是否显示整体进度
+  showOverallProgress = true;
+
+  // 整体进度计算防抖定时器
+  private _overallProgressUpdateTimer: any = null;
 
   // 🔧 优化：数据刷新防抖机制
   private refreshTimeouts = new Map<string, any>();
@@ -244,6 +261,13 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     // 🔧 优化：组件销毁时清理所有定时器
     this.refreshTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
     this.refreshTimeouts.clear();
+    
+    // 🆕 清理整体进度计算定时器
+    if (this._overallProgressUpdateTimer) {
+      clearTimeout(this._overallProgressUpdateTimer);
+      this._overallProgressUpdateTimer = null;
+    }
+    
     // console.log('🔧 [TEST_AREA] 组件销毁，已清理所有定时器');
 
     // 清理订阅
@@ -546,6 +570,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
           // 立即触发变更检测
           this.cdr.detectChanges();
         }
+
+        // 🆕 重新计算整体进度（任何批次的进度变化都会触发）
+        this.calculateOverallStationProgress();
       });
 
       // 🔧 新增：监听实例详情变化事件，实时更新实例详情
@@ -573,6 +600,11 @@ export class TestAreaComponent implements OnInit, OnDestroy {
             this.smartCacheRefresh('error');
           } else {
             this.smartCacheRefresh('complete');
+          }
+
+          // 🆕 如果是状态相关字段变化，重新计算整体进度
+          if (detailChange.field.includes('status') || detailChange.field.includes('overall_status')) {
+            this.calculateOverallStationProgress();
           }
         }
       });
@@ -605,6 +637,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
       console.log('✅ [TEST_AREA] 成功从后端获取批次列表');
       console.log('✅ [TEST_AREA] 批次数量:', this.availableBatches.length);
+
+      // 🆕 计算整体进度
+      this.calculateOverallStationProgress();
 
       // 更新批次选择服务
       this.batchSelectionService.setAvailableBatches(this.availableBatches);
@@ -645,6 +680,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
     // 2. 异步加载新批次详情
     this.loadBatchDetails();
+
+    // 🆕 重新计算整体进度
+    this.calculateOverallStationProgress();
   }
 
   /**
@@ -1207,6 +1245,9 @@ export class TestAreaComponent implements OnInit, OnDestroy {
 
         // 更新测试进度
         this.calculateTestProgress();
+
+        // 🆕 重新计算整体进度
+        this.calculateOverallStationProgress();
 
         // 强制检查测试完成状态
         this.checkTestCompletionStatus();
@@ -1820,6 +1861,136 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       skippedPoints: batch.skipped_points || 0,
       startedPoints: batch.started_points || 0 // 使用批次中保存的已开始测试点位数
     };
+  }
+
+  /**
+   * 计算整体站场测试进度（精简版）- 带防抖优化
+   * 直接使用现有批次数据进行汇总计算
+   */
+  private calculateOverallStationProgress(): void {
+    // 🔧 防抖处理：清除之前的定时器
+    if (this._overallProgressUpdateTimer) {
+      clearTimeout(this._overallProgressUpdateTimer);
+    }
+
+    // 🔧 防抖处理：延迟执行计算
+    this._overallProgressUpdateTimer = setTimeout(() => {
+      this.performOverallProgressCalculation();
+    }, 100); // 100ms防抖延迟
+  }
+
+  /**
+   * 执行整体进度计算的核心逻辑
+   */
+  private performOverallProgressCalculation(): void {
+    try {
+      if (!this.availableBatches || this.availableBatches.length === 0) {
+        // 重置为空状态
+        this.overallStationProgress = {
+          totalPoints: 0,
+          testedPoints: 0,
+          pendingPoints: 0,
+          successPoints: 0,
+          failedPoints: 0,
+          progressPercentage: 0
+        };
+        return;
+      }
+
+      let totalPoints = 0;
+      let testedPoints = 0;
+      let successPoints = 0;
+      let failedPoints = 0;
+
+      // 遍历所有批次，累加统计数据
+      this.availableBatches.forEach(batch => {
+        try {
+          const stats = this.getBatchTestStats(batch);
+          
+          totalPoints += stats.totalPoints || 0;
+          testedPoints += stats.testedPoints || 0;
+          successPoints += stats.successPoints || 0;
+          failedPoints += stats.failedPoints || 0;
+        } catch (error) {
+          console.warn('🏭 [TEST_AREA] 计算批次统计时出错:', batch.batch_id, error);
+          // 忽略单个批次的错误，继续处理其他批次
+        }
+      });
+
+      // 计算待测点位数
+      const pendingPoints = Math.max(0, totalPoints - testedPoints);
+      
+      // 计算总体进度百分比
+      const progressPercentage = totalPoints === 0 ? 0 : Math.round((testedPoints / totalPoints) * 100);
+      
+      // 确保百分比在有效范围内
+      const validProgressPercentage = Math.max(0, Math.min(100, progressPercentage));
+      
+      this.overallStationProgress = {
+        totalPoints,
+        testedPoints,
+        pendingPoints,
+        successPoints,
+        failedPoints,
+        progressPercentage: validProgressPercentage
+      };
+
+      console.log('🏭 [TEST_AREA] 整体站场进度已更新:', this.overallStationProgress);
+      
+      // 🔧 触发变更检测确保UI及时更新
+      this.cdr.detectChanges();
+      
+    } catch (error) {
+      console.error('🏭 [TEST_AREA] 计算整体进度时出错:', error);
+      // 出错时保持当前状态，不重置
+    }
+  }
+
+  /**
+   * 获取整体进度状态（精简版）
+   */
+  getOverallProgressStatus(): 'success' | 'exception' | 'normal' | 'active' {
+    const { progressPercentage, failedPoints } = this.overallStationProgress;
+    
+    if (progressPercentage === 100) {
+      return failedPoints === 0 ? 'success' : 'exception';
+    }
+    
+    if (failedPoints > 0) {
+      return 'exception';
+    }
+    
+    if (progressPercentage > 0) {
+      return 'active';
+    }
+    
+    return 'normal';
+  }
+
+  /**
+   * 获取整体进度颜色（精简版）
+   */
+  getOverallProgressColor(): string {
+    const status = this.getOverallProgressStatus();
+    switch (status) {
+      case 'success':
+        return '#10b981';
+      case 'exception':
+        return '#ef4444';
+      case 'active':
+        return '#6366f1';
+      default:
+        return '#d1d5db';
+    }
+  }
+
+  /**
+   * 检查整体进度数据是否有效
+   */
+  isOverallProgressValid(): boolean {
+    return this.overallStationProgress && 
+           typeof this.overallStationProgress.progressPercentage === 'number' &&
+           !isNaN(this.overallStationProgress.progressPercentage);
   }
 
   /**

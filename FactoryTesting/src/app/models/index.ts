@@ -609,3 +609,16 @@ export interface DeleteBatchResponse {
   deleted_definitions_count: number;
   deleted_instances_count: number;
 }
+
+// 整体站场测试进度接口（精简版）
+export interface OverallStationProgress {
+  // 核心点位统计
+  totalPoints: number;            // 总点位数
+  testedPoints: number;           // 已测试点位数  
+  pendingPoints: number;          // 待测试点位数
+  successPoints: number;          // 成功点位数
+  failedPoints: number;           // 失败点位数
+  
+  // 核心进度计算
+  progressPercentage: number;     // 总体进度百分比（最醒目显示）
+}

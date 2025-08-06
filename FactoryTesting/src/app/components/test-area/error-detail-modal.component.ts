@@ -200,7 +200,7 @@ import { ChannelTestInstance, ChannelPointDefinition, SubTestItem, SubTestExecut
                 <ol>
                   <li>被测PLC AO按序输出: 0%, 25%, 50%, 75%, 100%</li>
                   <li>测试PLC AI采集对应数值</li>
-                  <li>验证采集值与期望值的偏差在允许范围内(≤5%)</li>
+                  <li>验证采集值与期望值的偏差在允许范围内(≤3%)</li>
                 </ol>
                 <p><strong>量程范围：</strong> {{ definition.analog_range_min || 'N/A' }} ~ {{ definition.analog_range_max || 'N/A' }}</p>
               </div>

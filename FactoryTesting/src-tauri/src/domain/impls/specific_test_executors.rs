@@ -1110,7 +1110,7 @@ impl ISpecificTestStepExecutor for AOHardPointTestExecutor {
 
         let (success_msg, outcome) = if overall_success {
             info!("✅ 结果: {} - 通过", definition.tag);
-            let msg = format!("AO硬点测试成功: 所有{}个测试点偏差均在5%以内", readings.len());
+            let msg = format!("AO硬点测试成功: 所有{}个测试点偏差均在3%以内", readings.len());
             (msg.clone(), RawTestOutcome::success(instance.instance_id.clone(), SubTestItem::HardPoint))
         } else {
             info!("❌ 结果: {} - 失败", definition.tag);

@@ -63,7 +63,7 @@ use crate::domain::services::plc_communication_service::IPlcCommunicationService
 /// AO 手动采集允许的百分比偏差
 /// 
 /// 业务说明：
-/// AO测试时，测试PLC读取的实际值与期望值之间的偏差不得超过5%
+/// AO测试时，测试PLC读取的实际值与期望值之间的偏差不得超过3%
 /// 超出此范围则认为AO输出不准确，测试失败
 /// 
 /// Rust知识点：
