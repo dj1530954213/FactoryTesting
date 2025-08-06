@@ -57,6 +57,9 @@ pub trait ITestPlcConfigService: BaseService + Send + Sync {
     /// 初始化默认测试PLC通道配置
     async fn initialize_default_test_plc_channels(&self) -> AppResult<()>;
     
+    /// 从SQL文件恢复默认测试PLC通道配置
+    async fn restore_default_channels_from_sql(&self) -> AppResult<usize>;
+    
     /// 获取测试PLC配置 (用于通道分配服务)
     async fn get_test_plc_config(&self) -> AppResult<crate::application::services::channel_allocation_service::TestPlcConfig>;
 }
@@ -529,6 +532,20 @@ impl ITestPlcConfigService for TestPlcConfigService {
         
         info!("默认测试PLC配置初始化完成");
         Ok(())
+    }
+
+    async fn restore_default_channels_from_sql(&self) -> AppResult<usize> {
+        debug!("从SQL文件恢复默认测试PLC通道配置");
+        
+        // 嵌入SQL文件内容
+        // Rust知识点：include_str! 宏在编译时将文件内容作为字符串常量嵌入
+        const DEFAULT_CHANNELS_SQL: &str = include_str!("../../../data/test_plc_channel_configs_defult.sql");
+        
+        // 执行SQL恢复操作
+        let result = self.persistence_service.restore_test_plc_channels_from_sql(DEFAULT_CHANNELS_SQL).await?;
+        
+        info!("成功从SQL文件恢复 {} 个测试PLC通道配置", result);
+        Ok(result)
     }
 
     async fn get_test_plc_config(&self) -> AppResult<crate::application::services::channel_allocation_service::TestPlcConfig> {

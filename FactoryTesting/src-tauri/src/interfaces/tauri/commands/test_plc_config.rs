@@ -554,6 +554,47 @@ pub async fn restore_default_test_plc_channels_cmd(
     Ok(result_msg)
 }
 
+/// 从SQL文件恢复默认测试PLC通道配置
+/// 
+/// 业务说明：
+/// - 从嵌入的SQL文件读取默认配置
+/// - 先清空现有的test_plc_channel_configs表
+/// - 执行SQL文件中的INSERT语句恢复默认配置
+/// - 确保操作的事务性，要么全部成功要么全部失败
+/// 
+/// 参数：
+/// - state: 应用状态
+/// 
+/// 返回：
+/// - Ok: 成功消息，包含恢复的通道数量
+/// - Err: 错误信息
+/// 
+/// 调用链：
+/// 前端恢复默认按钮 -> restore_default_channels_from_sql_cmd -> TestPlcConfigService -> 数据库
+/// 
+/// Rust知识点：
+/// - include_str! 宏在编译时嵌入文件内容
+/// - 事务处理确保数据一致性
+#[tauri::command]
+pub async fn restore_default_channels_from_sql_cmd(
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    info!("开始从SQL文件恢复默认测试PLC通道配置");
+
+    // 调用服务层恢复默认配置
+    match state.test_plc_config_service.restore_default_channels_from_sql().await {
+        Ok(count) => {
+            let result_msg = format!("成功恢复 {} 个测试PLC通道配置", count);
+            info!("{}", result_msg);
+            Ok(result_msg)
+        }
+        Err(e) => {
+            log::error!("恢复默认测试PLC通道配置失败: {}", e);
+            Err(format!("恢复默认测试PLC通道配置失败: {}", e))
+        }
+    }
+}
+
 /// 创建88个测试PLC通道配置（基于重构前的真实数据）
 /// 
 /// 业务说明：

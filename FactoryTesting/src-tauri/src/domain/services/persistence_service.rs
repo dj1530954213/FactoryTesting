@@ -334,6 +334,11 @@ pub trait IPersistenceService: BaseService {
         Err(AppError::not_implemented_error("delete_test_plc_channel"))
     }
 
+    /// 从SQL恢复测试 PLC 通道配置
+    async fn restore_test_plc_channels_from_sql(&self, _sql_content: &str) -> AppResult<usize> {
+        Err(AppError::not_implemented_error("restore_test_plc_channels_from_sql"))
+    }
+
     // ======== PLC 连接配置相关 ========
     /// 保存 PLC 连接配置
     async fn save_plc_connection(&self, _connection: &PlcConnectionConfig) -> AppResult<()> {

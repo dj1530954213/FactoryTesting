@@ -77,7 +77,8 @@ use commands::test_plc_config::{
     get_test_plc_channels_cmd, save_test_plc_channel_cmd, delete_test_plc_channel_cmd,
     get_plc_connections_cmd, save_plc_connection_cmd, test_plc_connection_cmd, test_temp_plc_connection_cmd,
     test_address_read_cmd, get_channel_mappings_cmd, generate_channel_mappings_cmd, 
-    initialize_default_test_plc_channels_cmd, restore_default_test_plc_channels_cmd
+    initialize_default_test_plc_channels_cmd, restore_default_test_plc_channels_cmd,
+    restore_default_channels_from_sql_cmd
 };
 // Rust知识点：Arc<T> 是原子引用计数的智能指针，用于在多线程间共享所有权
 use std::sync::Arc;
@@ -373,6 +374,7 @@ pub fn run() {
                 generate_channel_mappings_cmd,
                 initialize_default_test_plc_channels_cmd,
                 restore_default_test_plc_channels_cmd,
+                restore_default_channels_from_sql_cmd,
                 
                 // === 量程设置命令 ===
                 apply_channel_range_setting_cmd,

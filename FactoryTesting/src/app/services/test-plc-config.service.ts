@@ -314,4 +314,13 @@ export class TestPlcConfigService {
       isEnabled: true
     };
   }
+
+  /**
+   * 从SQL文件恢复默认测试PLC通道配置
+   */
+  restoreDefaultChannelsFromSql(): Observable<string> {
+    return from(
+      invoke<string>('restore_default_channels_from_sql_cmd')
+    );
+  }
 } 

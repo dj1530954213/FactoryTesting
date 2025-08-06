@@ -9,7 +9,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTagModule } from 'ng-zorro-antd/tag';
-import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzSelectModule } from 'ng-zorro-antd/select';
@@ -192,6 +192,10 @@ import { PlcAdvancedTestWindowComponent } from './plc-advanced-test-window.compo
             <button *nzSpaceItem nz-button nzType="default" (click)="refreshChannels()">
               <span nz-icon nzType="reload" nzTheme="outline"></span>
               刷新列表
+            </button>
+            <button *nzSpaceItem nz-button nzType="default" nzDanger (click)="restoreDefaultChannels()">
+              <span nz-icon nzType="rollback" nzTheme="outline"></span>
+              恢复默认通道设置
             </button>
           </nz-space>
         </div>
@@ -584,6 +588,7 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
   constructor(
     private testPlcConfigService: TestPlcConfigService,
     private message: NzMessageService,
+    private modalService: NzModalService,
     private fb: FormBuilder
   ) {
     this.initializeForms();
@@ -912,6 +917,36 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
     });
   }
 
+  restoreDefaultChannels(): void {
+    // 创建确认对话框
+    const modal = this.modalService.confirm({
+      nzTitle: '确认恢复默认配置',
+      nzContent: '此操作将删除所有现有的通道配置并恢复为系统默认配置，是否继续？',
+      nzOkText: '确认恢复',
+      nzOkType: 'primary',
+      nzOkDanger: true,
+      nzCancelText: '取消',
+      nzOnOk: () => {
+        // 显示加载状态
+        const loadingMessage = this.message.loading('正在恢复默认配置...', { nzDuration: 0 }).messageId;
+        
+        // 调用服务恢复默认配置
+        this.testPlcConfigService.restoreDefaultChannelsFromSql().subscribe({
+          next: (result) => {
+            this.message.remove(loadingMessage);
+            this.message.success(result);
+            this.loadData(); // 重新加载数据
+          },
+          error: (error) => {
+            this.message.remove(loadingMessage);
+            console.error('恢复默认配置失败:', error);
+            this.message.error('恢复默认配置失败: ' + error);
+          }
+        });
+      }
+    });
+  }
+
   // ============================================================================
   // 辅助方法
   // ============================================================================
@@ -930,11 +965,11 @@ export class TestPlcConfigComponent implements OnInit, OnDestroy {
     }
     
     // 调试日志
-    console.log('通道类型转换:', { 
-      原始类型: type, 
-      转换后类型: channelType, 
-      标签: TestPlcChannelTypeLabels[channelType] 
-    });
+    // console.log('通道类型转换:', { 
+    //   原始类型: type, 
+    //   转换后类型: channelType, 
+    //   标签: TestPlcChannelTypeLabels[channelType] 
+    // });
     
     return TestPlcChannelTypeLabels[channelType] || `未知类型(${type})`;
   }

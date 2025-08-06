@@ -2,7 +2,7 @@
 // 详细注释：使用SeaORM和SQLite实现数据持久化服务
 
 use async_trait::async_trait;
-use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set, ConnectOptions};
+use sea_orm::{Database, DatabaseConnection, Schema, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, ActiveModelTrait, Set, ConnectOptions, TransactionTrait};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex}; // 使用 Mutex
 use chrono::Utc;
@@ -685,6 +685,70 @@ impl PersistenceService for SqliteOrmPersistenceService {
         } else {
             Ok(())
         }
+    }
+
+    /// 从SQL恢复测试PLC通道配置
+    async fn restore_test_plc_channels_from_sql(&self, sql_content: &str) -> AppResult<usize> {
+        use sea_orm::{ConnectionTrait, Statement, DbBackend};
+        
+        info!("开始从SQL恢复测试PLC通道配置");
+        
+        // 开始事务
+        let txn = self.db_conn.begin().await
+            .map_err(|e| AppError::persistence_error(format!("开始事务失败: {}", e)))?;
+        
+        // 先删除现有的所有配置
+        let delete_sql = "DELETE FROM test_plc_channel_configs";
+        let delete_stmt = Statement::from_string(DbBackend::Sqlite, delete_sql.to_string());
+        txn.execute(delete_stmt).await
+            .map_err(|e| AppError::persistence_error(format!("清空测试PLC通道配置表失败: {}", e)))?;
+        
+        info!("已清空现有测试PLC通道配置");
+        
+        // 解析SQL内容，提取INSERT语句
+        let mut insert_count = 0;
+        let lines: Vec<&str> = sql_content.lines().collect();
+        let mut current_statement = String::new();
+        
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // 跳过空行和注释
+            if trimmed.is_empty() || trimmed.starts_with("--") {
+                continue;
+            }
+            
+            // 累积SQL语句
+            current_statement.push_str(line);
+            current_statement.push(' ');
+            
+            // 如果遇到分号，执行该语句
+            if trimmed.ends_with(';') {
+                if current_statement.trim_start().to_uppercase().starts_with("INSERT") {
+                    let stmt = Statement::from_string(DbBackend::Sqlite, current_statement.clone());
+                    match txn.execute(stmt).await {
+                        Ok(result) => {
+                            insert_count += result.rows_affected();
+                            debug!("执行SQL语句成功，影响 {} 行", result.rows_affected());
+                        }
+                        Err(e) => {
+                            error!("执行SQL语句失败: {}", e);
+                            txn.rollback().await
+                                .map_err(|e| AppError::persistence_error(format!("回滚事务失败: {}", e)))?;
+                            return Err(AppError::persistence_error(format!("执行SQL恢复失败: {}", e)));
+                        }
+                    }
+                }
+                current_statement.clear();
+            }
+        }
+        
+        // 提交事务
+        txn.commit().await
+            .map_err(|e| AppError::persistence_error(format!("提交事务失败: {}", e)))?;
+        
+        info!("成功从SQL恢复 {} 个测试PLC通道配置", insert_count);
+        Ok(insert_count as usize)
     }
 
     /// 保存PLC连接配置
