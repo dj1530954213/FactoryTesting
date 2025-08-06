@@ -975,7 +975,7 @@ impl IChannelStateManager for ChannelStateManager {
                     cache.insert(instance.instance_id.clone(), instance.clone());
                 }
 
-                info!("✅ [STATE_MANAGER] 测试实例已保存到数据库和缓存: {}", instance.instance_id);
+                //info!("✅ [STATE_MANAGER] 测试实例已保存到数据库和缓存: {}", instance.instance_id);
             }
         }
 

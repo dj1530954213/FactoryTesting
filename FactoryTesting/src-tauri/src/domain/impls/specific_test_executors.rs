@@ -90,6 +90,95 @@ impl AIHardPointPercentExecutor {
             .map(|addr| addr.clone())
     }
 
+    /// 执行AI点位报警设定值下发
+    /// 向被测PLC下发低低报、低报、高报、高高报的设定值
+    async fn execute_alarm_setpoint_delivery(
+        &self,
+        definition: &ChannelPointDefinition,
+        target_conn_id: &str,
+        target_plc: Arc<dyn IPlcCommunicationService>,
+    ) -> AppResult<()> {
+        info!("📋 开始执行AI报警设定值下发: {}", definition.tag);
+        
+        let mut delivery_count = 0;
+        let mut success_count = 0;
+        
+        // 下发低低报设定值 (SLL)
+        if let (Some(sll_value), Some(sll_address)) = (&definition.sll_set_value, &definition.sll_set_point_communication_address) {
+            delivery_count += 1;
+            info!("📤 下发低低报设定值: [{}] = {:.2}", sll_address, sll_value);
+            
+            match target_plc.write_float32_by_id(target_conn_id, sll_address, *sll_value).await {
+                Ok(_) => {
+                    success_count += 1;
+                    info!("✅ 低低报设定值下发成功");
+                }
+                Err(e) => {
+                    warn!("❌ 低低报设定值下发失败: {}", e);
+                }
+            }
+        }
+        
+        // 下发低报设定值 (SL)
+        if let (Some(sl_value), Some(sl_address)) = (&definition.sl_set_value, &definition.sl_set_point_communication_address) {
+            delivery_count += 1;
+            info!("📤 下发低报设定值: [{}] = {:.2}", sl_address, sl_value);
+            
+            match target_plc.write_float32_by_id(target_conn_id, sl_address, *sl_value).await {
+                Ok(_) => {
+                    success_count += 1;
+                    info!("✅ 低报设定值下发成功");
+                }
+                Err(e) => {
+                    warn!("❌ 低报设定值下发失败: {}", e);
+                }
+            }
+        }
+        
+        // 下发高报设定值 (SH)  
+        if let (Some(sh_value), Some(sh_address)) = (&definition.sh_set_value, &definition.sh_set_point_communication_address) {
+            delivery_count += 1;
+            info!("📤 下发高报设定值: [{}] = {:.2}", sh_address, sh_value);
+            
+            match target_plc.write_float32_by_id(target_conn_id, sh_address, *sh_value).await {
+                Ok(_) => {
+                    success_count += 1;
+                    info!("✅ 高报设定值下发成功");
+                }
+                Err(e) => {
+                    warn!("❌ 高报设定值下发失败: {}", e);
+                }
+            }
+        }
+        
+        // 下发高高报设定值 (SHH)
+        if let (Some(shh_value), Some(shh_address)) = (&definition.shh_set_value, &definition.shh_set_point_communication_address) {
+            delivery_count += 1;
+            info!("📤 下发高高报设定值: [{}] = {:.2}", shh_address, shh_value);
+            
+            match target_plc.write_float32_by_id(target_conn_id, shh_address, *shh_value).await {
+                Ok(_) => {
+                    success_count += 1;
+                    info!("✅ 高高报设定值下发成功");
+                }
+                Err(e) => {
+                    warn!("❌ 高高报设定值下发失败: {}", e);
+                }
+            }
+        }
+        
+        if delivery_count == 0 {
+            info!("ℹ️ 无需下发报警设定值（所有设定值或地址均为空）");
+        } else {
+            info!("📊 报警设定值下发完成: {}/{} 成功", success_count, delivery_count);
+            
+            // 等待设定值生效（短暂延时）
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+        
+        Ok(())
+    }
+
     /// 执行AI点的完整硬点测试流程
     /// 包括多点测试、线性度检查、报警功能验证等
     async fn execute_complete_ai_hardpoint_test(
@@ -229,6 +318,15 @@ impl AIHardPointPercentExecutor {
             log::warn!("⚠️ 测试PLC复位失败: {}", e);
         } else {
             info!("✅ 测试PLC已复位为0%");
+        }
+
+        // 🆕 执行报警设定值下发（新增功能）
+        if let Err(e) = self.execute_alarm_setpoint_delivery(
+            definition,
+            target_conn_id,
+            target_plc.clone(),
+        ).await {
+            warn!("⚠️ 报警设定值下发失败，但不影响硬点测试结果: {}", e);
         }
 
         // 提取百分比测试结果 - 存储实际工程量 (转换f32到f64)
