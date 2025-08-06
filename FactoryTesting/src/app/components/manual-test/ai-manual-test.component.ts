@@ -98,6 +98,17 @@ import { ModuleType } from '../../models';
             <div class="test-item-content">
               <p>请确认HMI界面显示的数值与实际测量值一致</p>
 
+              <!-- 量程信息显示 -->
+              <div class="range-info-section">
+                <div class="range-info-label">
+                  <span class="label-text">量程范围:</span>
+                </div>
+                <div class="range-info-value">
+                  <span class="range-text">{{ getRangeDisplayText() }}</span>
+                  <span class="range-source" *ngIf="!hasUserDefinedRange()" title="使用默认量程">(默认)</span>
+                </div>
+              </div>
+
               <!-- 显示值输入和操作 -->
               <div class="display-value-section">
                 <div class="value-input-group">
@@ -724,15 +735,53 @@ export class AiManualTestComponent implements OnInit, OnDestroy {
     return this.manualTestService.areAllSubItemsCompleted(this.testConfig.applicableSubItems);
   }
 
+  // ==================== 量程处理方法 ====================
+
+  /**
+   * 获取量程低限值（自动填充0-100）
+   */
+  getRangeLowLimit(): number {
+    if (this.definition?.range_low_limit !== undefined && this.definition?.range_low_limit !== null) {
+      return this.definition.range_low_limit;
+    }
+    return 0; // 默认值
+  }
+
+  /**
+   * 获取量程高限值（自动填充0-100）
+   */
+  getRangeHighLimit(): number {
+    if (this.definition?.range_high_limit !== undefined && this.definition?.range_high_limit !== null) {
+      return this.definition.range_high_limit;
+    }
+    return 100; // 默认值
+  }
+
+  /**
+   * 获取格式化的量程显示文本
+   */
+  getRangeDisplayText(): string {
+    const low = this.getRangeLowLimit();
+    const high = this.getRangeHighLimit();
+    return `${low} ~ ${high}`;
+  }
+
+  /**
+   * 检查量程数据是否来自用户配置（非默认值）
+   */
+  hasUserDefinedRange(): boolean {
+    return (this.definition?.range_low_limit !== undefined && this.definition?.range_low_limit !== null) ||
+           (this.definition?.range_high_limit !== undefined && this.definition?.range_high_limit !== null);
+  }
+
   // ==================== 新增的AI手动测试方法 ====================
 
   /**
    * 获取显示值占位符
    */
   getDisplayValuePlaceholder(): string {
-    if (!this.definition) return '请输入测试值';
-    const low = this.definition.range_low_limit || 0;
-    const high = this.definition.range_high_limit || 100;
+    const low = this.getRangeLowLimit();
+    const high = this.getRangeHighLimit();
     return `${low} - ${high}`;
   }
 

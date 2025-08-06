@@ -441,10 +441,72 @@
   .test-actions button {
     width: 100%;
   }
+
+  /* 响应式设计 - 量程信息 */
+  .range-info-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .range-info-label {
+    margin-right: 0;
+    margin-bottom: 2px;
+  }
+
+  .range-text {
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 480px) {
   .capture-buttons {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* 量程信息显示样式 */
+.range-info-section {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-radius: 4px;
+  border: 1px solid #d0e7ff;
+  margin-bottom: 12px;
+}
+
+.range-info-label {
+  margin-right: 12px;
+}
+
+.range-info-label .label-text {
+  font-size: 12px;
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.range-info-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.range-text {
+  font-size: 14px;
+  color: #262626;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.5px;
+}
+
+.range-source {
+  font-size: 10px;
+  color: #8c8c8c;
+  font-style: italic;
+  padding: 2px 6px;
+  background: #fafafa;
+  border-radius: 3px;
+  border: 1px solid #f0f0f0;
 }
