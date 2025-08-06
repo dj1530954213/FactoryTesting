@@ -101,6 +101,14 @@ dist.zip                        # 分发包
 # ========
 docs/                           # 生成的文档 (可选择性忽略)
 
+# 数据库文件
+# ==========
+*.sqlite                        # SQLite 数据库文件
+*.sqlite3                       # SQLite3 数据库文件
+*.db                           # 通用数据库文件
+FactoryTesting/src-tauri/data/factory_testing_data.sqlite  # 应用数据库文件
+FactoryTesting/src-tauri/data/*.sqlite                     # 所有数据目录下的SQLite文件
+
 # 其他常见忽略项
 # ==============
 .eslintcache                    # ESLint 缓存
