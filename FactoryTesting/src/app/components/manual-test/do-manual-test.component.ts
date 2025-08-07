@@ -72,6 +72,7 @@ import {
                   nz-button
                   [nzType]="getButtonType(state, i)"
                   [class.completed-state]="isStateCompleted(state, i)"
+                  [ngStyle]="getButtonStyle(state, i)"
                   [disabled]="isStateButtonDisabled(state, i) || isStateCollectionCompleted()"
                   [nzLoading]="isCapturing && currentCapturingState === state"
                   (click)="captureDigitalState(state, i)"
@@ -161,50 +162,85 @@ import {
   `,
   styleUrls: ['./ai-manual-test.component.css'],
   styles: [`
-    /* DO组件特定样式 - 优化按钮颜色逻辑 */
+    /* DO组件特定样式 - 使用最高优先级强制覆盖ng-zorro */
     
-    /* 已完成状态按钮：仅当nzType为primary时显示绿色 */
-    button[nz-button][nzType="primary"].completed-state {
+    /* 已完成状态按钮：仅当nzType为primary且有completed-state类时显示绿色 */
+    .do-manual-test .capture-buttons button[nz-button][nzType="primary"].completed-state {
       background-color: #52c41a !important;
       border-color: #52c41a !important;
       color: white !important;
     }
     
-    button[nz-button][nzType="primary"].completed-state:hover {
+    .do-manual-test .capture-buttons button[nz-button][nzType="primary"].completed-state:hover {
       background-color: #73d13d !important;
       border-color: #73d13d !important;
     }
     
-    button[nz-button][nzType="primary"].completed-state:focus {
-      background-color: #52c41a !important;
-      border-color: #73d13d !important;
-      box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.2) !important;
-    }
-    
-    /* 等待状态按钮样式：nzType="text" 时确保显示为灰色 */
-    button[nz-button][nzType="text"]:not(:disabled) {
-      color: #bfbfbf !important;
-      background-color: #f5f5f5 !important;
-      border-color: #d9d9d9 !important;
-    }
-    
-    button[nz-button][nzType="text"]:disabled {
-      color: #bfbfbf !important;
-      background-color: #f5f5f5 !important;
-      border-color: #d9d9d9 !important;
-    }
-    
-    /* 当前可点击按钮样式：nzType="default" 时确保显示为蓝色 */
-    button[nz-button][nzType="default"]:not(.completed-state) {
+    /* 当前可点击按钮样式：nzType="default" 时显示为蓝色 */
+    .do-manual-test .capture-buttons button[nz-button][nzType="default"]:not(.completed-state) {
       color: #1890ff !important;
       border-color: #1890ff !important;
       background-color: #fff !important;
     }
     
-    button[nz-button][nzType="default"]:not(.completed-state):hover {
+    .do-manual-test .capture-buttons button[nz-button][nzType="default"]:not(.completed-state):hover {
       color: #40a9ff !important;
       border-color: #40a9ff !important;
       background-color: #fff !important;
+    }
+    
+    /* 等待状态按钮样式：终极覆盖方案 - 多重选择器确保优先级 */
+    .do-manual-test .capture-buttons button[nz-button][nzType="text"],
+    .do-manual-test .capture-buttons button.ant-btn-text,
+    .do-manual-test .capture-buttons button[nz-button].ant-btn-text {
+      color: white !important;
+      background-color: #8c8c8c !important;
+      border: 1px solid #8c8c8c !important;
+    }
+    
+    .do-manual-test .capture-buttons button[nz-button][nzType="text"]:hover,
+    .do-manual-test .capture-buttons button.ant-btn-text:hover,
+    .do-manual-test .capture-buttons button[nz-button].ant-btn-text:hover {
+      color: white !important;
+      background-color: #999999 !important;
+      border-color: #999999 !important;
+    }
+    
+    .do-manual-test .capture-buttons button[nz-button][nzType="text"]:disabled,
+    .do-manual-test .capture-buttons button.ant-btn-text:disabled,
+    .do-manual-test .capture-buttons button[nz-button].ant-btn-text:disabled {
+      color: white !important;
+      background-color: #8c8c8c !important;
+      border-color: #8c8c8c !important;
+      opacity: 0.7 !important;
+    }
+    
+    /* 修复按钮内容布局问题 */
+    .do-manual-test .capture-buttons button {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      min-height: 60px !important;
+      min-width: 140px !important;
+      width: 140px !important;
+      padding: 8px 12px !important;
+      white-space: normal !important;
+      word-break: break-word !important;
+      margin: 0 8px 8px 0 !important;
+    }
+    
+    .do-manual-test .capture-buttons .button-text {
+      font-weight: 500;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+    
+    .do-manual-test .capture-buttons .state-text {
+      font-size: 11px;
+      opacity: 0.8;
+      text-align: center;
+      line-height: 1.2;
     }
   `]
 })
@@ -453,6 +489,66 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
     
     // 等待的步骤显示为text（灰色）
     return 'text';
+  }
+
+  /**
+   * 获取按钮样式 - 使用内联样式强制覆盖
+   */
+  getButtonStyle(state: string, index: number): any {
+    const stepNumber = this.getStepNumberByStateAndIndex(state, index);
+    
+    // 已完成的步骤：绿色背景，白色文字
+    if (this.isStateCompleted(state, index)) {
+      return {
+        'background-color': '#52c41a !important',
+        'border-color': '#52c41a !important',
+        'color': 'white !important',
+        'display': 'flex',
+        'flex-direction': 'column',
+        'align-items': 'center',
+        'justify-content': 'center',
+        'min-height': '60px',
+        'min-width': '140px',
+        'width': '140px',
+        'padding': '8px 12px',
+        'margin': '0 8px 8px 0'
+      };
+    }
+    
+    // 当前可点击的步骤：蓝色边框，白色背景
+    const nextStep = this.getNextRequiredStep();
+    if (stepNumber === nextStep) {
+      return {
+        'color': '#1890ff !important',
+        'border-color': '#1890ff !important',
+        'background-color': '#fff !important',
+        'display': 'flex',
+        'flex-direction': 'column',
+        'align-items': 'center',
+        'justify-content': 'center',
+        'min-height': '60px',
+        'min-width': '140px',
+        'width': '140px',
+        'padding': '8px 12px',
+        'margin': '0 8px 8px 0'
+      };
+    }
+    
+    // 等待的步骤：灰色背景，白色文字
+    return {
+      'color': 'white !important',
+      'background-color': '#8c8c8c !important',
+      'border-color': '#8c8c8c !important',
+      'display': 'flex',
+      'flex-direction': 'column',
+      'align-items': 'center',
+      'justify-content': 'center',
+      'min-height': '60px',
+      'min-width': '140px',
+      'width': '140px',
+      'padding': '8px 12px',
+      'margin': '0 8px 8px 0'
+    };
   }
   
   /**
