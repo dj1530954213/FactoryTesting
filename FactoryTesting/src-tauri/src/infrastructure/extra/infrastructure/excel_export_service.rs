@@ -161,6 +161,53 @@ impl ExcelExportService {
         Ok(output_file_path.to_string_lossy().to_string())
     }
 
+    /// 格式化测试状态，区分跳过和未测试
+    fn format_test_status(&self, inst: &ChannelTestInstance, sub_item: &SubTestItem, outcomes: &[crate::models::structs::RawTestOutcome], default_result: &str) -> (String, bool) {
+        // 首先检查outcomes中是否有该子项的具体结果
+        let has_outcome = outcomes.iter().any(|oc| oc.sub_test_item == *sub_item);
+        
+        if has_outcome {
+            // 有具体测试结果，返回原结果
+            return (default_result.to_string(), false);
+        }
+        
+        // 没有具体测试结果时，检查sub_test_results中的状态
+        if let Some(sub_result) = inst.sub_test_results.get(sub_item) {
+            match sub_result.status {
+                crate::models::enums::SubTestStatus::Skipped => {
+                    // 判断跳过原因
+                    if let Some(details) = &sub_result.details {
+                        if details.contains("预留点位") {
+                            ("无需测试".to_string(), false)
+                        } else {
+                            ("无需测试".to_string(), false)
+                        }
+                    } else {
+                        ("无需测试".to_string(), false)
+                    }
+                }
+                crate::models::enums::SubTestStatus::NotTested => ("未测试".to_string(), true),
+                crate::models::enums::SubTestStatus::Passed => ("PASS".to_string(), false),
+                crate::models::enums::SubTestStatus::Failed => ("FAIL".to_string(), false),
+                _ => (default_result.to_string(), false),
+            }
+        } else {
+            // 没有sub_test_result条目，认为是未测试
+            ("未测试".to_string(), true)
+        }
+    }
+
+    /// 格式化整体测试状态
+    fn format_overall_status(&self, inst: &ChannelTestInstance) -> (&str, bool) {
+        match inst.overall_status {
+            crate::models::enums::OverallTestStatus::TestCompletedPassed => ("PASS", false),
+            crate::models::enums::OverallTestStatus::TestCompletedFailed => ("FAIL", false),
+            crate::models::enums::OverallTestStatus::Skipped => ("无需测试", false),
+            crate::models::enums::OverallTestStatus::NotTested => ("未测试", true),
+            _ => ("未测试", true),
+        }
+    }
+
     /// 创建模拟量测试结果工作表（AI/AO）
     async fn create_analog_test_worksheet(
         &self,
@@ -174,12 +221,14 @@ impl ExcelExportService {
         // 4. 样式
         let header_fmt = Format::new().set_bold().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
         let default_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+        let not_tested_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin)
+            .set_background_color(Color::Yellow);
 
-        // 5. 表头 - 模拟量专用字段
+        // 5. 表头 - 模拟量专用字段（增加显示值核对列）
         let headers = vec![
             "测试ID", "测试批次", "变量名称", "点表类型", "数据类型", "测试PLC通道位号", "被测PLC通道位号", 
             "行程最小值", "行程最大值", "0%对比值", "25%对比值", "50%对比值", "75%对比值", "100%对比值", 
-            "低低报反馈状态", "低报反馈状态", "高报反馈状态", "高高报反馈状态", "维护功能检测", 
+            "低低报反馈状态", "低报反馈状态", "高报反馈状态", "高高报反馈状态", "维护功能检测", "显示值核对",
             "开始测试时间", "最终测试时间", "测试时长", "通道硬点测试结果", "测试结果"
         ];
         for (col, title) in headers.iter().enumerate() {
@@ -215,9 +264,10 @@ impl ExcelExportService {
 
             // 百分比对比值
             let mut pct_vals = vec!["-".to_string(); 5];
-            // 硬点测试结果 & 报警反馈等
+            // 硬点测试结果 & 报警反馈等（初始化为默认值）
             let mut hardpoint_result = "-".to_string();
             let mut maint_result = "-".to_string();
+            let mut display_check_result = "-".to_string(); // 新增：显示值核对
             let mut alarm_vals = vec!["-".to_string(); 4];
 
             for oc in &outcomes {
@@ -229,6 +279,10 @@ impl ExcelExportService {
                     // 维护功能检测可能映射为 Maintenance 或 MaintenanceFunction
                     SubTestItem::Maintenance | SubTestItem::MaintenanceFunction => {
                         maint_result = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    // 新增：显示值核对处理
+                    SubTestItem::StateDisplay => {
+                        display_check_result = if oc.success { "PASS".into() } else { "FAIL".into() };
                     }
                     // 百分比结果可能记录在单独的 OutputX% 或 TrendCheck 等子项中，统一提取
                     _ => {}
@@ -259,17 +313,48 @@ impl ExcelExportService {
                 }
             }
 
-            // 如果维护功能检测仍为 "-"，尝试从实例的 sub_test_results 中获取
+            // 应用新的状态格式化逻辑
+            // 存储哪些项需要黄色背景
+            let mut needs_yellow_bg = vec![false; headers.len()];
+            
+            // 处理维护功能检测
             if maint_result == "-" {
-                if let Some(res) = inst.sub_test_results.get(&SubTestItem::Maintenance).or_else(|| inst.sub_test_results.get(&SubTestItem::MaintenanceFunction)) {
-                    use crate::models::enums::SubTestStatus;
-                    maint_result = match res.status {
-                        SubTestStatus::Passed => "PASS".into(),
-                        SubTestStatus::Failed => "FAIL".into(),
-                        _ => "-".into(),
-                    };
+                let (status, yellow) = self.format_test_status(&inst, &SubTestItem::Maintenance, &outcomes, "-");
+                if status == "-" {
+                    let (status2, yellow2) = self.format_test_status(&inst, &SubTestItem::MaintenanceFunction, &outcomes, "-");
+                    maint_result = status2.to_string();
+                    needs_yellow_bg[18] = yellow2; // 维护功能检测列位置
+                } else {
+                    maint_result = status.to_string();
+                    needs_yellow_bg[18] = yellow; // 维护功能检测列位置
                 }
             }
+            
+            // 处理显示值核对
+            let (display_status, display_yellow) = self.format_test_status(&inst, &SubTestItem::StateDisplay, &outcomes, "-");
+            display_check_result = display_status.to_string();
+            needs_yellow_bg[19] = display_yellow; // 显示值核对列位置
+            
+            // 处理报警测试结果
+            for (i, alarm_item) in [SubTestItem::LowLowAlarm, SubTestItem::LowAlarm, 
+                                   SubTestItem::HighAlarm, SubTestItem::HighHighAlarm].iter().enumerate() {
+                if alarm_vals[i] == "-" {
+                    let (status, yellow) = self.format_test_status(&inst, alarm_item, &outcomes, "-");
+                    alarm_vals[i] = status.to_string();
+                    needs_yellow_bg[14 + i] = yellow; // 报警列位置：14-17
+                }
+            }
+            
+            // 处理硬点测试结果
+            if hardpoint_result == "-" {
+                let (status, yellow) = self.format_test_status(&inst, &SubTestItem::HardPoint, &outcomes, "-");
+                hardpoint_result = status.to_string();
+                needs_yellow_bg[23] = yellow; // 硬点测试结果列位置
+            }
+            
+            // 处理百分比值不需要状态格式化，因为它们是数值而非状态
+            
+
 
             // 开始/结束/时长
             let start_time_utc = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
@@ -284,14 +369,10 @@ impl ExcelExportService {
             let duration_fmt = format!("{}小时{}分钟", hours, minutes);
 
             // 整体测试结果
-            let overall = match inst.overall_status {
-                crate::models::enums::OverallTestStatus::TestCompletedPassed => "PASS",
-                crate::models::enums::OverallTestStatus::TestCompletedFailed => "FAIL",
-                crate::models::enums::OverallTestStatus::Skipped => "-",
-                _ => "-",
-            };
+            let (overall_status, overall_yellow) = self.format_overall_status(&inst);
+            needs_yellow_bg[24] = overall_yellow; // 最终测试结果列位置
 
-            // 写入单元格
+            // 写入单元格 - 注意增加了显示值核对列
             let values: Vec<String> = vec![
                 test_id.to_string(),
                 inst.test_batch_name.clone(),
@@ -306,25 +387,25 @@ impl ExcelExportService {
             .into_iter()
             .chain(pct_vals.into_iter())
             .chain(alarm_vals.into_iter())
-            .chain(vec![maint_result])
+            .chain(vec![maint_result, display_check_result]) // 维护功能检测 + 显示值核对
             .chain(vec![
                 time_utils::format_bj(start_time, "%Y-%m-%d %H:%M:%S"),
                 time_utils::format_bj(end_time, "%Y-%m-%d %H:%M:%S"),
                 duration_fmt,
                 hardpoint_result,
-                overall.into(),
+                overall_status.to_string(),
             ])
             .collect();
 
             for (col, val) in values.iter().enumerate() {
-                sheet.write_string_with_format(row, col as u16, val, &default_fmt)?;
+                let fmt = if needs_yellow_bg.get(col).copied().unwrap_or(false) {
+                    &not_tested_fmt
+                } else {
+                    &default_fmt
+                };
+                sheet.write_string_with_format(row, col as u16, val, fmt)?;
             }
             row += 1;
-        }
-
-        // 自动列宽
-        for col_index in 0..headers.len() {
-            sheet.set_column_width(col_index as u16, 18)?;
         }
 
         // 自动列宽
@@ -348,6 +429,8 @@ impl ExcelExportService {
         // 样式
         let header_fmt = Format::new().set_bold().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
         let default_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+        let not_tested_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin)
+            .set_background_color(Color::Yellow);
 
         // 表头 - 数字量专用字段
         let headers = vec![
@@ -387,6 +470,9 @@ impl ExcelExportService {
             let mut digital_steps = vec!["-".to_string(); 3]; // 3个步骤
             let mut signal_test_result = "-".to_string();
             let mut hardpoint_result = "-".to_string();
+            
+            // 存储哪些项需要黄色背景
+            let mut needs_yellow_bg = vec![false; headers.len()];
 
             // 解析数字测试步骤 - 从digital_test_steps字段获取
             if let Some(steps) = &inst.digital_test_steps {
@@ -413,6 +499,22 @@ impl ExcelExportService {
                     _ => {}
                 }
             }
+            
+            // 应用新的状态格式化逻辑
+            
+            // 处理信号下发测试
+            if signal_test_result == "-" {
+                let (status, yellow) = self.format_test_status(&inst, &SubTestItem::StateDisplay, &outcomes, "-");
+                signal_test_result = status.to_string();
+                needs_yellow_bg[10] = yellow; // 信号下发测试列位置
+            }
+            
+            // 处理硬点测试结果
+            if hardpoint_result == "-" {
+                let (status, yellow) = self.format_test_status(&inst, &SubTestItem::HardPoint, &outcomes, "-");
+                hardpoint_result = status.to_string();
+                needs_yellow_bg[14] = yellow; // 硬点测试结果列位置
+            }
 
             // 开始/结束/时长
             let start_time_utc = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
@@ -426,12 +528,8 @@ impl ExcelExportService {
             let duration_fmt = format!("{}小时{}分钟", hours, minutes);
 
             // 整体测试结果
-            let overall = match inst.overall_status {
-                crate::models::enums::OverallTestStatus::TestCompletedPassed => "PASS",
-                crate::models::enums::OverallTestStatus::TestCompletedFailed => "FAIL",
-                crate::models::enums::OverallTestStatus::Skipped => "-",
-                _ => "-",
-            };
+            let (overall_status, overall_yellow) = self.format_overall_status(&inst);
+            needs_yellow_bg[15] = overall_yellow; // 最终测试结果列位置
 
             // 写入单元格
             let values: Vec<String> = vec![
@@ -451,12 +549,17 @@ impl ExcelExportService {
                 time_utils::format_bj(end_time, "%Y-%m-%d %H:%M:%S"),
                 duration_fmt,
                 hardpoint_result,
-                overall.into(),
+                overall_status.to_string(),
             ])
             .collect();
 
             for (col, val) in values.iter().enumerate() {
-                sheet.write_string_with_format(row, col as u16, val, &default_fmt)?;
+                let fmt = if needs_yellow_bg.get(col).copied().unwrap_or(false) {
+                    &not_tested_fmt
+                } else {
+                    &default_fmt
+                };
+                sheet.write_string_with_format(row, col as u16, val, fmt)?;
             }
             row += 1;
         }
