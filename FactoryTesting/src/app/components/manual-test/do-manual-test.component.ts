@@ -161,29 +161,50 @@ import {
   `,
   styleUrls: ['./ai-manual-test.component.css'],
   styles: [`
-    /* DO组件特定样式 - 绿色的已完成按钮 */
-    button[nz-button].completed-state {
+    /* DO组件特定样式 - 优化按钮颜色逻辑 */
+    
+    /* 已完成状态按钮：仅当nzType为primary时显示绿色 */
+    button[nz-button][nzType="primary"].completed-state {
       background-color: #52c41a !important;
       border-color: #52c41a !important;
       color: white !important;
     }
     
-    button[nz-button].completed-state:hover {
+    button[nz-button][nzType="primary"].completed-state:hover {
       background-color: #73d13d !important;
       border-color: #73d13d !important;
     }
     
-    button[nz-button].completed-state:focus {
+    button[nz-button][nzType="primary"].completed-state:focus {
       background-color: #52c41a !important;
       border-color: #73d13d !important;
       box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.2) !important;
     }
     
-    /* 等待状态按钮样式调整 */
+    /* 等待状态按钮样式：nzType="text" 时确保显示为灰色 */
+    button[nz-button][nzType="text"]:not(:disabled) {
+      color: #bfbfbf !important;
+      background-color: #f5f5f5 !important;
+      border-color: #d9d9d9 !important;
+    }
+    
     button[nz-button][nzType="text"]:disabled {
       color: #bfbfbf !important;
       background-color: #f5f5f5 !important;
       border-color: #d9d9d9 !important;
+    }
+    
+    /* 当前可点击按钮样式：nzType="default" 时确保显示为蓝色 */
+    button[nz-button][nzType="default"]:not(.completed-state) {
+      color: #1890ff !important;
+      border-color: #1890ff !important;
+      background-color: #fff !important;
+    }
+    
+    button[nz-button][nzType="default"]:not(.completed-state):hover {
+      color: #40a9ff !important;
+      border-color: #40a9ff !important;
+      background-color: #fff !important;
     }
   `]
 })
@@ -237,12 +258,20 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
     // 清空现有状态结果，避免残留数据影响
     this.stateResults = {};
     
-    if (!this.instance?.digital_test_steps_json) return;
+    // 🔧 修复：直接从 digital_test_steps 字段读取数据，而不是从 digital_test_steps_json
+    // 因为前端接收到的对象已经是从数据库转换后的结构体
+    if (!this.instance?.digital_test_steps || this.instance.digital_test_steps.length === 0) {
+      console.log('🔍 [DO_STATE_RESTORE] 没有找到数字测试步骤数据');
+      return;
+    }
+
+    console.log('🔍 [DO_STATE_RESTORE] 开始恢复状态，找到', this.instance.digital_test_steps.length, '个步骤');
 
     try {
-      const digitalSteps = JSON.parse(this.instance.digital_test_steps_json);
-      
-      digitalSteps.forEach((step: any) => {
+      // 直接使用 digital_test_steps 字段
+      this.instance.digital_test_steps.forEach((step: any, index: number) => {
+        console.log(`🔍 [DO_STATE_RESTORE] 处理步骤${index + 1}:`, step);
+        
         // 更严格的验证：确保有步骤号且有实际采集的数据
         if (step.step_number && step.actual_reading !== undefined && step.actual_reading !== null) {
           const resultKey = `step_${step.step_number}`;
@@ -251,13 +280,18 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
             timestamp: new Date(step.timestamp || Date.now()),
             stepNumber: step.step_number
           };
+          console.log(`✅ [DO_STATE_RESTORE] 恢复了步骤${step.step_number}的状态:`, step.actual_reading);
+        } else {
+          console.log(`⚠️ [DO_STATE_RESTORE] 跳过无效步骤${index + 1}:`, step);
         }
       });
 
+      console.log('🔍 [DO_STATE_RESTORE] 最终状态结果:', this.stateResults);
+      
       // 触发变更检测，确保UI立即刷新
       this.cdr.markForCheck();
     } catch (error) {
-      console.warn('恢复DO数字状态失败:', error);
+      console.warn('❌ [DO_STATE_RESTORE] 恢复DO数字状态失败:', error);
       // 出错时清空状态结果
       this.stateResults = {};
     }
