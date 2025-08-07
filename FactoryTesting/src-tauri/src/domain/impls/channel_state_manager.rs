@@ -526,10 +526,27 @@ impl IChannelStateManager for ChannelStateManager {
                 trace!("🔍 [APPLY_OUTCOME] 已存储硬点读数数据");
             }
 
-            // 存储数字量测试步骤到实例中（DI/DO点位）
-            if let Some(digital_steps) = &outcome.digital_steps {
-                instance.digital_test_steps = Some(digital_steps.clone());
-                trace!("🔍 [APPLY_OUTCOME] 已存储数字量测试步骤数据");
+            // 存储数字量测试步骤到实例中（DI/DO点位）- 累积添加而不是覆盖
+            if let Some(new_digital_steps) = &outcome.digital_steps {
+                let mut existing_steps = instance.digital_test_steps.clone().unwrap_or_default();
+                
+                // 合并新的步骤数据：如果步骤号相同则更新，否则添加
+                for new_step in new_digital_steps {
+                    // 查找是否已存在相同步骤号的数据
+                    if let Some(existing_step) = existing_steps.iter_mut().find(|s| s.step_number == new_step.step_number) {
+                        // 更新现有步骤
+                        *existing_step = new_step.clone();
+                    } else {
+                        // 添加新步骤
+                        existing_steps.push(new_step.clone());
+                    }
+                }
+                
+                // 按步骤号排序确保顺序正确
+                existing_steps.sort_by_key(|s| s.step_number);
+                
+                instance.digital_test_steps = Some(existing_steps);
+                trace!("🔍 [APPLY_OUTCOME] 已累积存储数字量测试步骤数据，共{}步", instance.digital_test_steps.as_ref().unwrap().len());
             }
         }
 

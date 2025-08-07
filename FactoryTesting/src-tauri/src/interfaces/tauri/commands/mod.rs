@@ -94,7 +94,8 @@ pub use manual_test_commands::{
     get_manual_test_status_cmd,                // 获取手动测试状态
     start_plc_monitoring_cmd,                  // 启动PLC监控
     stop_plc_monitoring_cmd,                   // 停止PLC监控
-    capture_ao_point_cmd                       // 捕获AO点位值
+    capture_ao_point_cmd,                      // 捕获AO点位值
+    capture_do_state_cmd                       // 捕获DO状态值
 };
 
 // === 通道量程设置命令重导出 ===

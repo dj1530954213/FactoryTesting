@@ -29,10 +29,10 @@ pub struct ExcelExportService {
 }
 
 impl ExcelExportService {
-    /// 导出测试结果表（根据当前会话批次过滤）
+    /// 导出测试结果表（根据当前会话批次过滤）- 合并为一个包含3个工作表的工作簿
     /// `target_path` 可以是目录或完整文件路径；为空时写入临时目录。
     /// `session_batch_ids` 当前会话的批次ID集合，用于过滤数据
-    /// 返回生成的文件完整路径
+    /// 返回生成文件的完整路径
     pub async fn export_test_results(&self, target_path: Option<PathBuf>, session_batch_ids: Option<std::collections::HashSet<String>>) -> AppResult<String> {
         // 1. 加载所需数据
         let all_definitions = self.persistence_service.load_all_channel_definitions().await?;
@@ -90,25 +90,92 @@ impl ExcelExportService {
             }
         }
 
-        // 2. 准备输出文件路径
+        // 4. 准备输出文件路径和名称
         let station_name = definitions[0].station_name.clone();
         let timestamp = Local::now().format("%Y%m%d_%H%M").to_string();
-        let filename = format!("{}_{}_测试结果.xlsx", station_name, timestamp);
-        let file_path: PathBuf = if let Some(p) = target_path.clone() {
-            let is_dir_path = p.is_dir() || p.extension().is_none();
-            if is_dir_path { p.join(&filename) } else { p }
-        } else { std::env::temp_dir().join(&filename) };
-        if let Some(parent) = file_path.parent() { std::fs::create_dir_all(parent).ok(); }
+        
+        // 确定基础目录和文件名
+        let (base_dir, filename): (PathBuf, String) = if let Some(p) = target_path.clone() {
+            if p.is_dir() || p.extension().is_none() {
+                // 是目录或无扩展名，使用默认文件名
+                (p, format!("{}_{}_综合测试结果.xlsx", station_name, timestamp))
+            } else {
+                // 是完整文件路径
+                let parent = p.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+                let fname = p.file_name().unwrap().to_string_lossy().to_string();
+                (parent, fname)
+            }
+        } else {
+            (std::env::temp_dir(), format!("{}_{}_综合测试结果.xlsx", station_name, timestamp))
+        };
 
-        // 3. 创建工作簿和工作表
+        // 创建输出目录
+        std::fs::create_dir_all(&base_dir).ok();
+        let output_file_path = base_dir.join(&filename);
+
+        // 5. 创建一个workbook包含三个工作表
         let mut workbook = Workbook::new();
-        let mut sheet = workbook.add_worksheet();
+
+        // 6. 按模块类型分类数据
+        let mut analog_instances = Vec::new();
+        let mut digital_instances = Vec::new();
+        
+        for instance in &instances {
+            if let Some(def) = def_map.get(&instance.definition_id) {
+                match def.module_type {
+                    ModuleType::AI | ModuleType::AINone | ModuleType::AO | ModuleType::AONone => {
+                        analog_instances.push(instance);
+                    }
+                    ModuleType::DI | ModuleType::DINone | ModuleType::DO | ModuleType::DONone => {
+                        digital_instances.push(instance);
+                    }
+                    _ => {
+                        // 其他类型默认归类为模拟量
+                        analog_instances.push(instance);
+                    }
+                }
+            }
+        }
+
+        // 7. 创建模拟量测试结果工作表
+        if !analog_instances.is_empty() {
+            self.create_analog_test_worksheet(&mut workbook, &analog_instances, &def_map, &outcome_cache).await?;
+        }
+
+        // 8. 创建数字量测试结果工作表
+        if !digital_instances.is_empty() {
+            self.create_digital_test_worksheet(&mut workbook, &digital_instances, &def_map, &outcome_cache).await?;
+        }
+
+        // 9. 创建错误汇总工作表
+        self.create_error_summary_worksheet(&mut workbook, &instances, &def_map).await?;
+
+        // 10. 保存工作簿
+        workbook.save(&output_file_path).map_err(|e| AppError::IoError { 
+            message: format!("无法保存Excel文件到 {:?}: {}", output_file_path, e),
+            kind: "WriteError".to_string()
+        })?;
+
+        log::info!("📤 [EXPORT] 测试结果已导出到综合工作簿: {}", output_file_path.to_string_lossy());
+        
+        Ok(output_file_path.to_string_lossy().to_string())
+    }
+
+    /// 创建模拟量测试结果工作表（AI/AO）
+    async fn create_analog_test_worksheet(
+        &self,
+        workbook: &mut Workbook,
+        instances: &[&ChannelTestInstance],
+        def_map: &std::collections::HashMap<String, &ChannelPointDefinition>,
+        outcome_cache: &std::collections::HashMap<String, Vec<crate::models::structs::RawTestOutcome>>,
+    ) -> AppResult<()> {
+        let mut sheet = workbook.add_worksheet().set_name("模拟量测试结果")?;
 
         // 4. 样式
         let header_fmt = Format::new().set_bold().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
         let default_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
 
-        // 5. 表头
+        // 5. 表头 - 模拟量专用字段
         let headers = vec![
             "测试ID", "测试批次", "变量名称", "点表类型", "数据类型", "测试PLC通道位号", "被测PLC通道位号", 
             "行程最小值", "行程最大值", "0%对比值", "25%对比值", "50%对比值", "75%对比值", "100%对比值", 
@@ -122,7 +189,7 @@ impl ExcelExportService {
         // 6. 写数据行
         let mut row = 1u32;
         // 按测试ID(定义中的 sequence_number) 升序排序
-        let mut instance_refs: Vec<&ChannelTestInstance> = instances.iter().collect();
+        let mut instance_refs: Vec<&ChannelTestInstance> = instances.iter().copied().collect();
         instance_refs.sort_by_key(|inst| {
             def_map
                 .get(&inst.definition_id)
@@ -214,7 +281,6 @@ impl ExcelExportService {
             let total_minutes = duration.num_minutes();
             let hours = total_minutes / 60;
             let minutes = total_minutes % 60;
-            let duration_ms = duration.num_milliseconds(); // 保留原毫秒以防后续使用
             let duration_fmt = format!("{}小时{}分钟", hours, minutes);
 
             // 整体测试结果
@@ -261,13 +327,163 @@ impl ExcelExportService {
             sheet.set_column_width(col_index as u16, 18)?;
         }
 
-        // 创建错误信息汇总工作表
-        self.create_error_summary_sheet(&mut workbook, &instances, &def_map).await?;
+        // 自动列宽
+        for col_index in 0..headers.len() {
+            sheet.set_column_width(col_index as u16, 18)?;
+        }
 
-        // 保存
-        workbook.save(&file_path)?;
-        log::info!("📤 [EXPORT] 测试结果 Excel 已保存到 {}", file_path.to_string_lossy());
-        Ok(file_path.to_string_lossy().to_string())
+        Ok(())
+    }
+
+    /// 创建数字量测试结果工作表（DI/DO）
+    async fn create_digital_test_worksheet(
+        &self,
+        workbook: &mut Workbook,
+        instances: &[&ChannelTestInstance],
+        def_map: &std::collections::HashMap<String, &ChannelPointDefinition>,
+        outcome_cache: &std::collections::HashMap<String, Vec<crate::models::structs::RawTestOutcome>>,
+    ) -> AppResult<()> {
+        let mut sheet = workbook.add_worksheet().set_name("数字量测试结果")?;
+
+        // 样式
+        let header_fmt = Format::new().set_bold().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+        let default_fmt = Format::new().set_align(FormatAlign::Center).set_border(FormatBorder::Thin);
+
+        // 表头 - 数字量专用字段
+        let headers = vec![
+            "测试ID", "测试批次", "变量名称", "点表类型", "数据类型", "测试PLC通道位号", "被测PLC通道位号", 
+            "第1步(低电平)", "第2步(高电平)", "第3步(低电平)", "信号下发测试", 
+            "开始测试时间", "最终测试时间", "测试时长", "通道硬点测试结果", "测试结果"
+        ];
+        for (col, title) in headers.iter().enumerate() {
+            sheet.write_with_format(0, col as u16, *title, &header_fmt)?;
+        }
+
+        // 写数据行
+        let mut row = 1u32;
+        let mut instance_refs: Vec<&ChannelTestInstance> = instances.iter().copied().collect();
+        instance_refs.sort_by_key(|inst| {
+            def_map
+                .get(&inst.definition_id)
+                .and_then(|d| d.sequence_number)
+                .unwrap_or(u32::MAX)
+        });
+
+        for (idx, inst) in instance_refs.iter().enumerate() {
+            let def = match def_map.get(&inst.definition_id) {
+                Some(d) => *d,
+                None => continue,
+            };
+            let outcomes = outcome_cache.get(&inst.instance_id).cloned().unwrap_or_default();
+
+            // 提取通用列
+            let test_id = def.sequence_number.unwrap_or((idx + 1) as u32);
+            let point_type = format!("{:?}", def.module_type);
+            let data_type = format!("{:?}", def.data_type);
+            let test_plc_tag = inst.test_plc_channel_tag.clone().unwrap_or_else(|| "-".into());
+            let measured_tag = def.tag.clone();
+
+            // 数字状态步骤结果
+            let mut digital_steps = vec!["-".to_string(); 3]; // 3个步骤
+            let mut signal_test_result = "-".to_string();
+            let mut hardpoint_result = "-".to_string();
+
+            // 解析数字测试步骤 - 从digital_test_steps字段获取
+            if let Some(steps) = &inst.digital_test_steps {
+                // 从digital_test_steps字段获取DO测试步骤数据
+                for step in steps {
+                    let step_index = (step.step_number - 1) as usize;
+                    if step_index < 3 {
+                        // 格式化布尔值为ON/OFF，便于阅读
+                        digital_steps[step_index] = if step.actual_reading { "ON" } else { "OFF" }.to_string();
+                    }
+                }
+            }
+
+            // 信号下发测试和硬点测试结果
+            for oc in &outcomes {
+                use crate::models::enums::SubTestItem;
+                match oc.sub_test_item {
+                    SubTestItem::HardPoint => {
+                        hardpoint_result = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    SubTestItem::StateDisplay => {
+                        signal_test_result = if oc.success { "PASS".into() } else { "FAIL".into() };
+                    }
+                    _ => {}
+                }
+            }
+
+            // 开始/结束/时长
+            let start_time_utc = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
+            let end_time_utc = inst.final_test_time.unwrap_or_else(|| outcomes.last().map(|o| o.end_time).unwrap_or(start_time_utc));
+            let start_time = start_time_utc.with_timezone(&Local);
+            let end_time = end_time_utc.with_timezone(&Local);
+            let duration = end_time.signed_duration_since(start_time);
+            let total_minutes = duration.num_minutes();
+            let hours = total_minutes / 60;
+            let minutes = total_minutes % 60;
+            let duration_fmt = format!("{}小时{}分钟", hours, minutes);
+
+            // 整体测试结果
+            let overall = match inst.overall_status {
+                crate::models::enums::OverallTestStatus::TestCompletedPassed => "PASS",
+                crate::models::enums::OverallTestStatus::TestCompletedFailed => "FAIL",
+                crate::models::enums::OverallTestStatus::Skipped => "-",
+                _ => "-",
+            };
+
+            // 写入单元格
+            let values: Vec<String> = vec![
+                test_id.to_string(),
+                inst.test_batch_name.clone(),
+                def.variable_name.clone(),
+                point_type,
+                data_type,
+                test_plc_tag,
+                measured_tag,
+            ]
+            .into_iter()
+            .chain(digital_steps.into_iter())
+            .chain(vec![signal_test_result])
+            .chain(vec![
+                time_utils::format_bj(start_time, "%Y-%m-%d %H:%M:%S"),
+                time_utils::format_bj(end_time, "%Y-%m-%d %H:%M:%S"),
+                duration_fmt,
+                hardpoint_result,
+                overall.into(),
+            ])
+            .collect();
+
+            for (col, val) in values.iter().enumerate() {
+                sheet.write_string_with_format(row, col as u16, val, &default_fmt)?;
+            }
+            row += 1;
+        }
+
+        // 自动列宽
+        for col_index in 0..headers.len() {
+            sheet.set_column_width(col_index as u16, 18)?;
+        }
+
+        // 自动列宽
+        for col_index in 0..headers.len() {
+            sheet.set_column_width(col_index as u16, 18)?;
+        }
+
+        Ok(())
+    }
+
+    /// 创建错误汇总工作表
+    async fn create_error_summary_worksheet(
+        &self,
+        workbook: &mut Workbook,
+        instances: &[ChannelTestInstance],
+        def_map: &std::collections::HashMap<String, &ChannelPointDefinition>,
+    ) -> AppResult<()> {
+        // 创建错误信息汇总工作表
+        self.create_error_summary_sheet(workbook, instances, def_map).await?;
+        Ok(())
     }
 
     /// 创建错误信息汇总工作表 - 以点位为基线的错误信息汇总
@@ -277,7 +493,7 @@ impl ExcelExportService {
         instances: &[ChannelTestInstance],
         def_map: &std::collections::HashMap<String, &ChannelPointDefinition>,
     ) -> AppResult<()> {
-        let mut error_sheet = workbook.add_worksheet().set_name("错误信息汇总")?;
+        let mut error_sheet = workbook.add_worksheet().set_name("测试结果")?;
 
         // 样式定义
         let title_fmt = Format::new()
@@ -330,7 +546,7 @@ impl ExcelExportService {
             .set_background_color(Color::RGB(0xF0F2F5));
 
         // 主标题
-        error_sheet.merge_range(0, 0, 0, 7, "错误信息汇总报告 - 按点位分类", &title_fmt)?;
+        error_sheet.merge_range(0, 0, 0, 7, "测试结果汇总报告 - 按点位分类", &title_fmt)?;
 
         // 表头
         let headers = vec![
@@ -434,7 +650,7 @@ impl ExcelExportService {
 
         // === 错误统计信息汇总 ===
         current_row += 1;
-        error_sheet.merge_range(current_row, 0, current_row, 6, "错误统计信息汇总", &title_fmt)?;
+        error_sheet.merge_range(current_row, 0, current_row, 6, "测试统计信息汇总", &title_fmt)?;
         current_row += 1;
 
         let hardpoint_failed = instances.iter().filter(|i| {

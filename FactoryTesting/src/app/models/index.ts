@@ -267,6 +267,7 @@ export interface ChannelTestInstance {
   // === 测试数据 ===
   hardpoint_readings?: AnalogReadingPoint[]; // 模拟量硬点测试读数
   digital_test_steps?: DigitalTestStep[];    // 数字量测试步骤
+  digital_test_steps_json?: string;         // 数字量测试步骤JSON字符串（数据库存储字段）
 
   // === 时间戳 ===
   created_at: string;                      // 创建时间戳

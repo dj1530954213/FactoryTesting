@@ -61,8 +61,8 @@ use commands::manual_test_commands::{
     generate_random_display_value_cmd, ai_show_value_test_cmd, ai_alarm_test_cmd,
     ai_maintenance_test_cmd, ai_reset_to_display_value_cmd, complete_manual_test_subitem_cmd,
     capture_ao_point_cmd,
-    // DI手动测试命令 - 数字量输入测试
-    di_signal_test_cmd
+    // DI/DO手动测试命令 - 数字量输入/输出测试
+    di_signal_test_cmd, capture_do_state_cmd
 };
 
 // 全局功能测试命令 - 处理系统级功能测试
@@ -353,6 +353,7 @@ pub fn run() {
                 // === DI/DO手动测试命令 ===
                 // 业务说明：数字量输入/输出测试
                 di_signal_test_cmd,
+                capture_do_state_cmd,
                 
                 // === 全局功能测试命令 ===
                 // 业务说明：系统级功能测试管理

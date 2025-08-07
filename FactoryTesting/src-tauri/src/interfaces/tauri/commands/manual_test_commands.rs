@@ -1429,3 +1429,141 @@ async fn write_bool_to_test_plc(
         }
     }
 }
+
+// ==================== DO 手动测试专用命令 ====================
+// 业务说明：DO（数字量输出）模块的手动测试需要特殊的功能：
+// 1. 数字状态采集：按照低-高-低的序列采集DO输出状态
+// 2. 状态验证：验证测试PLC接收到的状态与预期一致
+
+/// DO 数字状态采集请求结构体
+/// 
+/// 业务说明：
+/// 用于采集DO通道的数字状态（低电平/高电平）
+/// 测试流程：被测设备DO输出 -> 测试PLC DI输入 -> 验证状态一致性
+/// 
+/// 字段说明：
+/// - instance_id: 测试实例标识符
+/// - step_number: 步骤号（1=第1次低电平, 2=高电平, 3=第2次低电平）
+/// - expected_state: 期望状态（true=高电平, false=低电平）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoStateTestRequest {
+    pub instance_id: String,
+    pub step_number: u8,     // 1, 2, 3
+    pub expected_state: bool, // true = 高电平, false = 低电平
+}
+
+/// DO 数字状态采集响应结构体
+/// 
+/// 业务说明：
+/// 返回数字状态采集的执行结果
+/// 
+/// 字段说明：
+/// - success: 采集是否成功
+/// - message: 结果消息
+/// - actual_value: 实际读取到的状态
+/// - test_plc_address: 使用的测试PLC地址
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoStateTestResponse {
+    pub success: bool,
+    pub message: String,
+    pub actual_value: bool,       // 实际读取的状态值
+    pub test_plc_address: String, // 测试PLC通信地址
+}
+
+/// DO手动测试 - 数字状态采集命令
+/// 
+/// 业务说明：
+/// 采集DO通道的输出状态，按照低-高-低的序列进行
+/// 读取测试PLC的DI输入来验证被测设备DO输出的正确性
+/// 
+/// 参数说明：
+/// - instanceId: 实例ID（驼峰命名匹配前端）
+/// - stepNumber: 步骤号（驼峰命名匹配前端）
+/// - expectedState: 期望状态（驼峰命名匹配前端）
+/// - app_state: 应用状态
+/// 
+/// 返回值：
+/// - Ok(DoStateTestResponse): 采集成功，返回实际状态
+/// - Err(String): 采集失败，返回错误信息
+/// 
+/// 调用链：
+/// 前端DO测试界面 -> capture_do_state_cmd -> 读取测试PLC状态 -> 保存到digital_test_steps_json
+#[tauri::command]
+pub async fn capture_do_state_cmd(
+    instanceId: String,
+    stepNumber: u8,
+    expectedState: bool,
+    app_state: State<'_, crate::tauri_commands::AppState>,
+) -> Result<DoStateTestResponse, String> {
+    info!("📥 [DO_CMD] 收到状态采集请求: instance={} step={} expected={}",
+          instanceId, stepNumber, expectedState);
+
+    // 验证步骤号有效性
+    if ![1u8, 2, 3].contains(&stepNumber) {
+        return Err("不支持的采集步骤号，仅支持1、2、3".to_string());
+    }
+
+    // 获取实例与定义
+    let (instance, _definition) = get_instance_and_definition(&app_state, &instanceId).await?;
+
+    // 获取测试PLC DI地址（用于读取DO输出状态）
+    let test_plc_address = get_test_plc_address(&app_state, &instance).await?;
+
+    // 读取当前数字状态
+    let plc_service_arc = crate::infrastructure::plc_communication::global_plc_service();
+    let plc_service: std::sync::Arc<dyn IPlcCommunicationService + Send + Sync> = plc_service_arc;
+    let conn_id = &app_state.test_rig_connection_id;
+    
+    info!("🔌 [DO_CMD] 读取测试PLC DI地址 {}", test_plc_address);
+    let actual_state = plc_service
+        .read_bool_by_id(conn_id, &test_plc_address)
+        .await
+        .map_err(|e| format!("读取测试PLC失败: {}", e))?;
+
+    info!("📊 [DO_CMD] 步骤{}：期望={}, 实际={}", 
+          stepNumber, expectedState, actual_state);
+
+    // 校验实际状态是否与期望状态一致（DO测试要求严格相等）
+    if actual_state != expectedState {
+        return Err(format!(
+            "状态校验失败: 期望{}, 实际{} (步骤{})",
+            if expectedState { "高电平" } else { "低电平" },
+            if actual_state { "高电平" } else { "低电平" },
+            stepNumber
+        ));
+    }
+
+    // 创建数字测试步骤结构
+    let digital_step = crate::models::structs::DigitalTestStep {
+        step_number: stepNumber as u32,
+        step_description: format!("DO手动采集步骤{}", stepNumber),
+        set_value: expectedState,
+        expected_reading: expectedState,
+        actual_reading: actual_state,
+        status: crate::models::enums::SubTestStatus::Passed,
+        timestamp: chrono::Utc::now(),
+    };
+
+    // 更新或创建RawTestOutcome，保存到digital_test_steps字段
+    let mut outcome = crate::models::RawTestOutcome::success(
+        instanceId.clone(),
+        crate::models::enums::SubTestItem::HardPoint, // DO测试使用HardPoint
+    );
+    outcome.message = Some(format!("DO 手动状态采集 步骤{}", stepNumber));
+    outcome.raw_value_read = Some(format!("{}", actual_state));
+    outcome.digital_steps = Some(vec![digital_step]);
+
+    info!("💾 [DO_CMD] 调用 ChannelStateManager 更新数字测试步骤");
+    app_state
+        .channel_state_manager
+        .update_test_result(outcome)
+        .await
+        .map_err(|e| format!("保存测试结果失败: {}", e))?;
+
+    Ok(DoStateTestResponse {
+        success: true,
+        message: format!("步骤{}状态采集成功", stepNumber),
+        actual_value: actual_state,
+        test_plc_address,
+    })
+}
