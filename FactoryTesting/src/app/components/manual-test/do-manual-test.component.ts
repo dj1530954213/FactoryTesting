@@ -215,6 +215,16 @@ import {
       opacity: 0.7 !important;
     }
     
+    /* 禁用但未完成的按钮：强制蓝色，覆盖 AI 全局样式 */
+    .do-manual-test .capture-buttons button[disabled]:not(.completed-state) {
+      background-image: linear-gradient(135deg, #1890ff 0%, #096dd9 100%) !important;
+      background-color: #1890ff !important;
+      border-color: #1890ff !important;
+      color: white !important;
+      box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3) !important;
+      opacity: 1 !important; /* 避免 disabled 默认透明度 */
+    }
+
     /* 修复按钮内容布局问题 */
     .do-manual-test .capture-buttons button {
       display: flex !important;
@@ -443,8 +453,8 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
     const stepNumber = this.getStepNumberByStateAndIndex(state, index);
     const resultKey = `step_${stepNumber}`;
     const result = this.stateResults[resultKey];
-    // 确保结果存在且有有效的采集数据
-    return !!(result && result.actualValue !== undefined);
+    // 仅当存在有效时间戳时才视为已完成
+    return !!(result && result.timestamp);
   }
 
   /**
@@ -473,22 +483,16 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
   /**
    * 获取按钮类型 - 提供视觉引导
    */
-  getButtonType(state: string, index: number): 'default' | 'primary' | 'text' {
+  getButtonType(state: string, index: number): 'default' | 'primary' {
     const stepNumber = this.getStepNumberByStateAndIndex(state, index);
     
-    // 已完成的步骤显示为primary（将通过CSS设置为绿色）
+    // 已完成的步骤显示为 primary（绿色）
     if (this.isStateCompleted(state, index)) {
       return 'primary';
     }
     
-    // 当前可点击的步骤显示为default（蓝色边框）
-    const nextStep = this.getNextRequiredStep();
-    if (stepNumber === nextStep) {
-      return 'default';
-    }
-    
-    // 等待的步骤显示为text（灰色）
-    return 'text';
+    // 其余未完成步骤统一显示为 default（蓝色）
+    return 'default';
   }
 
   /**
@@ -497,9 +501,10 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
   getButtonStyle(state: string, index: number): any {
     const stepNumber = this.getStepNumberByStateAndIndex(state, index);
     
-    // 已完成的步骤：绿色背景，白色文字
+    // 已完成的步骤：绿色渐变
     if (this.isStateCompleted(state, index)) {
       return {
+        'background-image': 'linear-gradient(135deg, #52c41a 0%, #34c759 100%) !important',
         'background-color': '#52c41a !important',
         'border-color': '#52c41a !important',
         'color': 'white !important',
@@ -511,34 +516,17 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
         'min-width': '140px',
         'width': '140px',
         'padding': '8px 12px',
-        'margin': '0 8px 8px 0'
+        'margin': '0 8px 8px 0',
+        'box-shadow': '0 2px 8px rgba(82, 196, 26, 0.3)'
       };
     }
     
-    // 当前可点击的步骤：蓝色边框，白色背景
-    const nextStep = this.getNextRequiredStep();
-    if (stepNumber === nextStep) {
-      return {
-        'color': '#1890ff !important',
-        'border-color': '#1890ff !important',
-        'background-color': '#fff !important',
-        'display': 'flex',
-        'flex-direction': 'column',
-        'align-items': 'center',
-        'justify-content': 'center',
-        'min-height': '60px',
-        'min-width': '140px',
-        'width': '140px',
-        'padding': '8px 12px',
-        'margin': '0 8px 8px 0'
-      };
-    }
-    
-    // 等待的步骤：灰色背景，白色文字
+    // 未完成步骤统一使用蓝色渐变背景
     return {
+      'background-image': 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%) !important',
+      'background-color': '#1890ff !important',
+      'border-color': '#1890ff !important',
       'color': 'white !important',
-      'background-color': '#8c8c8c !important',
-      'border-color': '#8c8c8c !important',
       'display': 'flex',
       'flex-direction': 'column',
       'align-items': 'center',
@@ -547,7 +535,8 @@ export class DoManualTestComponent implements OnInit, OnDestroy, OnChanges {
       'min-width': '140px',
       'width': '140px',
       'padding': '8px 12px',
-      'margin': '0 8px 8px 0'
+      'margin': '0 8px 8px 0',
+      'box-shadow': '0 2px 8px rgba(24, 144, 255, 0.3)'
     };
   }
   
