@@ -53,7 +53,7 @@ use crate::utils::error::AppResult;
 use crate::models::entities::test_plc_channel_config;
 use chrono::Utc;
 use uuid;
-use log::{info, debug};
+use crate::{log_user_operation, log_communication_failure, log_config_warning};
 
 /// 获取测试PLC通道配置
 /// 
@@ -98,7 +98,7 @@ pub async fn get_test_plc_channels_cmd(
             Ok(channels)
         }
         Err(e) => {
-            log::error!("获取测试PLC通道配置失败: {}", e);
+            log_communication_failure!("获取测试PLC通道配置失败: {}", e);
             Err(format!("获取测试PLC通道配置失败: {}", e))
         }
     }
@@ -145,8 +145,7 @@ pub async fn save_test_plc_channel_cmd(
             Ok(saved_channel)
         }
         Err(e) => {
-            log::error!("保存测试PLC通道配置失败: {}", e);
-            log::error!("错误详情: {:?}", e);
+            log_user_operation!("保存测试PLC通道配置: 通道={}, 失败原因: {}", channel.channel_address, e);
             
             // 确保错误信息不会导致panic
             let error_message = format!("保存测试PLC通道配置失败: {}", e);
@@ -189,7 +188,7 @@ pub async fn delete_test_plc_channel_cmd(
             Ok(())
         }
         Err(e) => {
-            log::error!("删除测试PLC通道配置失败: {}", e);
+            log_user_operation!("删除测试PLC通道配置失败: 通道ID={}, 错误: {}", channel_id, e);
             Err(format!("删除测试PLC通道配置失败: {}", e))
         }
     }
@@ -224,7 +223,7 @@ pub async fn get_plc_connections_cmd(
             Ok(connections)
         }
         Err(e) => {
-            log::error!("获取PLC连接配置失败: {}", e);
+            log_communication_failure!("获取PLC连接配置失败: {}", e);
             Err(format!("获取PLC连接配置失败: {}", e))
         }
     }
@@ -261,7 +260,7 @@ pub async fn save_plc_connection_cmd(
             Ok(saved_connection)
         }
         Err(e) => {
-            log::error!("保存PLC连接配置失败: {}", e);
+            log_user_operation!("保存PLC连接配置: IP={}, 端口={}, 结果: {}", config.ip_address, config.port, if e.to_string().is_empty() { "成功" } else { &e.to_string() });
             Err(format!("保存PLC连接配置失败: {}", e))
         }
     }
@@ -302,7 +301,7 @@ pub async fn test_plc_connection_cmd(
             Ok(response)
         }
         Err(e) => {
-            log::error!("测试PLC连接失败: {}", e);
+            log_communication_failure!("测试PLC连接失败: IP={}, 错误: {}", config.ip_address, e);
             Err(format!("测试PLC连接失败: {}", e))
         }
     }

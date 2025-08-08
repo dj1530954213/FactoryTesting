@@ -6,6 +6,8 @@ use log::{Level, LevelFilter};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use std::fs;
+use std::time::SystemTime;
 
 /// 日志配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +22,8 @@ pub struct LoggerConfig {
     pub rotation: LogRotation,
     /// 敏感信息脱敏
     pub sanitization: SanitizationConfig,
+    /// 日志自动清理配置
+    pub cleanup: LogCleanupConfig,
 }
 
 /// 日志级别
@@ -99,6 +103,43 @@ pub enum SanitizationMode {
     Remove,    // 完全移除
 }
 
+/// 日志自动清理配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogCleanupConfig {
+    /// 是否启用自动清理
+    pub enabled: bool,
+    /// 保留天数
+    pub retention_days: u32,
+    /// 清理检查间隔（小时）
+    pub check_interval_hours: u32,
+}
+
+/// 核心问题日志分类
+/// 只记录这4类核心问题的日志，避免日志冗余
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum CoreLogCategory {
+    /// 读写操作过程中的通讯失败
+    CommunicationFailure,
+    /// 导入、导出文件时的解析失败 
+    FileParsingFailure,
+    /// 测试过程中的测试失败信息
+    TestExecutionFailure,
+    /// 用户配置和连接操作信息
+    UserOperations,
+}
+
+impl std::fmt::Display for CoreLogCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let category_name = match self {
+            CoreLogCategory::CommunicationFailure => "通讯失败",
+            CoreLogCategory::FileParsingFailure => "文件解析失败",
+            CoreLogCategory::TestExecutionFailure => "测试执行失败",
+            CoreLogCategory::UserOperations => "用户操作",
+        };
+        write!(f, "{}", category_name)
+    }
+}
+
 /// 结构化日志记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructuredLog {
@@ -112,6 +153,10 @@ pub struct StructuredLog {
     pub fields: serde_json::Value,
     pub trace_id: Option<String>,
     pub span_id: Option<String>,
+    /// 核心问题分类
+    pub category: Option<CoreLogCategory>,
+    /// 错误上下文信息
+    pub context: Option<serde_json::Value>,
 }
 
 /// 日志记录器
@@ -127,6 +172,10 @@ impl Logger {
     
     /// 初始化日志系统
     pub fn init(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // 在初始化时清理旧日志
+        if self.config.cleanup.enabled {
+            self.cleanup_old_logs()?;
+        }
         // 设置日志级别
         log::set_max_level(self.config.level.clone().into());
         
@@ -236,6 +285,56 @@ impl Logger {
             fields,
             None,
         );
+    }
+    
+    /// 记录核心问题日志
+    /// 只记录4类核心问题，避免日志过多
+    pub fn log_core_issue(
+        &self,
+        level: Level,
+        category: CoreLogCategory,
+        message: &str,
+        context: Option<serde_json::Value>,
+        file: Option<&str>,
+        line: Option<u32>,
+    ) {
+        let log_entry = StructuredLog {
+            timestamp: chrono::Local::now().with_timezone(&Utc),
+            level: level.to_string(),
+            target: "core_issue".to_string(),
+            message: self.sanitize_message(message),
+            module: None,
+            file: file.map(|f| f.to_string()),
+            line,
+            fields: context.unwrap_or(serde_json::json!({})),
+            trace_id: None,
+            span_id: None,
+            category: Some(category.clone()),
+            context: None,
+        };
+        
+        match self.config.format {
+            LogFormat::Json => {
+                let json_log = serde_json::to_string(&log_entry)
+                    .unwrap_or_else(|_| "Failed to serialize log".to_string());
+                log::log!(level, "{}", json_log);
+            }
+            LogFormat::Structured => {
+                let file_info = match (file, line) {
+                    (Some(f), Some(l)) => format!(" [{}:{}]", f, l),
+                    _ => String::new(),
+                };
+                log::log!(level, "[{}] [{}] [{}]{} - {}", 
+                         crate::utils::time_utils::format_bj(log_entry.timestamp, "%Y-%m-%d %H:%M:%S%.3f"),
+                         level,
+                         category,
+                         file_info,
+                         log_entry.message);
+            }
+            LogFormat::Plain => {
+                log::log!(level, "[{}] {}", category, log_entry.message);
+            }
+        }
     }
     
     /// 记录错误和异常
@@ -354,6 +453,50 @@ impl Logger {
         sanitized
     }
     
+    /// 清理过期日志文件
+    fn cleanup_old_logs(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.config.cleanup.enabled {
+            return Ok(());
+        }
+        
+        let logs_dir = std::path::Path::new("logs");
+        if !logs_dir.exists() {
+            return Ok(());
+        }
+        
+        let cutoff_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs() - (self.config.cleanup.retention_days as u64 * 24 * 60 * 60);
+        
+        let entries = fs::read_dir(logs_dir)?;
+        let mut cleaned_count = 0;
+        
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Ok(modified) = metadata.modified() {
+                        if let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH) {
+                            if duration.as_secs() < cutoff_time {
+                                if fs::remove_file(&path).is_ok() {
+                                    cleaned_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if cleaned_count > 0 {
+            log::info!("清理了 {} 个过期日志文件", cleaned_count);
+        }
+        
+        Ok(())
+    }
+    
     // 私有方法：脱敏字段
     fn sanitize_fields(&self, fields: serde_json::Value) -> serde_json::Value {
         if !self.config.sanitization.enabled {
@@ -385,6 +528,11 @@ impl Default for LoggerConfig {
                     "key".to_string(),
                 ],
                 mode: SanitizationMode::Mask,
+            },
+            cleanup: LogCleanupConfig {
+                enabled: true,
+                retention_days: 90, // 保留3个月的日志
+                check_interval_hours: 24, // 每天检查一次
             },
         }
     }

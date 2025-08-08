@@ -7,7 +7,7 @@ use calamine::{Reader, Xlsx, open_workbook, DataType};
 use crate::models::structs::ChannelPointDefinition;
 use crate::models::enums::{ModuleType, PointDataType};
 use crate::error::AppError;
-use log::{info, error};
+use crate::{log_file_parsing_failure};
 use std::collections::HashMap;
 
 type AppResult<T> = Result<T, AppError>;
@@ -32,11 +32,11 @@ const COL_KEY_SEQUENCE: &str = "序号";
 /// 根据标题行生成列索引映射
 fn build_header_index(row: &[DataType]) -> HashMap<String, usize> {
     let mut map = HashMap::new();
-    log::info!("构建头部索引映射，总列数: {}", row.len());
+    // 构建头部索引映射（成功时不记录）
 
     for (idx, cell) in row.iter().enumerate() {
         let title = cell.to_string();
-        log::info!("列 {}: '{}'", idx, title);
+        // 列标题检查（成功时不记录）
         if title.contains(COL_KEY_MODULE_TYPE) {
             map.insert(COL_KEY_MODULE_TYPE.to_string(), idx);
         } else if title.contains(COL_KEY_POWER_TYPE) {
@@ -80,16 +80,21 @@ impl ExcelImporter {
     pub async fn parse_excel_file(file_path: &str) -> AppResult<Vec<ChannelPointDefinition>> {
         // 检查文件是否存在
         if !Path::new(file_path).exists() {
+            log_file_parsing_failure!("Excel文件不存在: {}", file_path);
             return Err(AppError::validation_error(format!("文件不存在: {}", file_path)));
         }
 
         // 打开Excel文件
         let mut workbook: Xlsx<_> = open_workbook(file_path)
-            .map_err(|e| AppError::validation_error(format!("无法打开Excel文件: {}", e)))?;
+            .map_err(|e| {
+                log_file_parsing_failure!("无法打开Excel文件: {}", e);
+                AppError::validation_error(format!("无法打开Excel文件: {}", e))
+            })?;
 
         // 获取第一个工作表
         let worksheet_names = workbook.sheet_names();
         if worksheet_names.is_empty() {
+            log_file_parsing_failure!("Excel文件中没有工作表");
             return Err(AppError::validation_error("Excel文件中没有工作表"));
         }
         //获取到第一个表的名称
@@ -98,8 +103,14 @@ impl ExcelImporter {
         //获取到第一个表的范围
         let range = match workbook.worksheet_range(sheet_name) {
             Some(Ok(range)) => range,
-            Some(Err(e)) => return Err(AppError::validation_error(format!("无法读取工作表: {}", e))),
-            None => return Err(AppError::validation_error(format!("工作表不存在: {}", sheet_name))),
+            Some(Err(e)) => {
+                log_file_parsing_failure!("无法读取工作表: {}", e);
+                return Err(AppError::validation_error(format!("无法读取工作表: {}", e)));
+            },
+            None => {
+                log_file_parsing_failure!("工作表不存在: {}", sheet_name);
+                return Err(AppError::validation_error(format!("工作表不存在: {}", sheet_name)));
+            },
         };
 
         let mut definitions = Vec::new();
@@ -118,6 +129,7 @@ impl ExcelImporter {
                 for key in [COL_KEY_MODULE_TYPE, COL_KEY_POWER_TYPE, COL_KEY_CHANNEL_POS,
                             COL_KEY_HMI_NAME, COL_KEY_DATA_TYPE, COL_KEY_COMM_ADDR, COL_KEY_SEQUENCE] {
                     if !map.contains_key(key) {
+                        log_file_parsing_failure!("Excel标题缺少关键列: {}", key);
                         return Err(AppError::validation_error(format!("Excel标题缺少关键列: {}", key)));
                     }
                 }
@@ -135,7 +147,7 @@ impl ExcelImporter {
                 },
                 Err(e) => {
                     // 只记录错误，不显示详细调试信息
-                    log::error!("第{}行解析失败: {}", actual_row_number, e);
+                    log_file_parsing_failure!("Excel第{}行解析失败: {}", actual_row_number, e);
                 }
             }
         }
@@ -143,6 +155,7 @@ impl ExcelImporter {
         info!("Excel解析完成，共处理{}行数据，成功解析{}个通道定义", row_count, definitions.len());
 
         if definitions.is_empty() {
+            log_file_parsing_failure!("Excel文件中没有有效的通道定义数据");
             return Err(AppError::validation_error("Excel文件中没有有效的通道定义数据"));
         }
 

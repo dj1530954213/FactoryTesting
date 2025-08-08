@@ -55,6 +55,7 @@
 use sea_orm::{DatabaseConnection, Statement, ConnectionTrait};
 use sea_orm::ActiveValue::Set;
 use crate::error::AppError;
+use crate::{log_file_parsing_failure, log_user_operation};
 
 /// 数据库迁移管理器
 ///
@@ -104,7 +105,7 @@ impl DatabaseMigration {
         // Rust知识点：Self 引用当前类型，? 操作符用于错误传播
         let exists = Self::check_table_exists(db, "range_registers").await?;
         if !exists {
-            log::info!("创建 range_registers 表");
+            // 创建range_registers表（成功时不记录）
             // Rust知识点：r#"..."# 是原始字符串字面量，保留换行和空格
             let sql = r#"
                 CREATE TABLE IF NOT EXISTS range_registers (
@@ -135,11 +136,11 @@ impl DatabaseMigration {
             }
         }
         if !need_seed {
-            log::info!("range_registers 表已有数据，跳过默认种子");
+            // range_registers表已有数据，跳过默认种子
             return Ok(());
         }
 
-        log::info!("向 range_registers 表插入默认寄存器映射...");
+        // 向range_registers表插入默认寄存器映射
         // 业务说明：默认的量程寄存器映射
         // AO1_1到AO1_8: 第一组AO通道（有源）
         // AO2_1到AO2_8: 第二组AO通道（无源）
@@ -184,10 +185,10 @@ impl DatabaseMigration {
             // 业务说明：插入数据，失败不中断，只记录警告
             // Rust知识点：if let Err(e) 模式匹配错误情况
             if let Err(e) = am.insert(db).await {
-                log::warn!("插入默认寄存器映射 {} -> {} 失败: {}", tag, reg, e);
+                log_file_parsing_failure!("插入默认寄存器映射 {} -> {} 失败: {}", tag, reg, e);
             }
         }
-        log::info!("默认寄存器映射插入完成");
+        // 默认寄存器映射插入完成
         Ok(())
     }
     /// 执行所有必要的数据库迁移
@@ -216,7 +217,7 @@ impl DatabaseMigration {
     /// - pub async fn: 公开的异步函数
     /// - &DatabaseConnection: 借用数据库连接
     pub async fn migrate(db: &DatabaseConnection) -> Result<(), AppError> {
-        log::info!("开始执行数据库迁移...");
+        // 开始数据库迁移
 
         // 阶段一：数据模型重构迁移
         // 业务说明：迁移核心业务表，这些表是测试系统的基础
@@ -249,7 +250,7 @@ impl DatabaseMigration {
         // 通过测试实例找回关联关系
         Self::recover_missing_batch_associations(db).await?;
 
-        log::info!("数据库迁移完成");
+        // 数据库迁移完成
         Ok(())
     }
 
@@ -269,7 +270,7 @@ impl DatabaseMigration {
     /// Rust知识点：
     /// - async fn: 异步函数，返回Future
     async fn migrate_channel_point_definitions(db: &DatabaseConnection) -> Result<(), AppError> {
-        log::info!("开始迁移channel_point_definitions表...");
+        // 开始迁移channel_point_definitions表
 
         // 检查表是否存在
         // Rust知识点：? 操作符在Result为Err时提前返回
@@ -278,12 +279,12 @@ impl DatabaseMigration {
         if !table_exists {
             // 表不存在，创建新表
             // 业务说明：全新安装时需要创建完整的表结构
-            log::info!("channel_point_definitions表不存在，创建新表");
+            // channel_point_definitions表不存在，创建新表
             Self::create_channel_point_definitions_table(db).await?;
         } else {
             // 表存在，检查并添加缺失的列，保留现有数据
             // 业务说明：升级场景，保持向后兼容性
-            log::info!("channel_point_definitions表已存在，检查并添加缺失的列");
+            // channel_point_definitions表已存在，检查并添加缺失的列
             Self::add_channel_point_definition_columns(db).await?;
 
             // 检查数据完整性

@@ -44,7 +44,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, Mutex, Semaphore};
 use serde::{Serialize, Deserialize};
-use log::{debug, warn, error, info, trace};
+use crate::{log_test_failure, log_user_operation, log_communication_failure};
 use tokio::time::{sleep, Duration};
 use crate::domain::impls::test_execution_engine::TaskStatus;
 use chrono::Utc;
@@ -367,18 +367,21 @@ impl TestCoordinationService {
                     // 移除冗余的测试结果接收日志
 
                     // 保存结果到持久化存储
-                    if let Err(_e) = persistence_service.save_test_outcome(&result).await {
+                    if let Err(e) = persistence_service.save_test_outcome(&result).await {
+                        log_test_failure!("保存测试结果失败: {}", e);
                         // 🔧 移除 [TestCoordination] 日志
                     }
 
                     // ===== 关键修复：更新 ChannelStateManager 中的测试实例状态 =====
-                    if let Err(_e) = channel_state_manager.update_test_result(result.clone()).await {
+                    if let Err(e) = channel_state_manager.update_test_result(result.clone()).await {
+                        log_test_failure!("更新通道状态失败: {}", e);
                         // 🔧 移除 [TestCoordination] 日志
                     } else {
                         // 🔧 移除 [TestCoordination] 日志
 
                         // ===== 新增：发布测试完成事件到前端 =====
                         if let Err(e) = event_publisher.publish_test_completed(&result).await {
+                            log_communication_failure!("发布测试完成事件失败: {}", e);
                             // 🔧 移除 [TestCoordination] 日志
                         } else {
                             // 🔧 移除 [TestCoordination] 日志
@@ -457,6 +460,7 @@ impl TestCoordinationService {
 
                             tokio::spawn(async move {
                                 if let Err(e) = event_publisher_clone.publish_batch_status_changed(&batch_id_clone, &statistics_clone).await {
+                                    log_communication_failure!("发布批次状态变更事件失败: {}", e);
                                     // 🔧 移除 [TestCoordination] 日志
                                 } else {
                                     // 🔧 移除 [TestCoordination] 日志
@@ -491,6 +495,7 @@ impl ITestCoordinationService for TestCoordinationService {
         // 验证请求
         if request.channel_definitions.is_empty() {
             // 🔧 移除 [TestCoordination] 日志
+            log_test_failure!("创建批次失败: 通道定义列表为空");
             return Err(AppError::validation_error("通道定义列表不能为空"));
         }
 
@@ -529,7 +534,7 @@ impl ITestCoordinationService for TestCoordinationService {
             Err(e) => {
                 // **降级策略**: 配置获取失败时使用默认配置
                 // **系统可用性**: 确保即使配置服务异常，系统仍能继续运行
-                warn!("[TestCoordination] 获取测试PLC配置失败，使用默认配置: {}", e);
+                log_test_failure!("获取测试PLC配置失败，将使用默认配置: {}", e);
                 TestPlcConfig {
                     brand_type: "ModbusTcp".to_string(),    // 默认使用Modbus TCP协议
                     ip_address: "127.0.0.1".to_string(),   // 默认本地地址
@@ -597,7 +602,7 @@ impl ITestCoordinationService for TestCoordinationService {
         if request.auto_start {
             for batch in &allocation_result.batches {
                 if let Err(e) = self.start_batch_testing(&batch.batch_id).await {
-                    warn!("[TestCoordination] 启动批次 {} 失败: {}", batch.batch_id, e);
+                    log_test_failure!("启动批次测试失败: 批次ID={}, 错误: {}", batch.batch_id, e);
                 }
             }
         }

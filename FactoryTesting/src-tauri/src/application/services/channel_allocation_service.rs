@@ -275,12 +275,11 @@ impl ChannelAllocationService {
         // 为当前批次生成统一的批次ID
         let batch_id = format!("{}_batch_{}", uuid::Uuid::new_v4().to_string(), batch_number);
 
-        log::info!("--- 批次{}分配详情 ---", batch_number);
-        log::info!("批次ID: {}", batch_id);
+        // 批次分配开始 - 只在失败时记录详情
 
         // 计算测试PLC的实际容量限制
         let max_channels_per_batch = self.calculate_max_channels_per_batch(test_plc_config);
-        log::info!("每批次最大通道数限制: {}", max_channels_per_batch);
+        // 计算每批次最大通道数限制
 
         // 按类型分配通道，限制每批次最大通道数
 
@@ -323,7 +322,7 @@ impl ChannelAllocationService {
             used_channel_ids.push(def.id.clone());
 
             if batch_instances.len() >= max_channels_per_batch {
-                log::info!("批次{}已达到最大通道数限制，停止分配", batch_number);
+                log_test_failure!("批次{}通道分配达到最大限制，无法继续分配", batch_number);
                 break;
             }
         }
@@ -405,7 +404,7 @@ impl ChannelAllocationService {
                 .filter(|def| matches!(def.module_type, ModuleType::AO) && !self.is_powered_channel(def))
                 .filter(|def| !used_channel_ids.contains(&def.id))
                 .collect();
-            log::info!("存在AO点位供电类型填写为无源，无法分配,共计:{}个",batch_instances.len());
+            log_test_failure!("AO点位供电类型填写为无源，无法分配，共计: {}个", ao_powered_false_channels.len());
             let available_slots = max_channels_per_batch.saturating_sub(batch_instances.len());
             let allocated_count = std::cmp::min(
                 std::cmp::min(ao_powered_false_channels.len(), test_channel_pools.ai_powered_true.len()),
@@ -472,7 +471,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DI普通型[{}]: {} → {} (DO无源)", i + 1, def.tag, test_channel.channel_address);
+                // DI普通型分配成功
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -507,7 +506,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DI安全型[{}]: {} → {} (DO有源)", i + 1, def.tag, test_channel.channel_address);
+                // DI安全型分配成功
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -577,7 +576,7 @@ impl ChannelAllocationService {
                     serial_number.clone(),
                 )?;
 
-                log::info!("  DO无源[{}]: {} → {}", i + 1, def.tag, test_channel.channel_address);
+                // DO无源分配成功
                 batch_instances.push(instance);
                 used_channel_ids.push(def.id.clone());
 
@@ -587,7 +586,7 @@ impl ChannelAllocationService {
             }
         }
 
-        log::info!("批次{}分配完成：总共分配{}个通道", batch_number, batch_instances.len());
+        // 批次分配完成，成功时不记录日志
 
         Ok((batch_instances, used_channel_ids))
     }

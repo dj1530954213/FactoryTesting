@@ -24,3 +24,68 @@
 pub mod logger_config;
 
 pub use logger_config::*;
+
+/// 便捷日志宏 - 记录核心问题日志
+/// 只记录4类核心问题，避免日志冗余
+
+/// 记录通讯失败日志
+#[macro_export]
+macro_rules! log_communication_failure {
+    ($msg:expr) => {
+        log::error!("[通讯失败] {}", $msg);
+    };
+    ($msg:expr, $($arg:tt)*) => {
+        log::error!("[通讯失败] {}", format!($msg, $($arg)*));
+    };
+}
+
+/// 记录文件解析失败日志
+#[macro_export]
+macro_rules! log_file_parsing_failure {
+    ($msg:expr) => {
+        log::error!("[文件解析失败] {}", $msg);
+    };
+    ($msg:expr, $($arg:tt)*) => {
+        log::error!("[文件解析失败] {}", format!($msg, $($arg)*));
+    };
+}
+
+/// 记录测试执行失败日志
+#[macro_export]
+macro_rules! log_test_failure {
+    ($msg:expr) => {
+        log::error!("[测试执行失败] {}", $msg);
+    };
+    ($msg:expr, $($arg:tt)*) => {
+        log::error!("[测试执行失败] {}", format!($msg, $($arg)*));
+    };
+}
+
+/// 记录用户操作日志
+#[macro_export]
+macro_rules! log_user_operation {
+    ($msg:expr) => {
+        log::info!("[用户操作] {}", $msg);
+    };
+    ($msg:expr, $($arg:tt)*) => {
+        log::info!("[用户操作] {}", format!($msg, $($arg)*));
+    };
+}
+
+/// 记录用户配置操作警告
+#[macro_export]
+macro_rules! log_config_warning {
+    ($msg:expr) => {
+        log::warn!("[配置警告] {}", $msg);
+    };
+    ($msg:expr, $($arg:tt)*) => {
+        log::warn!("[配置警告] {}", format!($msg, $($arg)*));
+    };
+}
+
+// 重新导出宏
+pub use log_communication_failure;
+pub use log_file_parsing_failure;
+pub use log_test_failure;
+pub use log_user_operation;
+pub use log_config_warning;

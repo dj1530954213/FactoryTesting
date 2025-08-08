@@ -106,63 +106,71 @@ use crate::infrastructure::range_register_repository::RangeRegisterRepository;
 /// 
 /// 调用链：main.rs -> run() -> init_app_state() -> tauri::Builder
 pub fn run() {
-    // 初始化日志系统 - 同时输出到控制台和文件
-    // Rust知识点：局部use导入，只在当前作用域有效
-    use std::fs::OpenOptions;
-    use std::io::{Write, BufWriter};
-    use std::sync::{Arc, Mutex};
+    // 初始化日志系统 - 使用增强的核心问题日志系统
+    // 业务说明：只记录4类核心问题，避免日志过多
+    use crate::logging::{LoggerConfig, Logger, LogTarget, LogFormat, LogLevel, LogCleanupConfig};
+    use std::path::PathBuf;
+    use std::fs;
+    
+    // 创建logging目录
+    if let Err(e) = fs::create_dir_all("logs") {
+        eprintln!("创建logs目录失败: {}", e);
+    }
+    
+    // 配置日志系统
+    let logger_config = LoggerConfig {
+        level: LogLevel::Info, // 只记录INFO及ERROR级别的核心问题
+        targets: vec![
+            LogTarget::Console,
+            LogTarget::File { path: PathBuf::from("logs/fat_test.log") }
+        ],
+        format: LogFormat::Structured,
+        rotation: crate::logging::LogRotation {
+            max_file_size_mb: 50,
+            max_files: 10,
+            strategy: crate::logging::RotationStrategy::Size,
+        },
+        sanitization: crate::logging::SanitizationConfig {
+            enabled: true,
+            sensitive_fields: vec![
+                "password".to_string(),
+                "token".to_string(),
+                "secret".to_string(),
+                "key".to_string(),
+                "address".to_string(), // PLC地址也需要保护
+            ],
+            mode: crate::logging::SanitizationMode::Mask,
+        },
+        cleanup: LogCleanupConfig {
+            enabled: true,
+            retention_days: 90, // 保留3个月的日志
+            check_interval_hours: 24,
+        },
+    };
+    
+    let logger = Logger::new(logger_config);
+    if let Err(e) = logger.init() {
+        eprintln!("初始化日志系统失败: {}", e);
+        // 备用日志初始化
+        let _ = env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Warn)
+            .init();
+    }
 
-    // 创建日志文件
-    // 业务说明：所有日志会同时输出到控制台和fat_test_debug.log文件
-    let log_file = OpenOptions::new()
-        .create(true)       // 如果文件不存在则创建
-        .append(true)       // 追加模式，不会覆盖已有日志
-        .open("fat_test_debug.log")
-        .expect("无法创建日志文件");
-
-    // Rust知识点：Arc<Mutex<T>> 是线程安全的共享可变状态模式
-    // Arc提供共享所有权，Mutex提供互斥访问
-    let file_writer = Arc::new(Mutex::new(BufWriter::new(log_file)));
-
-    // 使用简单的控制台日志，同时写入文件
-    // 业务说明：配置不同模块的日志级别，避免数据库查询日志刷屏
-    env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Debug) // 应用默认级别
-        .filter_module("sqlx", log::LevelFilter::Warn) // 过滤sqlx查询日志
-        .filter_module("sea_orm", log::LevelFilter::Warn) // 过滤sea_orm查询日志
-        .filter_module("sea_orm_migration", log::LevelFilter::Warn) // 过滤迁移日志
-        .filter_module("sqlx::query", log::LevelFilter::Off) // 完全关闭sqlx查询日志
-        .filter_module("tokio_modbus", log::LevelFilter::Warn) // 过滤tokio_modbus的DEBUG日志
-        .filter_module("app::services", log::LevelFilter::Debug) // 确保业务服务日志显示
-        .filter_module("app::tauri_commands", log::LevelFilter::Debug) // 确保命令日志显示
-        .filter_module("app::models", log::LevelFilter::Debug) // 确保模型转换日志显示
-        .format_timestamp_secs() // 添加时间戳
-        .format_module_path(false) // 简化模块路径显示
-        .format(move |buf, record| {
-            use std::io::Write;
-            // 格式化日志，使用北京时间
-            let formatted = format!("[{}] [{}] {}\n",
-                crate::utils::time_utils::format_bj(chrono::Utc::now(), "%Y-%m-%d %H:%M:%S"),
-                record.level(),
-                record.args()
-            );
-
-            // 写入控制台
-            write!(buf, "{}", formatted)?;
-
-            // 同时写入文件
-            // Rust知识点：if let 模式匹配，处理 Result/Option
-            if let Ok(mut writer) = file_writer.lock() {
-                let _ = writer.write_all(formatted.as_bytes());
-                let _ = writer.flush();  // 立即刷新缓冲区
-            }
-
-            Ok(())
-        })
-        .init();
+    // 日志初始化完成，使用env_logger作为底层实现
+    // 业务说明：过滤询细的第三方库日志，只保留核心业务日志
+    if env_logger::try_init().is_err() {
+        // 如果日志系统已初始化，则跳过
+        let _ = env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Warn) // 只显示警告和错误
+            .filter_module("sqlx", log::LevelFilter::Off) // 关闭数据库查询日志
+            .filter_module("sea_orm", log::LevelFilter::Off) // 关闭ORM日志
+            .filter_module("tokio_modbus", log::LevelFilter::Error) // 只显示Modbus错误
+            .init();
+    }
 
     log::info!("=== FAT_TEST 工厂测试系统启动 ===");
-    log::info!("日志系统已初始化，级别: DEBUG (数据库查询日志已过滤)");
+    log::info!("日志系统已初始化，只记录4类核心问题：通讯失败、文件解析失败、测试执行失败、用户配置操作");
 
     // 使用 tokio 运行时启动 Tauri 应用
     // Rust知识点：block_on 将异步代码阻塞执行，用于在同步上下文中运行异步代码

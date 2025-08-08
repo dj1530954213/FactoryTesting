@@ -32,6 +32,9 @@ use tokio_modbus::prelude::*; // for tcp::connect_slave and Slave
 use std::sync::OnceLock;
 use std::str::FromStr;
 
+// 导入日志宏
+use crate::{log_communication_failure, log_user_operation};
+
 use crate::utils::error::{AppError, AppResult};
 use crate::domain::services::BaseService;
 use super::plc_communication_service::{
@@ -437,7 +440,7 @@ impl PlcCommunicationService for ModbusPlcService {
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("�� [ModbusPlcService] 检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            // 只在连接失败时记录，不记录正常的连接尝试
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -448,20 +451,20 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    log::debug!("✅ [ModbusPlcService] 独立连接建立成功: IP={}", self.config.ip_address);
+                    // 连接成功，无需记录日志
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
                     *status_guard = PlcConnectionStatus::Connected;
                 },
                 Ok(Err(e)) => {
-                    log::error!("❌ [ModbusPlcService] 独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    log_communication_failure!("PLC独立连接失败: IP={}, 错误: {}", self.config.ip_address, e);
                     return Err(AppError::PlcCommunicationError {
                         message: format!("连接失败: {}", e)
                     });
                 },
                 Err(_) => {
-                    log::error!("❌ [ModbusPlcService] 独立连接超时: IP={}", self.config.ip_address);
+                    log_communication_failure!("PLC连接超时: IP={}", self.config.ip_address);
                     return Err(AppError::PlcCommunicationError {
                         message: "连接超时".to_string()
                     });
@@ -576,7 +579,7 @@ impl PlcCommunicationService for ModbusPlcService {
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("🔗 [ModbusPlcService] Float32读取检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            // Float32读取检测到未连接，尝试建立连接
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -587,20 +590,20 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    log::debug!("✅ [ModbusPlcService] Float32读取独立连接建立成功: IP={}", self.config.ip_address);
+                    // Float32读取连接成功
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
                     *status_guard = PlcConnectionStatus::Connected;
                 },
                 Ok(Err(e)) => {
-                    log::error!("❌ [ModbusPlcService] Float32读取独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    log_communication_failure!("PLC Float32读取连接失败: IP={}, 错误: {}", self.config.ip_address, e);
                     return Err(AppError::PlcCommunicationError {
                         message: format!("连接失败: {}", e)
                     });
                 },
                 Err(_) => {
-                    log::error!("❌ [ModbusPlcService] Float32读取独立连接超时: IP={}", self.config.ip_address);
+                    log_communication_failure!("PLC Float32读取连接超时: IP={}", self.config.ip_address);
                     return Err(AppError::PlcCommunicationError {
                         message: "连接超时".to_string()
                     });
@@ -670,7 +673,7 @@ impl PlcCommunicationService for ModbusPlcService {
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("�� [ModbusPlcService] 写入操作检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            // 写入操作检测到未连接，尝试建立连接
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -681,20 +684,20 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    log::debug!("✅ [ModbusPlcService] 写入操作独立连接建立成功: IP={}", self.config.ip_address);
+                    // 写入操作连接成功
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
                     *status_guard = PlcConnectionStatus::Connected;
                 },
                 Ok(Err(e)) => {
-                    log::error!("❌ [ModbusPlcService] 写入操作独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    log_communication_failure!("PLC写入操作连接失败: IP={}, 错误: {}", self.config.ip_address, e);
                     return Err(AppError::PlcCommunicationError {
                         message: format!("连接失败: {}", e)
                     });
                 },
                 Err(_) => {
-                    log::error!("❌ [ModbusPlcService] 写入操作独立连接超时: IP={}", self.config.ip_address);
+                    log_communication_failure!("PLC写入操作连接超时: IP={}", self.config.ip_address);
                     return Err(AppError::PlcCommunicationError {
                         message: "连接超时".to_string()
                     });
@@ -792,7 +795,7 @@ impl PlcCommunicationService for ModbusPlcService {
                 return Ok(result);
             }
             // 如果连接管理器中没有匹配的连接，回退到独立连接模式
-            log::debug!("🔄 [ModbusPlcService] 连接管理器中无匹配连接，回退到独立连接模式: IP={}", self.config.ip_address);
+            // 连接管理器中无匹配连接，回退到独立连接模式
         }
 
         // 🔧 修复：确保在独立连接模式下能够自动连接
@@ -802,7 +805,7 @@ impl PlcCommunicationService for ModbusPlcService {
         // 🔧 修复：如果没有连接，尝试建立连接
         if client_ctx_guard.is_none() {
             drop(client_ctx_guard);
-            log::debug!("🔗 [ModbusPlcService] Float32写入检测到未连接，尝试建立连接: IP={}", self.config.ip_address);
+            // Float32写入检测到未连接，尝试建立连接
 
             // 建立连接
             let socket_addr = self.get_socket_addr()?;
@@ -813,20 +816,20 @@ impl PlcCommunicationService for ModbusPlcService {
                 tokio_modbus::client::tcp::connect_slave(socket_addr, slave),
             ).await {
                 Ok(Ok(ctx)) => {
-                    log::debug!("✅ [ModbusPlcService] Float32写入独立连接建立成功: IP={}", self.config.ip_address);
+                    // Float32写入连接成功
                     let mut client_ctx_guard = self.client_context.lock().await;
                     *client_ctx_guard = Some(ctx);
                     let mut status_guard = self.connection_status.lock().await;
                     *status_guard = PlcConnectionStatus::Connected;
                 },
                 Ok(Err(e)) => {
-                    log::error!("❌ [ModbusPlcService] Float32写入独立连接失败: IP={}, 错误={}", self.config.ip_address, e);
+                    log_communication_failure!("PLC Float32写入连接失败: IP={}, 错误: {}", self.config.ip_address, e);
                     return Err(AppError::PlcCommunicationError {
                         message: format!("连接失败: {}", e)
                     });
                 },
                 Err(_) => {
-                    log::error!("❌ [ModbusPlcService] Float32写入独立连接超时: IP={}", self.config.ip_address);
+                    log_communication_failure!("PLC Float32写入连接超时: IP={}", self.config.ip_address);
                     return Err(AppError::PlcCommunicationError {
                         message: "连接超时".to_string()
                     });
@@ -846,19 +849,7 @@ impl PlcCommunicationService for ModbusPlcService {
         let (reg1, reg2) = ByteOrderConverter::float_to_registers(value, self.config.byte_order);
         let registers_to_write = [reg1, reg2];
 
-        // 🔍 详细调试信息：打印写入的寄存器内容 (降级为debug)
-        log::debug!("🔍 [ModbusPlcService] Float32写入调试信息:");
-        log::debug!("   原始值: {}", value);
-        log::debug!("   字节序: {:?}", self.config.byte_order);
-        log::debug!("   转换后寄存器: reg1=0x{:04X}({}), reg2=0x{:04X}({})", reg1, reg1, reg2, reg2);
-        log::debug!("   写入数组: [{}, {}] = [0x{:04X}, 0x{:04X}]", registers_to_write[0], registers_to_write[1], registers_to_write[0], registers_to_write[1]);
-        log::debug!("   目标地址: {}, 偏移: {}", address, reg_offset);
-
-        // 🔍 将float32转换为字节数组来查看内存布局
-        let bytes = value.to_le_bytes();
-        log::debug!("   Float32字节(小端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes[0], bytes[1], bytes[2], bytes[3]);
-        let bytes_be = value.to_be_bytes();
-        log::debug!("   Float32字节(大端): [{:02X}, {:02X}, {:02X}, {:02X}]", bytes_be[0], bytes_be[1], bytes_be[2], bytes_be[3]);
+        // 字节序转换（仅在必要时记录错误）
 
         let start_time = chrono::Utc::now();
         let modbus_io_result = ctx.write_multiple_registers(reg_offset, &registers_to_write).await;
