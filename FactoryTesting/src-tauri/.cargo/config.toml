@@ -1,0 +1,33 @@
+[build]
+# 单线程编译避免文件锁竞争
+jobs = 1
+# 启用增量编译缓存
+incremental = true
+
+[target.x86_64-pc-windows-msvc]
+# 简化配置，移除可能冲突的选项
+rustflags = [
+    "-C", "debuginfo=1"
+]
+
+# 网络优化
+[net]
+retry = 2
+git-fetch-with-cli = true
+
+# 缓存优化  
+[install]
+root = "target/install"
+
+[profile.dev]
+# 开发模式优化编译速度
+opt-level = 0
+debug = 1
+split-debuginfo = "unpacked"
+incremental = true
+codegen-units = 256
+
+[profile.dev.package."*"]
+# 依赖库使用基础优化
+opt-level = 1
+debug = false

@@ -44,8 +44,11 @@ pub use data_management::{
     parse_excel_file,                          // 解析Excel文件
     create_test_batch,                         // 创建测试批次
     get_batch_list,                           // 获取批次列表
+    get_dashboard_batch_list,                  // 获取仪表板批次列表  
     get_batch_channel_definitions,             // 获取批次通道定义
     import_excel_and_prepare_batch_cmd,        // 导入Excel并准备批次
+    import_excel_and_create_batch_cmd,         // 导入Excel并创建批次
+    create_test_batch_with_definitions_cmd,    // 创建测试批次和定义
     start_tests_for_batch_cmd,                 // 启动批次测试
     get_batch_status_cmd,                      // 获取批次状态
     prepare_test_instances_for_batch_cmd,      // 准备批次测试实例

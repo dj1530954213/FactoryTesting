@@ -202,7 +202,7 @@ impl Logger {
         trace_id: Option<String>,
     ) {
         let log_entry = StructuredLog {
-            timestamp: chrono::Utc::now(),
+            timestamp: chrono::Local::now().with_timezone(&Utc),
             level: level.to_string(),
             target: target.to_string(),
             message: self.sanitize_message(message),
@@ -299,21 +299,18 @@ impl Logger {
         line: Option<u32>,
     ) {
         let log_entry = StructuredLog {
-            timestamp: chrono::Utc::now(),
+            timestamp: chrono::Local::now().with_timezone(&Utc),
             level: level.to_string(),
             target: "core_issue".to_string(),
             message: self.sanitize_message(message),
             module: None,
             file: file.map(|f| f.to_string()),
             line,
-            fields: serde_json::json!({
-                "category": category,
-                "level": level.to_string()
-            }),
+            fields: context.unwrap_or(serde_json::json!({})),
             trace_id: None,
             span_id: None,
             category: Some(category.clone()),
-            context: context,
+            context: None,
         };
         
         match self.config.format {
@@ -348,7 +345,7 @@ impl Logger {
         trace_id: Option<String>,
     ) {
         let mut fields = serde_json::json!({
-            "error_type": std::any::type_name::<dyn std::error::Error>(),
+            "error_type": std::any::type_name_of_val(error),
             "error_message": error.to_string(),
         });
         
@@ -386,7 +383,10 @@ impl Logger {
         for target in &self.config.targets {
             match target {
                 LogTarget::Console => {
-                    // 控制台输出已在外部初始化，这里只需要标记配置完成
+                    // 配置控制台输出
+                    env_logger::Builder::from_default_env()
+                        .filter_level(self.config.level.clone().into())
+                        .init();
                 }
                 LogTarget::File { path } => {
                     // 配置文件输出

@@ -157,7 +157,17 @@ pub fn run() {
             .init();
     }
 
-    // 日志初始化已在上方完成，无需重复初始化
+    // 日志初始化完成，使用env_logger作为底层实现
+    // 业务说明：过滤询细的第三方库日志，只保留核心业务日志
+    if env_logger::try_init().is_err() {
+        // 如果日志系统已初始化，则跳过
+        let _ = env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Warn) // 只显示警告和错误
+            .filter_module("sqlx", log::LevelFilter::Off) // 关闭数据库查询日志
+            .filter_module("sea_orm", log::LevelFilter::Off) // 关闭ORM日志
+            .filter_module("tokio_modbus", log::LevelFilter::Error) // 只显示Modbus错误
+            .init();
+    }
 
     log::info!("=== FAT_TEST 工厂测试系统启动 ===");
     log::info!("日志系统已初始化，只记录4类核心问题：通讯失败、文件解析失败、测试执行失败、用户配置操作");
