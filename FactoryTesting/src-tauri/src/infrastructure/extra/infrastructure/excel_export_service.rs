@@ -211,9 +211,9 @@ impl ExcelExportService {
                 });
                 
                 if has_completed_tests {
-                    ("未完成所有测试".to_string(), true)
+                    ("未完成测试".to_string(), true)
                 } else {
-                    ("未测试".to_string(), true)
+                    ("未完成测试".to_string(), true)
                 }
             },
             _ => ("未测试".to_string(), true),
@@ -390,7 +390,11 @@ impl ExcelExportService {
             let duration_fmt = format!("{}小时{}分钟", hours, minutes);
 
             // 整体测试结果
-            let (overall_status, overall_yellow) = self.format_overall_status(&inst);
+            let (mut overall_status, overall_yellow) = self.format_overall_status(&inst);
+            if overall_status == "未测试" {
+                overall_status = "未完成测试".to_string();
+            }
+
             needs_yellow_bg[24] = overall_yellow; // 最终测试结果列位置
 
             // 写入单元格 - 注意增加了显示值核对列
@@ -557,7 +561,10 @@ impl ExcelExportService {
             let duration_fmt = format!("{}小时{}分钟", hours, minutes);
 
             // 整体测试结果
-            let (overall_status, overall_yellow) = self.format_overall_status(&inst);
+            let (mut overall_status, overall_yellow) = self.format_overall_status(&inst);
+            if overall_status == "未测试" {
+                overall_status = "未完成测试".to_string();
+            }
             needs_yellow_bg[15] = overall_yellow; // 最终测试结果列位置
 
             // 写入单元格
