@@ -198,13 +198,25 @@ impl ExcelExportService {
     }
 
     /// 格式化整体测试状态
-    fn format_overall_status(&self, inst: &ChannelTestInstance) -> (&str, bool) {
+    fn format_overall_status(&self, inst: &ChannelTestInstance) -> (String, bool) {
         match inst.overall_status {
-            crate::models::enums::OverallTestStatus::TestCompletedPassed => ("PASS", false),
-            crate::models::enums::OverallTestStatus::TestCompletedFailed => ("FAIL", false),
-            crate::models::enums::OverallTestStatus::Skipped => ("无需测试", false),
-            crate::models::enums::OverallTestStatus::NotTested => ("未测试", true),
-            _ => ("未测试", true),
+            crate::models::enums::OverallTestStatus::TestCompletedPassed => ("PASS".to_string(), false),
+            crate::models::enums::OverallTestStatus::TestCompletedFailed => ("FAIL".to_string(), false),
+            crate::models::enums::OverallTestStatus::Skipped => ("无需测试".to_string(), false),
+            crate::models::enums::OverallTestStatus::NotTested => {
+                // 检查是否有部分测试项已完成
+                let has_completed_tests = inst.sub_test_results.values().any(|result| {
+                    matches!(result.status, crate::models::enums::SubTestStatus::Passed | 
+                                           crate::models::enums::SubTestStatus::Failed)
+                });
+                
+                if has_completed_tests {
+                    ("未完成所有测试".to_string(), true)
+                } else {
+                    ("未测试".to_string(), true)
+                }
+            },
+            _ => ("未测试".to_string(), true),
         }
     }
 
@@ -259,8 +271,9 @@ impl ExcelExportService {
             let data_type = format!("{:?}", def.data_type);
             let test_plc_tag = inst.test_plc_channel_tag.clone().unwrap_or_else(|| "-".into());
             let measured_tag = def.tag.clone();
-            let range_min = def.range_low_limit.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
-            let range_max = def.range_high_limit.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+            // 自动填充行程最小值和最大值（模拟量必需项）
+            let range_min = def.range_low_limit.map(|v| v.to_string()).unwrap_or_else(|| "0".into());
+            let range_max = def.range_high_limit.map(|v| v.to_string()).unwrap_or_else(|| "100".into());
 
             // 百分比对比值
             let mut pct_vals = vec!["-".to_string(); 5];
@@ -330,10 +343,12 @@ impl ExcelExportService {
                 }
             }
             
-            // 处理显示值核对
-            let (display_status, display_yellow) = self.format_test_status(&inst, &SubTestItem::StateDisplay, &outcomes, "-");
-            display_check_result = display_status.to_string();
-            needs_yellow_bg[19] = display_yellow; // 显示值核对列位置
+            // 处理显示值核对 - 只有原本为"-"才处理
+            if display_check_result == "-" {
+                let (display_status, display_yellow) = self.format_test_status(&inst, &SubTestItem::StateDisplay, &outcomes, "-");
+                display_check_result = display_status.to_string();
+                needs_yellow_bg[19] = display_yellow; // 显示值核对列位置
+            }
             
             // 处理报警测试结果
             for (i, alarm_item) in [SubTestItem::LowLowAlarm, SubTestItem::LowAlarm, 
@@ -352,7 +367,13 @@ impl ExcelExportService {
                 needs_yellow_bg[23] = yellow; // 硬点测试结果列位置
             }
             
-            // 处理百分比值不需要状态格式化，因为它们是数值而非状态
+            // 处理百分比值 - 0%-100%为必测项目，如果为空则显示"未测试"
+            for i in 0..5 {
+                if pct_vals[i] == "-" {
+                    pct_vals[i] = "未测试".to_string();
+                    needs_yellow_bg[9 + i] = true; // 百分比列位置：9-13
+                }
+            }
             
 
 
@@ -501,6 +522,14 @@ impl ExcelExportService {
             }
             
             // 应用新的状态格式化逻辑
+            
+            // 处理数字量步骤 - 低电平、高电平、低电平是必测项，空值显示未测试
+            for i in 0..3 {
+                if digital_steps[i] == "-" {
+                    digital_steps[i] = "未测试".to_string();
+                    needs_yellow_bg[7 + i] = true; // 数字量步骤列位置：7-9
+                }
+            }
             
             // 处理信号下发测试
             if signal_test_result == "-" {
