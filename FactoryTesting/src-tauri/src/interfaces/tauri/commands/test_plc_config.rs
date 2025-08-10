@@ -47,13 +47,14 @@
 
 use tauri::State;
 use serde::{Deserialize, Serialize};
+use log::{debug, info, warn, error, trace};
+use crate::{log_test_failure, log_user_operation, log_communication_failure};
 use crate::tauri_commands::AppState;
 use crate::models::test_plc_config::*;
 use crate::utils::error::AppResult;
 use crate::models::entities::test_plc_channel_config;
 use chrono::Utc;
 use uuid;
-use crate::{log_user_operation, log_communication_failure, log_config_warning};
 
 /// 获取测试PLC通道配置
 /// 
@@ -138,6 +139,9 @@ pub async fn save_test_plc_channel_cmd(
           channel.id, channel.channel_address, channel.channel_type, 
           channel.communication_address, channel.power_supply_type);
     
+    // 保存channel_address用于日志记录
+    let channel_address = channel.channel_address.clone();
+    
     // 调用服务层保存配置
     match state.test_plc_config_service.save_test_plc_channel(channel).await {
         Ok(saved_channel) => {
@@ -145,7 +149,7 @@ pub async fn save_test_plc_channel_cmd(
             Ok(saved_channel)
         }
         Err(e) => {
-            log_user_operation!("保存测试PLC通道配置: 通道={}, 失败原因: {}", channel.channel_address, e);
+            log_user_operation!("保存测试PLC通道配置: 通道={}, 失败原因: {}", channel_address, e);
             
             // 确保错误信息不会导致panic
             let error_message = format!("保存测试PLC通道配置失败: {}", e);
@@ -253,6 +257,10 @@ pub async fn save_plc_connection_cmd(
 ) -> Result<PlcConnectionConfig, String> {
     debug!("保存PLC连接配置命令: {:?}", connection.name);
     
+    // 保存connection信息用于日志记录
+    let connection_ip = connection.ip_address.clone();
+    let connection_port = connection.port;
+    
     // 调用服务层保存连接配置
     match state.test_plc_config_service.save_plc_connection(connection).await {
         Ok(saved_connection) => {
@@ -260,7 +268,9 @@ pub async fn save_plc_connection_cmd(
             Ok(saved_connection)
         }
         Err(e) => {
-            log_user_operation!("保存PLC连接配置: IP={}, 端口={}, 结果: {}", config.ip_address, config.port, if e.to_string().is_empty() { "成功" } else { &e.to_string() });
+            let error_string = e.to_string();
+            let result_msg = if error_string.is_empty() { "成功" } else { error_string.as_str() };
+            log_user_operation!("保存PLC连接配置: IP={}, 端口={}, 结果: {}", connection_ip, connection_port, result_msg);
             Err(format!("保存PLC连接配置失败: {}", e))
         }
     }
@@ -301,7 +311,7 @@ pub async fn test_plc_connection_cmd(
             Ok(response)
         }
         Err(e) => {
-            log_communication_failure!("测试PLC连接失败: IP={}, 错误: {}", config.ip_address, e);
+            log_communication_failure!("测试PLC连接失败: IP={}, 错误: {}", connection_id, e);
             Err(format!("测试PLC连接失败: {}", e))
         }
     }

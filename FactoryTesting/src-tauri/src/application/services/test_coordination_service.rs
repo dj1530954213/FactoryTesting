@@ -28,6 +28,7 @@
 //! - **并发控制**: 使用Semaphore控制并发测试数量
 //! - **消息传递**: 使用mpsc channel进行任务间通信
 
+use log::{debug, info, warn, error, trace};
 use crate::models::{
     ChannelTestInstance, ChannelPointDefinition, RawTestOutcome, TestBatchInfo,
     OverallTestStatus

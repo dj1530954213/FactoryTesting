@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use log::{info, debug};
+use crate::log_test_failure;
 use crate::models::{SubTestItem, SubTestStatus, SubTestExecutionResult};
 use crate::models::{
     ChannelPointDefinition, ChannelTestInstance, TestBatchInfo, ModuleType, OverallTestStatus

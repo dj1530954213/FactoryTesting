@@ -212,6 +212,8 @@ impl Logger {
             fields: self.sanitize_fields(fields),
             trace_id,
             span_id: None,
+            category: None,
+            context: None,
         };
         
         match self.config.format {
