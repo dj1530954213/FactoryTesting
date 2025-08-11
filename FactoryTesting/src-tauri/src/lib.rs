@@ -106,65 +106,62 @@ use crate::infrastructure::range_register_repository::RangeRegisterRepository;
 /// 
 /// 调用链：main.rs -> run() -> init_app_state() -> tauri::Builder
 pub fn run() {
-    // 初始化日志系统 - 使用增强的核心问题日志系统
-    // 业务说明：只记录4类核心问题，避免日志过多
-    use crate::logging::{LoggerConfig, Logger, LogTarget, LogFormat, LogLevel, LogCleanupConfig};
-    use std::path::PathBuf;
-    use std::fs;
-    
     // 创建logging目录
+    use std::fs;
     if let Err(e) = fs::create_dir_all("logs") {
         eprintln!("创建logs目录失败: {}", e);
     }
-    
-    // 配置日志系统
-    let logger_config = LoggerConfig {
-        level: LogLevel::Info, // 只记录INFO及ERROR级别的核心问题
-        targets: vec![
-            LogTarget::Console,
-            LogTarget::File { path: PathBuf::from("logs/fat_test.log") }
-        ],
-        format: LogFormat::Structured,
-        rotation: crate::logging::LogRotation {
-            max_file_size_mb: 50,
-            max_files: 10,
-            strategy: crate::logging::RotationStrategy::Size,
-        },
-        sanitization: crate::logging::SanitizationConfig {
-            enabled: true,
-            sensitive_fields: vec![
-                "password".to_string(),
-                "token".to_string(),
-                "secret".to_string(),
-                "key".to_string(),
-                "address".to_string(), // PLC地址也需要保护
-            ],
-            mode: crate::logging::SanitizationMode::Mask,
-        },
-        cleanup: LogCleanupConfig {
-            enabled: true,
-            retention_days: 90, // 保留3个月的日志
-            check_interval_hours: 24,
-        },
-    };
-    
-    let logger = Logger::new(logger_config);
-    if let Err(e) = logger.init() {
-        eprintln!("初始化日志系统失败: {}", e);
-        // 备用日志初始化
-        let _ = env_logger::Builder::from_default_env()
-            .filter_level(log::LevelFilter::Warn)
-            .init();
-    }
-
-    // 日志初始化已在上方完成，无需重复初始化
-
-    log::info!("=== FAT_TEST 工厂测试系统启动 ===");
-    log::info!("日志系统已初始化，只记录4类核心问题：通讯失败、文件解析失败、测试执行失败、用户配置操作");
 
     // 使用 tokio 运行时启动 Tauri 应用
     // Rust知识点：block_on 将异步代码阻塞执行，用于在同步上下文中运行异步代码
     tauri::async_runtime::block_on(async {
+        // 初始化日志系统 - 在Tokio运行时环境内
+        // 业务说明：只记录4类核心问题，避免日志过多
+        use crate::logging::{LoggerConfig, Logger, LogTarget, LogFormat, LogLevel, LogCleanupConfig};
+        use std::path::PathBuf;
+        
+        // 配置日志系统
+        let logger_config = LoggerConfig {
+            level: LogLevel::Info, // 只记录INFO及ERROR级别的核心问题
+            targets: vec![
+                LogTarget::Console,
+                LogTarget::File { path: PathBuf::from("logs/fat_test.log") }
+            ],
+            format: LogFormat::Structured,
+            rotation: crate::logging::LogRotation {
+                max_file_size_mb: 50,
+                max_files: 10,
+                strategy: crate::logging::RotationStrategy::Size,
+            },
+            sanitization: crate::logging::SanitizationConfig {
+                enabled: true,
+                sensitive_fields: vec![
+                    "password".to_string(),
+                    "token".to_string(),
+                    "secret".to_string(),
+                    "key".to_string(),
+                    "address".to_string(), // PLC地址也需要保护
+                ],
+                mode: crate::logging::SanitizationMode::Mask,
+            },
+            cleanup: LogCleanupConfig {
+                enabled: true,
+                retention_days: 90, // 保留3个月的日志
+                check_interval_hours: 24,
+            },
+        };
+        
+        let mut logger = Logger::new(logger_config);
+        if let Err(e) = logger.init() {
+            eprintln!("初始化日志系统失败: {}", e);
+            // 备用日志初始化
+            let _ = env_logger::Builder::from_default_env()
+                .filter_level(log::LevelFilter::Warn)
+                .init();
+        }
+
+        log::info!("=== FAT_TEST 工厂测试系统启动 ===");
+        log::info!("日志系统已初始化，只记录4类核心问题：通讯失败、文件解析失败、测试执行失败、用户配置操作");
         // 初始化应用状态
         // 业务说明：init_app_state会初始化数据库连接、执行数据迁移、创建所有必要的服务
         log::info!("开始初始化应用状态...");

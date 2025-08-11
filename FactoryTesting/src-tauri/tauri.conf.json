@@ -24,6 +24,7 @@
     },
     "withGlobalTauri": false
   },
+  "plugins": {},
   "bundle": {
     "active": true,
     "targets": "all",
