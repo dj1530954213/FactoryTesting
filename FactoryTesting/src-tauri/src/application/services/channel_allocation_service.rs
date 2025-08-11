@@ -811,7 +811,7 @@ impl ChannelAllocationService {
         }
 
         // 设置日志
-        info!("[ALLOC] 创建测试实例: {} (Tag={})", instance.instance_id, definition.tag);
+        //info!("[ALLOC] 创建测试实例: {} (Tag={})", instance.instance_id, definition.tag);
 
         Ok(instance)
     }

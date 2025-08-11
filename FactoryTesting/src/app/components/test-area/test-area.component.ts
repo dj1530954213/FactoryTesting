@@ -2246,7 +2246,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
    */
   async startSingleChannelTest(instance: ChannelTestInstance): Promise<void> {
     try {
-      console.log('🚀 [TEST_AREA] 开始单个通道硬点测试:', instance.instance_id);
+      //console.log('🚀 [TEST_AREA] 开始单个通道硬点测试:', instance.instance_id);
 
       // 🔧 新增：为单个通道测试初始化计数器
       this.initializeTestCounter(1);

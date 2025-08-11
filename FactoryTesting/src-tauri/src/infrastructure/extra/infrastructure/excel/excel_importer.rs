@@ -613,7 +613,7 @@ impl ExcelImporter {
 
     /// 解析序列号
     fn parse_sequence_number(cell: &calamine::DataType) -> Option<u32> {
-        log::info!("解析序号: {:?}", cell);
+        //log::info!("解析序号: {:?}", cell);
         match cell {
             calamine::DataType::String(s) => s.trim().parse::<u32>().ok(),
             calamine::DataType::Float(f) => Some(*f as u32),

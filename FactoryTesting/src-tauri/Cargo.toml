@@ -29,9 +29,6 @@ path = "src/bin/create_db.rs"
 name = "initialize_database_complete"
 path = "src/bin/initialize_database_complete.rs"
 
-[[bin]]
-name = "test_macros"
-path = "src/bin/test_macros.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.3.1", features = [] }

@@ -1033,7 +1033,7 @@ impl ITestCoordinationService for TestCoordinationService {
             }
         }
 
-        info!("单个通道硬点测试任务已提交: {} -> {}", instance_id, task_id);
+        //info!("单个通道硬点测试任务已提交: {} -> {}", instance_id, task_id);
 
         // 8. 启动异步任务等待测试真正完成后发布完成事件
         let ep = self.event_publisher.clone();
