@@ -1030,13 +1030,8 @@ impl IChannelAllocationService for ChannelAllocationService {
         serial_number: Option<String>,
     ) -> Result<BatchAllocationResult, AppError> {
 
-        // 1. 判断是否为安全型 PLC （模块名称含字母 'S')
-        let is_safety_plc = definitions
-            .iter()
-            .any(|d| d.module_name.to_uppercase().contains('S'));
-
-        if !is_safety_plc {
-            // 普通 PLC：沿用原整体分配方式
+        
+        // 暂时先不区分安全型和普通型的区别，如果需要区分则将下面的注释放开
             let result = self.allocate_channels_by_rack(
                 definitions,
                 test_plc_config,
@@ -1051,54 +1046,76 @@ impl IChannelAllocationService for ChannelAllocationService {
                 result.allocated_instances.len()
             );
             return Ok(result);
-        }
+        
+        // // 1. 判断是否为安全型 PLC （模块名称含字母 'S')
+        // let is_safety_plc = definitions
+        //     .iter()
+        //     .any(|d| d.module_name.to_uppercase().contains('S'));
 
-        // 安全型 PLC：先分配 AI/DI，再分配 AO/DO
-        let all_definitions = definitions.clone(); // 留作最终统计
-        //使用partition方法将定义按模块类型分区(切分)，且into_iter()方法将会转移所有权
-        let (ai_di_defs, ao_do_defs): (Vec<_>, Vec<_>) = definitions
-            .into_iter()
-            .partition(|d| matches!(d.module_type, ModuleType::AI | ModuleType::DI));
+        // if !is_safety_plc {
+        //     // 普通 PLC：沿用原整体分配方式
+        //     let result = self.allocate_channels_by_rack(
+        //         definitions,
+        //         test_plc_config,
+        //         product_model,
+        //         serial_number,
+        //         1,
+        //     )?;
 
-        // 先分配 AI / DI
-        let mut first_result = self.allocate_channels_by_rack(
-            ai_di_defs,
-            test_plc_config.clone(),
-            product_model.clone(),
-            serial_number.clone(),
-            1,
-        )?;
+        //     log::info!(
+        //         "[ChannelAllocation] 普通PLC分配完成 -> 批次:{} 实例:{}",
+        //         result.batches.len(),
+        //         result.allocated_instances.len()
+        //     );
+        //     return Ok(result);
+        // }
 
-        // 继续批次号
-        let start_no = first_result.batches.len() as u32 + 1;
+        // // 安全型 PLC：先分配 AI/DI，再分配 AO/DO
+        // let all_definitions = definitions.clone(); // 留作最终统计
+        // //使用partition方法将定义按模块类型分区(切分)，且into_iter()方法将会转移所有权
+        // let (ai_di_defs, ao_do_defs): (Vec<_>, Vec<_>) = definitions
+        //     .into_iter()
+        //     .partition(|d| matches!(d.module_type, ModuleType::AI | ModuleType::DI));
 
-        // 再分配 AO / DO
-        let second_result = self.allocate_channels_by_rack(
-            ao_do_defs,
-            test_plc_config,
-            product_model,
-            serial_number,
-            start_no,
-        )?;
+        // // 先分配 AI / DI
+        // let mut first_result = self.allocate_channels_by_rack(
+        //     ai_di_defs,
+        //     test_plc_config.clone(),
+        //     product_model.clone(),
+        //     serial_number.clone(),
+        //     1,
+        // )?;
 
-        // 合并结果
-        first_result.batches.extend(second_result.batches);
-        first_result.allocated_instances.extend(second_result.allocated_instances);
-        first_result.errors.extend(second_result.errors);
+        // // 继续批次号
+        // let start_no = first_result.batches.len() as u32 + 1;
 
-        // 重新计算分配摘要
-        first_result.allocation_summary = self.calculate_allocation_summary(
-            &all_definitions,
-            &first_result.allocated_instances,
-            first_result.errors.clone(),
-        );
+        // // 再分配 AO / DO
+        // let second_result = self.allocate_channels_by_rack(
+        //     ao_do_defs,
+        //     test_plc_config,
+        //     product_model,
+        //     serial_number,
+        //     start_no,
+        // )?;
 
-        log::info!(
-            "[ChannelAllocation] 安全PLC分配完成 -> 批次:{} 实例:{}",
-            first_result.batches.len(),
-            first_result.allocated_instances.len()
-        );
-        Ok(first_result)
+        // // 合并结果
+        // first_result.batches.extend(second_result.batches);
+        // first_result.allocated_instances.extend(second_result.allocated_instances);
+        // first_result.errors.extend(second_result.errors);
+
+        // // 重新计算分配摘要
+        // first_result.allocation_summary = self.calculate_allocation_summary(
+        //     &all_definitions,
+        //     &first_result.allocated_instances,
+        //     first_result.errors.clone(),
+        // );
+
+        // log::info!(
+        //     "[ChannelAllocation] 安全PLC分配完成 -> 批次:{} 实例:{}",
+        //     first_result.batches.len(),
+        //     first_result.allocated_instances.len()
+        // );
+        // Ok(first_result)
     }
 
     async fn get_batch_instances(
