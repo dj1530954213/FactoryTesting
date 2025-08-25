@@ -409,7 +409,7 @@ impl ExcelExportService {
                 overall_status = "未完成测试".to_string();
             }
 
-            needs_yellow_bg[24] = overall_yellow; // 最终测试结果列位置
+            needs_yellow_bg[24] = overall_yellow || overall_status == "FAIL"; // 最终测试结果列位置 (FAIL 高亮)
 
             // 写入单元格 - 注意增加了显示值核对列
             let values: Vec<String> = vec![
@@ -579,7 +579,7 @@ impl ExcelExportService {
             if overall_status == "未测试" {
                 overall_status = "未完成测试".to_string();
             }
-            needs_yellow_bg[15] = overall_yellow; // 最终测试结果列位置
+            needs_yellow_bg[15] = overall_yellow || overall_status == "FAIL"; // 最终测试结果列位置 (FAIL 高亮)
 
             // 写入单元格
             let values: Vec<String> = vec![
