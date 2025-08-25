@@ -375,7 +375,21 @@ impl ExcelExportService {
                 }
             }
             
-
+            // ✅ AO 点位特殊处理：这些子项为非必测，应显示 "无需测试" 并恢复默认底色
+            if matches!(def.module_type, ModuleType::AO | ModuleType::AONone) {
+                // 报警反馈四列
+                for i in 0..alarm_vals.len() {
+                    if alarm_vals[i] == "未测试" {
+                        alarm_vals[i] = "无需测试".to_string();
+                        needs_yellow_bg[14 + i] = false; // 取消黄色背景
+                    }
+                }
+                // 维护功能检测列
+                if maint_result == "未测试" {
+                    maint_result = "无需测试".to_string();
+                    needs_yellow_bg[18] = false; // 取消黄色背景
+                }
+            }
 
             // 开始/结束/时长
             let start_time_utc = inst.start_time.unwrap_or_else(|| outcomes.first().map(|o| o.start_time).unwrap_or_else(chrono::Utc::now));
