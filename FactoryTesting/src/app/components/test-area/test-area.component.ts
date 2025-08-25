@@ -173,6 +173,8 @@ export class TestAreaComponent implements OnInit, OnDestroy {
   showOnlyPassed = false;
   showOnlyHardPointPassed = false;
   showOnlyNotTested = false;
+  /** 隐藏整体测试已通过的点位 */
+  hideCompletedPassed = false;
 
   // 🔧 性能优化：缓存过滤结果
   private _filteredInstances: ChannelTestInstance[] = [];
@@ -1396,6 +1398,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       showOnlyPassed: this.showOnlyPassed,
       showOnlyFailed: this.showOnlyFailed,
       showOnlyHardPointPassed: this.showOnlyHardPointPassed,
+      hideCompletedPassed: this.hideCompletedPassed,
       showOnlyNotTested: this.showOnlyNotTested,
       instancesLength: this.batchDetails?.instances?.length || 0,
       // 添加实例状态变化的检测
@@ -1453,6 +1456,13 @@ export class TestAreaComponent implements OnInit, OnDestroy {
       // 硬点测试通过筛选
       if (this.showOnlyHardPointPassed) {
         if (instance.overall_status !== OverallTestStatus.HardPointTestCompleted) {
+          return false;
+        }
+      }
+
+      // 隐藏已通过状态筛选
+      if (this.hideCompletedPassed) {
+        if (instance.overall_status === OverallTestStatus.TestCompletedPassed) {
           return false;
         }
       }
@@ -1526,6 +1536,7 @@ export class TestAreaComponent implements OnInit, OnDestroy {
     this.showOnlyFailed = false;
     this.showOnlyHardPointPassed = false;
     this.showOnlyNotTested = false;
+    this.hideCompletedPassed = false;
   }
 
   getFilterStatusText(): string {

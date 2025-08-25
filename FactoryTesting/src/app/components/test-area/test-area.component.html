@@ -356,6 +356,9 @@
               </div-->
               
               <div class="filter-item">
+                <label nz-checkbox [(ngModel)]="hideCompletedPassed" (ngModelChange)="onFilterChange()">隐藏测试通过</label>
+              </div>
+              <div class="filter-item">
                 <button nz-button (click)="clearAllFilters()">
                   <i nz-icon nzType="clear"></i>
                   清除筛选
