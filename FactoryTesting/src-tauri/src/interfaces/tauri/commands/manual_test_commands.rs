@@ -643,23 +643,49 @@ pub async fn ai_alarm_test_cmd(
         Err(e) => return Err(e),
     };
 
-    // 根据报警类型计算测试值（量程的1%偏移）
-    // 业务说明：为了确保触发报警，测试值需要超过报警设定值一定偏移量
+    // ===== 生成测试值 =====
+    // 新测试策略：
+    // LL : SLL - 1% 量程
+    // L  : 随机值 ∈ (SLL , SL)
+    // H  : 随机值 ∈ (SH , SHH)
+    // HH : SHH + 1% 量程
     let range = definition.range_high_limit.unwrap_or(100.0) - definition.range_low_limit.unwrap_or(0.0);
-    let offset = range * 0.01; // 1%偏移，确保可靠触发报警
+    let offset = range * 0.01;
 
-    // 根据报警类型选择对应的测试值
-    // Rust知识点：as_str() 将String转换为&str便于match匹配
-    let test_value = match request.alarm_type.as_str() {
-        "LL" => definition.sll_set_value.unwrap_or(0.0) as f64 - offset as f64,    // 低低报警
-        "L" => definition.sl_set_value.unwrap_or(10.0) as f64 - offset as f64,     // 低报警
-        "H" => definition.sh_set_value.unwrap_or(90.0) as f64 + offset as f64,     // 高报警
-        "HH" => definition.shh_set_value.unwrap_or(100.0) as f64 + offset as f64,  // 高高报警
+    let mut rng = rand::thread_rng();
+
+    let mut test_value = match request.alarm_type.as_str() {
+        // 低低报警：固定偏移
+        "LL" => definition.sll_set_value.unwrap_or(0.0) as f64 - offset,
+        // 低报警：在 SLL 与 SL 之间随机
+        "L"  => {
+            let ll = definition.sll_set_value.unwrap_or(0.0) as f64;
+            let l  = definition.sl_set_value.unwrap_or(10.0) as f64;
+            if l > ll { rng.gen_range(ll..l) } else { l - offset }
+        }
+        // 高报警：在 SH 与 SHH 之间随机
+        "H"  => {
+            let h  = definition.sh_set_value.unwrap_or(90.0) as f64;
+            let hh = definition.shh_set_value.unwrap_or(100.0) as f64;
+            if hh > h { rng.gen_range(h..hh) } else { h + offset }
+        }
+        // 高高报警：固定偏移
+        "HH" => definition.shh_set_value.unwrap_or(100.0) as f64 + offset,
         _ => {
             error!("❌ [AI_MANUAL_TEST] 无效的报警类型: {}", request.alarm_type);
             return Err("无效的报警类型".to_string());
         }
     };
+
+    // 若生成值超出量程，进行夹紧处理
+    let low_limit  = definition.range_low_limit.unwrap_or(0.0) as f64;
+    let high_limit = definition.range_high_limit.unwrap_or(100.0) as f64;
+    if test_value < low_limit {
+        test_value = low_limit;
+    }
+    if test_value > high_limit {
+        test_value = high_limit;
+    }
 
     // 将工程值转换为百分比
     let percentage = convert_engineering_to_percentage(
