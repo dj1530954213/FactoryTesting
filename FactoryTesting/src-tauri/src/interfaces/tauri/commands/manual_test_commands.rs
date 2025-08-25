@@ -649,11 +649,11 @@ pub async fn ai_alarm_test_cmd(
     // L  : 随机值 ∈ (SLL , SL)
     // H  : 随机值 ∈ (SH , SHH)
     // HH : SHH + 1% 量程
-    let range = definition.range_high_limit.unwrap_or(100.0) - definition.range_low_limit.unwrap_or(0.0);
+    let range = definition.range_high_limit.unwrap_or(100.0) as f64
+        - definition.range_low_limit.unwrap_or(0.0) as f64;
     let offset = range * 0.01;
 
-    let mut rng = rand::thread_rng();
-
+    // 生成测试值，根据报警类型采用不同策略
     let mut test_value = match request.alarm_type.as_str() {
         // 低低报警：固定偏移
         "LL" => definition.sll_set_value.unwrap_or(0.0) as f64 - offset,
@@ -661,13 +661,13 @@ pub async fn ai_alarm_test_cmd(
         "L"  => {
             let ll = definition.sll_set_value.unwrap_or(0.0) as f64;
             let l  = definition.sl_set_value.unwrap_or(10.0) as f64;
-            if l > ll { rng.gen_range(ll..l) } else { l - offset }
+            if l > ll { rand::thread_rng().gen_range(ll..l) } else { l - offset }
         }
         // 高报警：在 SH 与 SHH 之间随机
         "H"  => {
             let h  = definition.sh_set_value.unwrap_or(90.0) as f64;
             let hh = definition.shh_set_value.unwrap_or(100.0) as f64;
-            if hh > h { rng.gen_range(h..hh) } else { h + offset }
+            if hh > h { rand::thread_rng().gen_range(h..hh) } else { h + offset }
         }
         // 高高报警：固定偏移
         "HH" => definition.shh_set_value.unwrap_or(100.0) as f64 + offset,
